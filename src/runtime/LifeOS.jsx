@@ -33,6 +33,7 @@ import {
   Heart, AlertTriangle, Battery, Activity, Edit3, Wind,
   ChevronDown, ChevronUp, ArrowRight, Lightbulb,
 } from "lucide-react";
+import { supabase } from "../supabaseClient.js";
 
 // ─────────────────────────────────────────────────────────────────
 // § 1 · ACTION TYPES (typed, frozen, tree-shakeable)
@@ -616,6 +617,21 @@ function deserializeAppState(raw) {
   return migratedSlice;
 }
 
+
+// ── 4.7b · Cloud state normalization ───────────────────────────
+//
+// Supabase stores the same persistent slice as JSONB. This helper keeps
+// old / partial cloud snapshots safe by merging them into the local baseline.
+function normalizeCloudState(cloudState) {
+  if (!cloudState || typeof cloudState !== "object") return null;
+  const clean = Object.fromEntries(
+    PERSISTENT_DOMAINS
+      .filter((k) => cloudState[k] !== undefined)
+      .map((k) => [k, cloudState[k]])
+  );
+  return deepMerge(PERSISTENT_INITIAL, clean);
+}
+
 // ── 4.8 · Core persistence I/O (with retry) ─────────────────────
 //
 // persistStateAsync: up to `retries` attempts with exponential-ish backoff.
@@ -700,8 +716,8 @@ const todayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
 const PERSISTENT_INITIAL = {
   xp: {
-    total: 0,
-    dailyLog: [],
+    total:      0,
+    dailyLog:   [],
   },
   quests: {
     completedIds: [],
@@ -709,8 +725,8 @@ const PERSISTENT_INITIAL = {
     customItems: null,
   },
   streak: {
-    current: 0,
-    best: 0,
+    current:     0,
+    best:        0,
     lastCheckin: null,
   },
   achievements: {
@@ -718,16 +734,16 @@ const PERSISTENT_INITIAL = {
   },
   planner: {
     swimPairIndex: 0,
-    blenderMode: "continue",
+    blenderMode:   "continue",
   },
   reflection: {
     current: {
-      mood: null,
-      energy: null,
+      mood:       null,
+      energy:     null,
       categories: [],
-      journal: "",
-      saved: false,
-      date: new Date().toDateString(),
+      journal:    "",
+      saved:      false,
+      date:       new Date().toDateString(),
     },
     history: [],
   },
@@ -949,6 +965,7 @@ const MOB_NAV_ITEMS = [
   { id:"planner",    icon:Layers,        label:"Plan" },
   { id:"reflection", icon:MessageSquare, label:"Reflexión", accent:true },
   { id:"profile",    icon:User,          label:"Perfil" },
+  { id:"settings",   icon:Settings,      label:"Ajustes" },
 ];
 
 const MobileBottomNav = memo(function MobileBottomNav() {
@@ -1194,8 +1211,9 @@ const CSS = `
 .planner-intel-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:18px}
 .rf-main-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start}
 .profile-main-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:18px;margin-bottom:18px}
-.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,10,.98);border-top:1px solid rgba(255,255,255,.07);padding:6px 8px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(28px);animation:mobNavIn .32s cubic-bezier(.34,1.56,.64,1)}
-.mob-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 5px;border-radius:11px;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);color:#4b5563;position:relative;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,10,.98);border-top:1px solid rgba(255,255,255,.07);padding:6px 8px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(28px);animation:mobNavIn .32s cubic-bezier(.34,1.56,.64,1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mob-nav::-webkit-scrollbar{display:none}
+.mob-nav-item{flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 5px;border-radius:11px;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);color:#4b5563;position:relative;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
 .mob-nav-item.on{color:#a78bfa;background:rgba(167,139,250,.1)}
 .mob-nav-item.on::before{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:26px;height:3px;background:linear-gradient(90deg,#7c3aed,#06b6d4);border-radius:0 0 3px 3px}
 .mob-nav-item:active{animation:tapFeedback .18s ease;background:rgba(255,255,255,.06)}
@@ -1215,7 +1233,10 @@ const CSS = `
 @media(max-width:640px){
   .sb{display:none}
   .mob-nav{display:flex}
-  .ca{padding:16px 14px 88px;overflow-x:hidden}
+  .mob-layout-grid{grid-template-columns:1fr!important}
+  .mob-layout-grid input{width:100%;min-height:42px}
+  .mob-layout-grid button{min-height:44px}
+  .ca{padding:16px 14px 98px;overflow-x:hidden}
   .tb{padding:10px 14px;gap:8px}
   .tb-xp-track{display:none}
   .tb-xp-pct{display:none}
@@ -2112,32 +2133,6 @@ const RARITY_STYLE = {
   LEGENDARY: ["#fbbf24","rgba(251,191,36,.14)"],
 };
 
-function ProgressBar({ pct = 0, gradient = "linear-gradient(90deg,#7c3aed,#06b6d4)", height = 6 }) {
-  const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
-
-  return (
-    <div
-      style={{
-        width: "100%",
-        height,
-        background: "rgba(255,255,255,.06)",
-        borderRadius: 999,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${safePct}%`,
-          height: "100%",
-          background: gradient,
-          borderRadius: 999,
-          transition: "width .35s ease",
-        }}
-      />
-    </div>
-  );
-}
-
 function AchievementsView() {
   const { persistent } = useAppData();
   const unlockedIds = Array.isArray(persistent?.achievements?.unlockedIds)
@@ -2609,7 +2604,11 @@ function ProfileView() {
 }
 
 function SettingsView() {
-  const { persistent, pDispatch } = useAppData();
+  const {
+    persistent, pDispatch,
+    cloudUser, cloudEmail, setCloudEmail, cloudStatus, cloudMessage,
+    handleCloudLogin, handleCloudLogout,
+  } = useAppData();
   const { uiDispatch } = useAppUI();
   const importRef = useRef(null);
 
@@ -2688,7 +2687,38 @@ function SettingsView() {
   return (
     <div style={{ animation:"sldIn .3s ease", maxWidth:980 }}>
       <div style={S.ptitle} className="mob-ptitle">Ajustes</div>
-      <div style={S.psub} className="mob-psub">Respaldos, persistencia local y edición rápida de tus misiones diarias.</div>
+      <div style={S.psub} className="mob-psub">Respaldos, sincronización, persistencia local y edición rápida de tus misiones diarias.</div>
+
+      <div className="g" style={{ padding:22, marginBottom:16 }}>
+        <div style={S.stitle}>Sincronización en la nube</div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:16 }}>
+          Conectá tu correo para sincronizar LifeOS entre laptop y celular. localStorage queda como respaldo automático.
+        </div>
+
+        {cloudUser ? (
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ fontSize:13, color:"#34d399", fontWeight:800 }}>Conectado como {cloudUser.email}</div>
+            <div style={{ fontSize:12, color:T_COLOR.muted }}>Estado: {cloudStatus}</div>
+            {cloudMessage && <div style={{ fontSize:12, color:T_COLOR.subtext }}>{cloudMessage}</div>}
+            <button onClick={handleCloudLogout} style={{ border:"1px solid rgba(248,113,113,.25)", background:"rgba(248,113,113,.08)", color:"#f87171", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer", width:"fit-content" }}>
+              Cerrar sesión en la nube
+            </button>
+          </div>
+        ) : (
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+            <input
+              value={cloudEmail}
+              onChange={(e) => setCloudEmail(e.target.value)}
+              placeholder="tu-correo@gmail.com"
+              style={{ flex:"1 1 240px", minHeight:42, background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.text, borderRadius:10, padding:"10px 12px", outline:"none" }}
+            />
+            <button onClick={handleCloudLogin} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer", minHeight:42 }}>
+              Enviar enlace mágico
+            </button>
+            {cloudMessage && <div style={{ width:"100%", fontSize:12, color:T_COLOR.subtext }}>{cloudMessage}</div>}
+          </div>
+        )}
+      </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }} className="mob-layout-grid">
         <div className="g" style={{ padding:22 }}>
@@ -2842,6 +2872,102 @@ export default function LifeOS() {
   const isFirstRender                       = useRef(true);
   const debouncedSaver                      = useRef(null);
 
+  // ── Cloud sync state (Supabase, optional; localStorage remains fallback) ─
+  const [cloudUser,      setCloudUser]      = useState(null);
+  const [cloudEmail,     setCloudEmail]     = useState("");
+  const [cloudStatus,    setCloudStatus]    = useState("LOCAL");
+  const [cloudMessage,   setCloudMessage]   = useState("");
+  const cloudHydratedRef                    = useRef(false);
+  const cloudSaveTimerRef                   = useRef(null);
+
+  const loadCloudState = useCallback(async (userId) => {
+    if (!supabase || !userId) return;
+
+    setCloudStatus("CARGANDO");
+    setCloudMessage("Cargando datos desde la nube…");
+
+    const { data, error } = await supabase
+      .from("lifeos_profiles")
+      .select("state")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[LifeOS Cloud] Load failed:", error.message);
+      setCloudStatus("ERROR");
+      setCloudMessage("No se pudo cargar la nube. Se mantiene el guardado local.");
+      cloudHydratedRef.current = true;
+      return;
+    }
+
+    const normalized = normalizeCloudState(data?.state);
+
+    if (normalized) {
+      pDispatch(AC.stateHydrate(normalized));
+      setCloudMessage("Datos cargados desde la nube.");
+    } else {
+      const { error: upsertError } = await supabase.from("lifeos_profiles").upsert({
+        user_id: userId,
+        state: Object.fromEntries(PERSISTENT_DOMAINS.map((k) => [k, persistentRef.current?.[k] ?? PERSISTENT_INITIAL[k]])),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (upsertError) {
+        console.warn("[LifeOS Cloud] Initial save failed:", upsertError.message);
+        setCloudStatus("ERROR");
+        setCloudMessage("No se pudo crear tu perfil en la nube.");
+        cloudHydratedRef.current = true;
+        return;
+      }
+
+      setCloudMessage("Perfil creado en la nube.");
+    }
+
+    cloudHydratedRef.current = true;
+    setCloudStatus("SINCRONIZADO");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCloudLogin = useCallback(async () => {
+    if (!supabase) {
+      setCloudStatus("ERROR");
+      setCloudMessage("Supabase no está configurado en este entorno.");
+      return;
+    }
+
+    const email = cloudEmail.trim();
+    if (!email) {
+      setCloudMessage("Escribí tu correo primero.");
+      return;
+    }
+
+    setCloudStatus("ENVIANDO");
+    setCloudMessage("Enviando enlace mágico…");
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
+
+    if (error) {
+      console.warn("[LifeOS Cloud] Login failed:", error.message);
+      setCloudStatus("ERROR");
+      setCloudMessage(error.message);
+      return;
+    }
+
+    setCloudStatus("REVISA_TU_CORREO");
+    setCloudMessage("Te envié un enlace mágico. Abrilo para iniciar sesión.");
+  }, [cloudEmail]);
+
+  const handleCloudLogout = useCallback(async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setCloudUser(null);
+    setCloudStatus("LOCAL");
+    setCloudMessage("Sesión cerrada. Usando guardado local.");
+    cloudHydratedRef.current = false;
+  }, []);
+
   // ── Startup hydration ─────────────────────────────────────────
   // Pipeline: read → deserialize → migrate → validate → deepMerge → dispatch
   // Any failure at any stage boots from PERSISTENT_INITIAL silently.
@@ -2874,6 +3000,78 @@ export default function LifeOS() {
 
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Cloud session bootstrap ───────────────────────────────────
+  useEffect(() => {
+    if (!supabase) {
+      setCloudStatus("LOCAL");
+      setCloudMessage("Modo local activo.");
+      return;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const user = data?.session?.user ?? null;
+      setCloudUser(user);
+      if (user?.email) setCloudEmail(user.email);
+      if (user?.id) loadCloudState(user.id);
+      else setCloudStatus("LOCAL");
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      setCloudUser(user);
+      if (user?.email) setCloudEmail(user.email);
+
+      if (user?.id) {
+        cloudHydratedRef.current = false;
+        loadCloudState(user.id);
+      } else {
+        cloudHydratedRef.current = false;
+        setCloudStatus("LOCAL");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, [loadCloudState]);
+
+  // ── Cloud autosave ───────────────────────────────────────────
+  useEffect(() => {
+    if (!supabase || !cloudUser?.id) return;
+    if (!hydrated || !cloudHydratedRef.current) return;
+
+    setCloudStatus("GUARDANDO");
+
+    if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
+
+    cloudSaveTimerRef.current = setTimeout(async () => {
+      const state = Object.fromEntries(PERSISTENT_DOMAINS.map((k) => [k, persistent[k]]));
+      const { error } = await supabase.from("lifeos_profiles").upsert({
+        user_id: cloudUser.id,
+        state,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.warn("[LifeOS Cloud] Save failed:", error.message);
+        setCloudStatus("ERROR");
+        setCloudMessage("No se pudo guardar en la nube. Se mantiene el respaldo local.");
+        return;
+      }
+
+      setCloudStatus("SINCRONIZADO");
+      setCloudMessage("Guardado en la nube.");
+    }, 900);
+
+    return () => {
+      if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
+    };
+  }, [persistent, cloudUser, hydrated]);
 
   // ── Debounced autosave ────────────────────────────────────────
   // Fires on every persistent state mutation after hydration completes.
@@ -2923,7 +3121,11 @@ export default function LifeOS() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Stable context values ─────────────────────────────────────
-  const dataCtxValue = useMemo(() => ({ persistent, pDispatch }), [persistent]);
+  const dataCtxValue = useMemo(() => ({
+    persistent, pDispatch,
+    cloudUser, cloudEmail, setCloudEmail, cloudStatus, cloudMessage,
+    handleCloudLogin, handleCloudLogout,
+  }), [persistent, cloudUser, cloudEmail, cloudStatus, cloudMessage, handleCloudLogin, handleCloudLogout]);
   const uiCtxValue   = useMemo(() => ({ ui, uiDispatch }),         [ui]);
 
   const level  = useMemo(() => SELECTORS.level(persistent.xp.total),    [persistent.xp.total]);
