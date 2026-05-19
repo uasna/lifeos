@@ -103,13 +103,108 @@ const DAY_NAMES  = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 const DAY_FULL   = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 const SWIM_PAIRS = [[1,3],[1,4],[2,4]];
 
+const LIFEOS_LINKS = Object.freeze([
+  { id:"calculo",   label:"Cálculo Trainer",   url:"https://uasna.github.io/calculo-trainer.html", note:"Ejercicios de cálculo con corrección inteligente." },
+  { id:"vacaciones",label:"Plan de vacaciones",url:"https://uasna.github.io/vacaciones-v2.html",   note:"Ruta diaria de cálculo, RL y Blender." },
+  { id:"blender",   label:"Blender Path",      url:"https://uasna.github.io/blender-path.html",    note:"Ruta de aprendizaje y proyectos de Blender." },
+  { id:"portfolio", label:"UASNA 3D",          url:"https://uasna.github.io/",                     note:"Portafolio público de renders y trabajos 3D." },
+]);
+
 const QUESTS = Object.freeze([
-  { id:1, title:"Meditación matutina",  sub:"10 min · atención plena",      xp:50,  icon:Brain,    diff:"FÁCIL",   cat:"mind",  accent:"#a78bfa" },
-  { id:2, title:"Entrenamiento fuerte",        sub:"45 min · fuerza", xp:120, icon:Dumbbell, diff:"DIFÍCIL",   cat:"body",  accent:"#34d399" },
-  { id:3, title:"Lectura profunda",         sub:"30 páginas · cualquier género",      xp:80,  icon:BookOpen, diff:"MEDIO", cat:"mind",  accent:"#60a5fa" },
-  { id:4, title:"Exposición al frío",        sub:"3 min · ducha fría",       xp:100, icon:Sun,      diff:"DIFÍCIL",   cat:"body",  accent:"#fbbf24" },
-  { id:5, title:"Bloque de trabajo profundo",      sub:"2 h · sin distracciones",  xp:150, icon:Target,   diff:"DIFÍCIL",   cat:"work",  accent:"#22d3ee" },
-  { id:6, title:"Diario nocturno",      sub:"Reflexioná · planificá mañana",   xp:60,  icon:Moon,     diff:"FÁCIL",   cat:"mind",  accent:"#c084fc" },
+  {
+    id:1,
+    title:"Estudiar cálculo",
+    sub:"60–90 min · tema del día, ejercicios o repaso",
+    xp:18,
+    icon:BookOpen,
+    diff:"DIFÍCIL",
+    cat:"work",
+    accent:"#60a5fa",
+    iconKey:"BookOpen",
+    linkLabel:"Abrir Cálculo Trainer",
+    link:"https://uasna.github.io/calculo-trainer.html",
+    links:[
+      { label:"Cálculo Trainer", url:"https://uasna.github.io/calculo-trainer.html" },
+      { label:"Plan de vacaciones", url:"https://uasna.github.io/vacaciones-v2.html" },
+    ],
+  },
+  {
+    id:2,
+    title:"Rocket League training",
+    sub:"30–45 min · mecánicas, recoveries o replay",
+    xp:12,
+    icon:Target,
+    diff:"MEDIO",
+    cat:"work",
+    accent:"#22d3ee",
+    iconKey:"Target",
+    linkLabel:"Abrir plan de vacaciones",
+    link:"https://uasna.github.io/vacaciones-v2.html",
+    links:[
+      { label:"Plan de vacaciones", url:"https://uasna.github.io/vacaciones-v2.html" },
+    ],
+  },
+  {
+    id:3,
+    title:"Inglés activo",
+    sub:"20–25 min · listening, vocabulario o speaking",
+    xp:10,
+    icon:Brain,
+    diff:"MEDIO",
+    cat:"mind",
+    accent:"#a78bfa",
+    iconKey:"Brain",
+    linkLabel:"",
+    link:"",
+    links:[],
+  },
+  {
+    id:4,
+    title:"Proyecto LifeOS / código",
+    sub:"30–45 min · mejorar la app o documentar ideas",
+    xp:15,
+    icon:Zap,
+    diff:"DIFÍCIL",
+    cat:"work",
+    accent:"#fbbf24",
+    iconKey:"Zap",
+    linkLabel:"Abrir LifeOS",
+    link:"https://lifeos-brown-one.vercel.app",
+    links:[
+      { label:"LifeOS online", url:"https://lifeos-brown-one.vercel.app" },
+    ],
+  },
+  {
+    id:5,
+    title:"Blender / 3D",
+    sub:"30–45 min · ruta, práctica o proyecto low poly",
+    xp:12,
+    icon:Dumbbell,
+    diff:"MEDIO",
+    cat:"work",
+    accent:"#34d399",
+    iconKey:"Dumbbell",
+    linkLabel:"Abrir Blender Path",
+    link:"https://uasna.github.io/blender-path.html",
+    links:[
+      { label:"Blender Path", url:"https://uasna.github.io/blender-path.html" },
+      { label:"UASNA 3D", url:"https://uasna.github.io/" },
+    ],
+  },
+  {
+    id:6,
+    title:"Reflexión nocturna",
+    sub:"5 min · revisar el día y planear mañana",
+    xp:5,
+    icon:Moon,
+    diff:"FÁCIL",
+    cat:"mind",
+    accent:"#c084fc",
+    iconKey:"Moon",
+    linkLabel:"",
+    link:"",
+    links:[],
+  },
 ]);
 
 const QUEST_ICON_KEYS = ["Brain", "Dumbbell", "BookOpen", "Sun", "Target", "Moon"];
@@ -127,6 +222,14 @@ function sanitizeQuestItems(items = []) {
     diff: ["FÁCIL", "MEDIO", "DIFÍCIL"].includes(q.diff) ? q.diff : "MEDIO",
     cat: ["mind", "body", "work"].includes(q.cat) ? q.cat : "mind",
     accent: q.accent || QUEST_ACCENTS[i % QUEST_ACCENTS.length],
+    link: String(q.link || "").slice(0, 240),
+    linkLabel: String(q.linkLabel || "").slice(0, 60),
+    links: Array.isArray(q.links)
+      ? q.links.slice(0, 4).map((l) => ({
+          label: String(l?.label || "Abrir enlace").slice(0, 60),
+          url: String(l?.url || "").slice(0, 240),
+        })).filter((l) => l.url)
+      : [],
   }));
 }
 
@@ -1328,6 +1431,36 @@ const QuestItem = memo(function QuestItem({ q, completed, onComplete, isBurst })
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:13.5, fontWeight:600, color:completed ? "#374151" : "#eef2f8", marginBottom:1, transition:"color .3s" }}>{q.title}</div>
         <div style={{ fontSize:11.5, color:"#64748b" }}>{q.sub}</div>
+        {(q.link || (Array.isArray(q.links) && q.links.length > 0)) && (
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:7 }}>
+            {(Array.isArray(q.links) && q.links.length > 0 ? q.links : [{ label:q.linkLabel || "Abrir página", url:q.link }]).map((lnk, idx) => (
+              <a
+                key={`${q.id}-link-${idx}`}
+                href={lnk.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display:"inline-flex",
+                  alignItems:"center",
+                  gap:4,
+                  width:"fit-content",
+                  maxWidth:"100%",
+                  padding:"4px 7px",
+                  borderRadius:8,
+                  border:`1px solid ${q.accent}35`,
+                  background:`${q.accent}10`,
+                  color:q.accent,
+                  fontSize:10.5,
+                  fontWeight:800,
+                  textDecoration:"none",
+                }}
+              >
+                {lnk.label || q.linkLabel || "Abrir página"} <ArrowRight size={10}/>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
         <div className="q-xp" style={{ background:`${q.accent}14`, color:q.accent, border:`1px solid ${q.accent}28` }}>+{q.xp} XP</div>
@@ -2750,6 +2883,42 @@ function SettingsView() {
       </div>
 
       <div className="g" style={{ padding:22, marginBottom:16 }}>
+        <div style={S.stitle}>Links de páginas</div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:16 }}>
+          Accesos rápidos a tus páginas externas para estudiar, practicar y ver tus proyectos.
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+          {LIFEOS_LINKS.map((lnk) => (
+            <a
+              key={lnk.id}
+              href={lnk.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display:"flex",
+                justifyContent:"space-between",
+                alignItems:"center",
+                gap:12,
+                padding:14,
+                borderRadius:12,
+                border:"1px solid rgba(34,211,238,.18)",
+                background:"rgba(34,211,238,.055)",
+                color:T_COLOR.text,
+                textDecoration:"none",
+              }}
+            >
+              <div>
+                <div style={{ fontSize:13, fontWeight:900, marginBottom:4 }}>{lnk.label}</div>
+                <div style={{ fontSize:11, color:T_COLOR.subtext, lineHeight:1.45 }}>{lnk.note}</div>
+              </div>
+              <ArrowRight size={16} color="#22d3ee" style={{ flexShrink:0 }}/>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:22, marginBottom:16 }}>
         <div style={S.stitle}>Misiones diarias editables</div>
         <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:16 }}>
           Cambiá nombres, descripciones y XP sin tocar código. Esto te permite usar LifeOS con tus responsabilidades reales hasta que agreguemos el generador inteligente.
@@ -2757,9 +2926,10 @@ function SettingsView() {
 
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {questDraft.map((q, idx) => (
-            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.2fr 1.4fr 84px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
+            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.1fr 1.3fr 1.1fr 76px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
               <input value={q.title} onChange={(e) => updateQuestDraft(idx, { title:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.text, borderRadius:9, padding:"10px 12px", fontWeight:700 }} />
               <input value={q.sub} onChange={(e) => updateQuestDraft(idx, { sub:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.subtext, borderRadius:9, padding:"10px 12px" }} />
+              <input value={q.link || ""} onChange={(e) => updateQuestDraft(idx, { link:e.target.value, linkLabel:q.linkLabel || "Abrir página" })} placeholder="Link opcional" style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:"#22d3ee", borderRadius:9, padding:"10px 12px" }} />
               <input type="number" min="0" max="999" value={q.xp} onChange={(e) => updateQuestDraft(idx, { xp:Number(e.target.value) || 0 })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:q.accent, borderRadius:9, padding:"10px 12px", fontWeight:900 }} />
             </div>
           ))}
