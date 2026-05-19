@@ -700,34 +700,34 @@ const todayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
 const PERSISTENT_INITIAL = {
   xp: {
-    total:      3250,
-    dailyLog:   [],
+    total: 0,
+    dailyLog: [],
   },
   quests: {
-    completedIds: [1, 3],
+    completedIds: [],
     dailyHistory: [],
     customItems: null,
   },
   streak: {
-    current:     5,
-    best:        7,
+    current: 0,
+    best: 0,
     lastCheckin: null,
   },
   achievements: {
-    unlockedIds: [1, 2, 3],
+    unlockedIds: [],
   },
   planner: {
     swimPairIndex: 0,
-    blenderMode:   "continue",
+    blenderMode: "continue",
   },
   reflection: {
     current: {
-      mood:       null,
-      energy:     null,
+      mood: null,
+      energy: null,
       categories: [],
-      journal:    "",
-      saved:      false,
-      date:       new Date().toDateString(),
+      journal: "",
+      saved: false,
+      date: new Date().toDateString(),
     },
     history: [],
   },
