@@ -31,7 +31,7 @@ import {
   Star, Bell, CheckCircle2, Circle, TrendingUp, Award, ChevronRight,
   Settings, Sparkles, Calendar, RefreshCw, Layers, MessageSquare,
   Heart, AlertTriangle, Battery, Activity, Edit3, Wind,
-  ChevronDown, ChevronUp, ArrowRight, Lightbulb,
+  ChevronDown, ChevronUp, ArrowRight, Lightbulb, Gamepad2, Timer, Play, Pause,
 } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 
@@ -43,6 +43,12 @@ const AT = Object.freeze({
   // ── Quest domain ─────────────────────────────────────────────
   QUEST_COMPLETE:             "QUEST_COMPLETE",
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
+  // ── Rocket League domain ─────────────────────────────────────
+  RL_DAILY_SYNC:             "RL_DAILY_SYNC",
+  RL_SUBTASK_TOGGLE:         "RL_SUBTASK_TOGGLE",
+  RL_TIMER_COMMIT:           "RL_TIMER_COMMIT",
+  RL_MENTAL_UPDATE:          "RL_MENTAL_UPDATE",
+  RL_MENTAL_SAVE:            "RL_MENTAL_SAVE",
   // ── Reflection domain ─────────────────────────────────────────
   REFLECTION_FIELD_UPDATE:    "REFLECTION_FIELD_UPDATE",
   REFLECTION_TOGGLE_CATEGORY: "REFLECTION_TOGGLE_CATEGORY",
@@ -74,6 +80,11 @@ const AC = Object.freeze({
   // Persistent
   questComplete:           (questId, xpGained, newNivel) => ({ type: AT.QUEST_COMPLETE, questId, xpGained, newNivel }),
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
+  rlDailySync:            (dateKey, planId) => ({ type: AT.RL_DAILY_SYNC, dateKey, planId }),
+  rlSubtaskToggle:        (subtaskId) => ({ type: AT.RL_SUBTASK_TOGGLE, subtaskId }),
+  rlTimerCommit:          (subtaskId, secondsDelta) => ({ type: AT.RL_TIMER_COMMIT, subtaskId, secondsDelta }),
+  rlMentalUpdate:         (key, value) => ({ type: AT.RL_MENTAL_UPDATE, key, value }),
+  rlMentalSave:           () => ({ type: AT.RL_MENTAL_SAVE }),
   reflectionFieldUpdate:   (key, value)   => ({ type: AT.REFLECTION_FIELD_UPDATE, key, value }),
   reflectionToggleCategory:(id)           => ({ type: AT.REFLECTION_TOGGLE_CATEGORY, id }),
   reflectionSave:          ()             => ({ type: AT.REFLECTION_SAVE }),
@@ -131,18 +142,16 @@ const QUESTS = Object.freeze([
   {
     id:2,
     title:"Rocket League training",
-    sub:"30–45 min · mecánicas, recoveries o replay",
+    sub:"45 min · freeplay, speedflips, training packs y mental",
     xp:12,
     icon:Target,
     diff:"MEDIO",
     cat:"work",
     accent:"#22d3ee",
     iconKey:"Target",
-    linkLabel:"Abrir plan de vacaciones",
-    link:"https://uasna.github.io/vacaciones-v2.html",
-    links:[
-      { label:"Plan de vacaciones", url:"https://uasna.github.io/vacaciones-v2.html" },
-    ],
+    linkLabel:"Abrir Rocket League",
+    link:"",
+    links:[],
   },
   {
     id:3,
@@ -243,6 +252,251 @@ function hydrateQuestItems(items = []) {
 function getActiveQuests(persistentState) {
   const custom = persistentState?.quests?.customItems;
   return hydrateQuestItems(Array.isArray(custom) && custom.length > 0 ? custom : QUESTS);
+}
+
+
+// ── Rocket League static training system ────────────────────────
+// Custom Training only: Epic-safe, no Steam Workshop dependency.
+
+const ROCKET_LEAGUE_PARENT_QUEST_ID = 2;
+
+const ROCKET_LEAGUE_PROFILE = Object.freeze({
+  duel: "1v1 Plat I",
+  doubles: "2v2 Plat III",
+  standard: "3v3 Plat III",
+  platform: "Epic · no workshop",
+  target: "Plat III → Diamond",
+});
+
+const ROCKET_LEAGUE_PACKS = Object.freeze({
+  powershots: {
+    name: "Powershots",
+    code: "7028-5E10-88EF-E83E",
+    focus: "pegar fuerte, limpio y con dirección",
+  },
+  groundShots: {
+    name: "Ground Shots",
+    code: "6EB1-79B2-33B8-681C",
+    focus: "tiros básicos consistentes",
+  },
+  shotsYouShouldntMiss: {
+    name: "Shots You Shouldn't Miss",
+    code: "42BF-686D-E047-574B",
+    focus: "no fallar tiros ganables",
+  },
+  basicRebounds: {
+    name: "Basic Rebound Practice",
+    code: "3DBA-229E-745C-429C",
+    focus: "leer rebotes simples",
+  },
+  backboardReads: {
+    name: "Backboard Reads",
+    code: "2486-EEA6-B887-A040",
+    focus: "lecturas de pared/backboard",
+  },
+  aerialsOffWall: {
+    name: "Aerials Off Wall",
+    code: "5BFE-60D6-0D59-79F2",
+    focus: "salidas de pared y control aéreo",
+  },
+  shadowDefense: {
+    name: "Shadow Defense",
+    code: "5CCE-FB29-7B05-A0B1",
+    focus: "defender sin regalar espacio",
+  },
+  platDiamond: {
+    name: "Plat–Diamond Training",
+    code: "3B40-CE8C-58EB-32B3",
+    focus: "transición Plat alto hacia Diamond",
+  },
+  speedflipTest: {
+    name: "Speedflip Test",
+    code: "98E6-EF86-7BD6-E585",
+    focus: "timing y consistencia de speedflip",
+  },
+  speedflipPractice: {
+    name: "Speedflip Practice",
+    code: "315D-FBC3-D181-8DE7",
+    focus: "mecánica diaria obligatoria",
+  },
+});
+
+const RL_SUBTASK_TYPES = Object.freeze({
+  FREEPLAY: "Freeplay",
+  SPEEDFLIP: "Speedflip",
+  PACK: "Training Pack",
+  MENTAL: "Mental",
+});
+
+const RL_FREEPLAY_SUBTASK = Object.freeze({
+  id: "freeplay",
+  title: "Freeplay agresivo",
+  type: RL_SUBTASK_TYPES.FREEPLAY,
+  minutes: 10,
+  instruction: "Sin ranked frío: powershots, recoveries, pads pequeños y cero pausa entre toques.",
+  focus: "ritmo + confianza",
+  accent: "#22d3ee",
+});
+
+const RL_SPEEDFLIP_SUBTASK = Object.freeze({
+  id: "speedflips",
+  title: "Speedflips",
+  type: RL_SUBTASK_TYPES.SPEEDFLIP,
+  minutes: 5,
+  pack: ROCKET_LEAGUE_PACKS.speedflipPractice,
+  instruction: "Después del freeplay: repetí kickoff speedflips, priorizando flip cancel limpio antes que velocidad.",
+  focus: "timing + muscle memory",
+  accent: "#fbbf24",
+});
+
+const RL_MENTAL_SUBTASK = Object.freeze({
+  id: "mental",
+  title: "Mental reset + revisión corta",
+  type: RL_SUBTASK_TYPES.MENTAL,
+  minutes: 10,
+  instruction: "Anotá un error repetido, una cosa buena y el momento donde empezó el tilt.",
+  focus: "menos tilt + mejores decisiones",
+  accent: "#a78bfa",
+});
+
+const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") => Object.freeze({
+  id,
+  title: pack.name,
+  type: RL_SUBTASK_TYPES.PACK,
+  minutes,
+  pack,
+  instruction,
+  focus: pack.focus,
+  accent,
+});
+
+const makeRlPlan = (id, title, focus, packA, packB, instructionA, instructionB) => Object.freeze({
+  id,
+  title,
+  focus,
+  minutes: 45,
+  subtasks: Object.freeze([
+    RL_FREEPLAY_SUBTASK,
+    RL_SPEEDFLIP_SUBTASK,
+    makeRlPackSubtask("pack-a", packA, 10, instructionA, "#34d399"),
+    makeRlPackSubtask("pack-b", packB, 10, instructionB, "#60a5fa"),
+    RL_MENTAL_SUBTASK,
+  ]),
+});
+
+const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
+  makeRlPlan(
+    "powershot-day",
+    "Powershot Control",
+    "Pegar fuerte sin regalar posesión",
+    ROCKET_LEAGUE_PACKS.powershots,
+    ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss,
+    "Buscá potencia con contacto limpio; no tires por tirar.",
+    "Fallá lento: repetí cada tiro ganable hasta que salga simple."
+  ),
+  makeRlPlan(
+    "ground-rebound-day",
+    "Ground Shots + Rebounds",
+    "Consistencia de tiro y lectura del rebote",
+    ROCKET_LEAGUE_PACKS.groundShots,
+    ROCKET_LEAGUE_PACKS.basicRebounds,
+    "Apuntá a esquinas grandes primero; después ajustá precisión.",
+    "Leé pared antes de saltar; no te regales si el rebote sale largo."
+  ),
+  makeRlPlan(
+    "defense-day",
+    "Shadow Defense",
+    "Defender sin entrar en pánico ni over-respect",
+    ROCKET_LEAGUE_PACKS.shadowDefense,
+    ROCKET_LEAGUE_PACKS.backboardReads,
+    "Mantené distancia útil: ni muy encima ni regalando cancha.",
+    "Priorizá despeje seguro antes que toque perfecto."
+  ),
+  makeRlPlan(
+    "wall-aerial-day",
+    "Wall + Fast Aerial Reads",
+    "Llegar antes sin perder control",
+    ROCKET_LEAGUE_PACKS.aerialsOffWall,
+    ROCKET_LEAGUE_PACKS.platDiamond,
+    "Salí de pared solo cuando tengas ángulo real.",
+    "Jugá como Plat alto: simple, rápido y recuperando bien."
+  ),
+  makeRlPlan(
+    "diamond-push-day",
+    "Diamond Push",
+    "Velocidad útil, decisiones simples y menos errores gratis",
+    ROCKET_LEAGUE_PACKS.platDiamond,
+    ROCKET_LEAGUE_PACKS.powershots,
+    "No busques clips: buscá primer toque sólido y recovery rápido.",
+    "Cada shot debe tener intención: gol, pase o presión."
+  ),
+  makeRlPlan(
+    "one-v-one-day",
+    "1v1 Decision Day",
+    "No regalar posesión y castigar errores",
+    ROCKET_LEAGUE_PACKS.groundShots,
+    ROCKET_LEAGUE_PACKS.shadowDefense,
+    "Tiro simple, fake si el rival se tira, recovery inmediato.",
+    "En shadow, defendé el ángulo peligroso y no la pelota."
+  ),
+]);
+
+function getRocketLeagueDateKey(date = new Date()) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getRocketLeaguePlanForDate(dateKey = getRocketLeagueDateKey()) {
+  const seed = String(dateKey).split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return ROCKET_LEAGUE_TRAINING_PLANS[seed % ROCKET_LEAGUE_TRAINING_PLANS.length];
+}
+
+function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = getRocketLeaguePlanForDate(dateKey).id) {
+  return {
+    dateKey,
+    planId,
+    completedSubtaskIds: [],
+    elapsedBySubtask: {},
+    mental: {
+      moodBefore: null,
+      moodAfter: null,
+      tiltLevel: null,
+      note: "",
+      saved: false,
+    },
+  };
+}
+
+function createRocketLeagueInitialState() {
+  return {
+    current: createRocketLeagueCurrent(),
+    history: [],
+  };
+}
+
+function hasRocketLeagueProgress(current) {
+  if (!current || typeof current !== "object") return false;
+  const elapsed = Object.values(current.elapsedBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
+  const mental = current.mental || {};
+  return (
+    (current.completedSubtaskIds || []).length > 0 ||
+    elapsed > 0 ||
+    mental.moodBefore !== null ||
+    mental.moodAfter !== null ||
+    mental.tiltLevel !== null ||
+    Boolean(String(mental.note || "").trim()) ||
+    mental.saved === true
+  );
+}
+
+function formatSeconds(totalSeconds = 0) {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 const ACHIEVEMENTS = Object.freeze([
@@ -461,7 +715,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 1; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 2; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -481,9 +735,12 @@ const STORAGE_KEY = "lifeos:app";
 //   }),
 
 const MIGRATIONS = Object.freeze({
-  // v1 is the current version — no migrations needed yet.
-  // When bumping to v2, add:
-  //   [1]: (snap) => ({ ...snap, ... })
+  [1]: (snap) => ({
+    ...snap,
+    rocketLeague: snap?.rocketLeague && typeof snap.rocketLeague === "object"
+      ? deepMerge(createRocketLeagueInitialState(), snap.rocketLeague)
+      : createRocketLeagueInitialState(),
+  }),
 });
 
 // Chains migration functions from savedVersion → STORAGE_SCHEMA_VERSION.
@@ -564,7 +821,7 @@ function validateSnapshotIntegrity(snap) {
   if (!snap || typeof snap !== "object") return false;
 
   // Required top-level domains
-  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements"];
+  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague"];
   if (!REQUIRED_DOMAINS.every(k => snap[k] !== null && typeof snap[k] === "object")) return false;
 
   // XP domain
@@ -595,6 +852,14 @@ function validateSnapshotIntegrity(snap) {
   const { reflection } = snap;
   if (!reflection.current || typeof reflection.current !== "object") return false;
   if (!Array.isArray(reflection.history)) return false;
+
+  // Rocket League domain
+  const { rocketLeague } = snap;
+  if (!rocketLeague.current || typeof rocketLeague.current !== "object") return false;
+  if (!Array.isArray(rocketLeague.history)) return false;
+  if (!Array.isArray(rocketLeague.current.completedSubtaskIds)) return false;
+  if (rocketLeague.current.elapsedBySubtask === null || typeof rocketLeague.current.elapsedBySubtask !== "object" || Array.isArray(rocketLeague.current.elapsedBySubtask)) return false;
+  if (!rocketLeague.current.mental || typeof rocketLeague.current.mental !== "object") return false;
 
   return true;
 }
@@ -638,7 +903,7 @@ const StorageAdapter = Object.freeze({
 // UI state is intentionally never serialized.
 
 const PERSISTENT_DOMAINS = Object.freeze([
-  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy"
+  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague"
 ]);
 
 function serializeAppState(persistentState) {
@@ -853,6 +1118,7 @@ const PERSISTENT_INITIAL = {
   energy: {
     history: [],
   },
+  rocketLeague: createRocketLeagueInitialState(),
 };
 
 const UI_INITIAL = {
@@ -902,6 +1168,101 @@ function persistentReducer(state, action) {
           ...state.quests,
           customItems: items,
           completedIds: (state.quests.completedIds || []).filter(id => validIds.has(id)),
+        },
+      };
+    }
+
+    case AT.RL_DAILY_SYNC: {
+      const dateKey = action.dateKey || getRocketLeagueDateKey();
+      const planId = action.planId || getRocketLeaguePlanForDate(dateKey).id;
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent(dateKey, planId);
+
+      if (current.dateKey === dateKey && current.planId === planId) {
+        return state;
+      }
+
+      const shouldArchive = hasRocketLeagueProgress(current);
+      return {
+        ...state,
+        quests: {
+          ...state.quests,
+          completedIds: (state.quests.completedIds || []).filter(id => id !== ROCKET_LEAGUE_PARENT_QUEST_ID),
+        },
+        rocketLeague: {
+          current: createRocketLeagueCurrent(dateKey, planId),
+          history: shouldArchive
+            ? [...(state.rocketLeague?.history || []), { ...current, archivedAt: new Date().toISOString() }].slice(-90)
+            : (state.rocketLeague?.history || []),
+        },
+      };
+    }
+
+    case AT.RL_SUBTASK_TOGGLE: {
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent();
+      const ids = Array.isArray(current.completedSubtaskIds) ? current.completedSubtaskIds : [];
+      const exists = ids.includes(action.subtaskId);
+      return {
+        ...state,
+        rocketLeague: {
+          ...(state.rocketLeague || createRocketLeagueInitialState()),
+          current: {
+            ...current,
+            completedSubtaskIds: exists ? ids.filter(id => id !== action.subtaskId) : [...ids, action.subtaskId],
+          },
+        },
+      };
+    }
+
+    case AT.RL_TIMER_COMMIT: {
+      const delta = Math.max(0, Math.floor(Number(action.secondsDelta) || 0));
+      if (!action.subtaskId || delta <= 0) return state;
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent();
+      const elapsed = current.elapsedBySubtask || {};
+      return {
+        ...state,
+        rocketLeague: {
+          ...(state.rocketLeague || createRocketLeagueInitialState()),
+          current: {
+            ...current,
+            elapsedBySubtask: {
+              ...elapsed,
+              [action.subtaskId]: Math.max(0, Math.floor(Number(elapsed[action.subtaskId]) || 0)) + delta,
+            },
+          },
+        },
+      };
+    }
+
+    case AT.RL_MENTAL_UPDATE: {
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent();
+      const mental = current.mental || createRocketLeagueCurrent().mental;
+      return {
+        ...state,
+        rocketLeague: {
+          ...(state.rocketLeague || createRocketLeagueInitialState()),
+          current: {
+            ...current,
+            mental: {
+              ...mental,
+              [action.key]: action.value,
+              saved: false,
+            },
+          },
+        },
+      };
+    }
+
+    case AT.RL_MENTAL_SAVE: {
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent();
+      const mental = current.mental || createRocketLeagueCurrent().mental;
+      return {
+        ...state,
+        rocketLeague: {
+          ...(state.rocketLeague || createRocketLeagueInitialState()),
+          current: {
+            ...current,
+            mental: { ...mental, saved: true },
+          },
         },
       };
     }
@@ -1064,6 +1425,7 @@ function useMobile() {
 const MOB_NAV_ITEMS = [
   { id:"dashboard",  icon:Home,          label:"Inicio"    },
   { id:"quests",     icon:Target,        label:"Misiones"  },
+  { id:"rocketLeague", icon:Gamepad2,    label:"Rocket"    },
   { id:"schedule",   icon:Calendar,      label:"Horario"},
   { id:"planner",    icon:Layers,        label:"Plan" },
   { id:"reflection", icon:MessageSquare, label:"Reflexión", accent:true },
@@ -1314,6 +1676,11 @@ const CSS = `
 .planner-intel-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:18px}
 .rf-main-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start}
 .profile-main-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:18px;margin-bottom:18px}
+.rl-main-grid{display:grid;grid-template-columns:1.35fr .9fr;gap:18px;align-items:start}
+.rl-task-grid{display:grid;grid-template-columns:1fr;gap:10px}
+.rl-chip-row{display:flex;gap:8px;flex-wrap:wrap}
+.rl-task-card{padding:16px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075);transition:all .22s ease}
+.rl-task-card:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.14)}
 .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,10,.98);border-top:1px solid rgba(255,255,255,.07);padding:6px 8px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(28px);animation:mobNavIn .32s cubic-bezier(.34,1.56,.64,1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .mob-nav::-webkit-scrollbar{display:none}
 .mob-nav-item{flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 5px;border-radius:11px;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);color:#4b5563;position:relative;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -1331,7 +1698,7 @@ const CSS = `
   .ach-grid{grid-template-columns:repeat(2,1fr)}
   .rf-cat-grid{grid-template-columns:repeat(2,1fr)}
   .wp-sys-grid{grid-template-columns:repeat(2,1fr)}
-  .dash-main-grid,.sch-main-grid,.planner-tl-grid,.planner-hm-grid,.planner-intel-grid,.rf-main-grid,.profile-main-grid{gap:14px}
+  .dash-main-grid,.sch-main-grid,.planner-tl-grid,.planner-hm-grid,.planner-intel-grid,.rf-main-grid,.profile-main-grid,.rl-main-grid{gap:14px}
 }
 @media(max-width:640px){
   .sb{display:none}
@@ -1351,6 +1718,7 @@ const CSS = `
   .planner-intel-grid{grid-template-columns:1fr}
   .rf-main-grid{grid-template-columns:1fr}
   .profile-main-grid{grid-template-columns:1fr}
+  .rl-main-grid{grid-template-columns:1fr}
   .s-grid{grid-template-columns:1fr 1fr}
   .ach-grid{grid-template-columns:1fr 1fr}
   .rf-cat-grid{grid-template-columns:1fr 1fr}
@@ -1556,6 +1924,13 @@ function DashboardView() {
 
   const { pDispatch } = useAppData();
   const handleQuestComplete = useCallback((q) => {
+    if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
+      const id = Date.now();
+      uiDispatch(AC.setView("rocketLeague"));
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá todas las submisiones para ganar XP"));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
+      return;
+    }
     const wasCompleted = completedSet.has(q.id);
     const deltaXp = wasCompleted ? -q.xp : q.xp;
     const oldNivel = SELECTORS.level(persistent.xp.total);
@@ -1674,6 +2049,281 @@ function DashboardView() {
   );
 }
 
+
+function RocketLeagueView() {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+
+  const dateKey = useMemo(() => getRocketLeagueDateKey(), []);
+  const plan = useMemo(() => getRocketLeaguePlanForDate(dateKey), [dateKey]);
+  const current = persistent.rocketLeague?.current || createRocketLeagueCurrent(dateKey, plan.id);
+  const completedIds = current.completedSubtaskIds || [];
+  const elapsedBySubtask = current.elapsedBySubtask || {};
+  const completedSet = useMemo(() => new Set(completedIds), [completedIds]);
+  const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
+  const parentQuest = useMemo(
+    () => activeQuests.find(q => q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) || QUESTS.find(q => q.id === ROCKET_LEAGUE_PARENT_QUEST_ID),
+    [activeQuests]
+  );
+  const parentCompleted = (persistent.quests.completedIds || []).includes(ROCKET_LEAGUE_PARENT_QUEST_ID);
+  const allComplete = plan.subtasks.every(task => completedSet.has(task.id));
+  const doneCount = plan.subtasks.filter(task => completedSet.has(task.id)).length;
+  const totalTargetSeconds = plan.subtasks.reduce((sum, task) => sum + task.minutes * 60, 0);
+
+  const [activeSubtaskId, setActiveSubtaskId] = useState(null);
+  const [tickNow, setTickNow] = useState(Date.now());
+  const activeTimerRef = useRef({ id: null, startedAt: null });
+
+  const commitActiveTimer = useCallback(() => {
+    const { id, startedAt } = activeTimerRef.current;
+    if (!id || !startedAt) return;
+    const delta = Math.floor((Date.now() - startedAt) / 1000);
+    if (delta > 0) pDispatch(AC.rlTimerCommit(id, delta));
+    activeTimerRef.current = { id: null, startedAt: null };
+  }, [pDispatch]);
+
+  useEffect(() => {
+    if (current.dateKey !== dateKey || current.planId !== plan.id) {
+      commitActiveTimer();
+      setActiveSubtaskId(null);
+      pDispatch(AC.rlDailySync(dateKey, plan.id));
+    }
+  }, [current.dateKey, current.planId, dateKey, plan.id, pDispatch, commitActiveTimer]);
+
+  useEffect(() => {
+    if (!activeSubtaskId) return undefined;
+    const timer = setInterval(() => setTickNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [activeSubtaskId]);
+
+  useEffect(() => () => commitActiveTimer(), [commitActiveTimer]);
+
+  const getElapsedSeconds = useCallback((subtaskId) => {
+    const persisted = Math.max(0, Math.floor(Number(elapsedBySubtask[subtaskId]) || 0));
+    const active = activeTimerRef.current;
+    if (active.id === subtaskId && active.startedAt) {
+      return persisted + Math.max(0, Math.floor((tickNow - active.startedAt) / 1000));
+    }
+    return persisted;
+  }, [elapsedBySubtask, tickNow]);
+
+  const totalElapsedSeconds = useMemo(
+    () => plan.subtasks.reduce((sum, task) => sum + getElapsedSeconds(task.id), 0),
+    [plan.subtasks, getElapsedSeconds]
+  );
+
+  const progressPct = Math.min(100, Math.round((doneCount / Math.max(plan.subtasks.length, 1)) * 100));
+  const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
+
+  const toggleTimer = useCallback((subtaskId) => {
+    if (activeTimerRef.current.id === subtaskId) {
+      commitActiveTimer();
+      setActiveSubtaskId(null);
+      return;
+    }
+    commitActiveTimer();
+    activeTimerRef.current = { id: subtaskId, startedAt: Date.now() };
+    setTickNow(Date.now());
+    setActiveSubtaskId(subtaskId);
+  }, [commitActiveTimer]);
+
+  const toggleSubtask = useCallback((subtaskId) => {
+    if (activeTimerRef.current.id === subtaskId) {
+      commitActiveTimer();
+      setActiveSubtaskId(null);
+    }
+    pDispatch(AC.rlSubtaskToggle(subtaskId));
+  }, [commitActiveTimer, pDispatch]);
+
+  const updateMental = useCallback((key, value) => {
+    pDispatch(AC.rlMentalUpdate(key, value));
+  }, [pDispatch]);
+
+  const saveMental = useCallback(() => {
+    commitActiveTimer();
+    pDispatch(AC.rlMentalSave());
+    const id = Date.now();
+    uiDispatch(AC.toastAdd(id, "Reflexión Rocket guardada", "Mental fuerte: menos tilt, mejores decisiones"));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
+  }, [commitActiveTimer, pDispatch, uiDispatch]);
+
+  useEffect(() => {
+    if (!parentQuest) return;
+    if (allComplete && !parentCompleted) {
+      const oldNivel = SELECTORS.level(persistent.xp.total);
+      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
+      const id = Date.now();
+      uiDispatch(AC.toastAdd(id, "Rocket League Training completado", `+${parentQuest.xp} XP · buen trabajo, no ranked frío`));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 3200);
+    }
+    if (!allComplete && parentCompleted) {
+      const oldNivel = SELECTORS.level(persistent.xp.total);
+      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
+    }
+  }, [allComplete, parentCompleted, parentQuest, persistent.xp.total, pDispatch, uiDispatch]);
+
+  const missionStatus = parentCompleted
+    ? { label: "Completada", color: "#34d399" }
+    : allComplete
+      ? { label: "Lista para completar", color: "#fbbf24" }
+      : { label: "Pendiente", color: "#64748b" };
+
+  const mental = current.mental || createRocketLeagueCurrent().mental;
+  const moodOptions = [1, 2, 3, 4, 5];
+
+  return (
+    <div style={{ animation:"sldIn .3s ease" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
+        <div>
+          <div style={S.ptitle}>Rocket League Training</div>
+          <div style={S.psub}>45 min diarios · Plat III → Diamond · mecánicas útiles + mental</div>
+          <div className="rl-chip-row">
+            {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
+              <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
+            ))}
+          </div>
+        </div>
+        <div className="g" style={{ padding:14, minWidth:220 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:800, textTransform:"uppercase", letterSpacing:.8 }}>Misión padre</span>
+            <span style={{ fontSize:11, color:missionStatus.color, fontWeight:800 }}>{missionStatus.label}</span>
+          </div>
+          <ProgresoBar pct={progressPct} gradient="linear-gradient(90deg,#22d3ee,#a78bfa)" height={7}/>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:T_COLOR.muted, marginTop:8 }}>
+            <span>{doneCount}/{plan.subtasks.length} submisiones</span>
+            <span>{formatSeconds(totalElapsedSeconds)} / 45:00</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rl-main-grid">
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="g" style={{ padding:18, borderColor:"rgba(34,211,238,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div style={{ width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(34,211,238,.12)", color:"#22d3ee" }}><Gamepad2 size={19}/></div>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
+                <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }} className="mob-layout-grid">
+              <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
+                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Duración</div>
+                <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>45 min</div>
+              </div>
+              <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
+                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Tiempo</div>
+                <div style={{ fontSize:20, fontWeight:900, color:"#22d3ee" }}>{formatSeconds(totalElapsedSeconds)}</div>
+              </div>
+              <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
+                <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>No ranked frío</div>
+              </div>
+            </div>
+            <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
+              No ranked frío: primero completá el bloque de 45 min. Si perdés 2 seguidas por tilt, no sigas ranked.
+            </div>
+          </div>
+
+          <div className="rl-task-grid">
+            {plan.subtasks.map((task, index) => {
+              const done = completedSet.has(task.id);
+              const active = activeSubtaskId === task.id;
+              const elapsed = getElapsedSeconds(task.id);
+              const target = task.minutes * 60;
+              const pct = Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
+              const over = elapsed > target;
+              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : Target;
+              return (
+                <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                    <div style={{ width:40, height:40, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, background:`${task.accent}14`, color:task.accent, border:`1px solid ${task.accent}24` }}>
+                      <Icon size={18}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                        <span style={{ fontSize:10, fontWeight:900, color:task.accent, letterSpacing:1 }}>#{index + 1}</span>
+                        <span style={{ fontSize:13.5, fontWeight:800, color:T_COLOR.text }}>{task.title}</span>
+                        <span style={{ fontSize:10, fontWeight:800, color:T_COLOR.muted, border:"1px solid rgba(255,255,255,.08)", borderRadius:99, padding:"2px 7px" }}>{task.type}</span>
+                      </div>
+                      <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>{task.instruction}</div>
+                      {task.pack && (
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
+                          <span style={{ fontSize:11, color:"#22d3ee", fontWeight:900, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", borderRadius:9, padding:"4px 8px" }}>Código: {task.pack.code}</span>
+                          <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.pack.focus}</span>
+                        </div>
+                      )}
+                      <div style={{ marginTop:10 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:over ? "#fbbf24" : T_COLOR.muted, marginBottom:6 }}>
+                          <span><Timer size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {formatSeconds(elapsed)}</span>
+                          <span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span>
+                        </div>
+                        <ProgresoBar pct={pct} gradient={over ? "linear-gradient(90deg,#fbbf24,#fb923c)" : `linear-gradient(90deg,${task.accent}88,${task.accent})`} height={6}/>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:8, flexShrink:0 }}>
+                      <button onClick={() => toggleTimer(task.id)} style={{ width:38, height:38, borderRadius:11, border:`1px solid ${active ? task.accent : "rgba(255,255,255,.1)"}`, background:active ? `${task.accent}18` : "rgba(255,255,255,.04)", color:active ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={active ? "Pausar" : "Iniciar"}>
+                        {active ? <Pause size={16}/> : <Play size={16}/>} 
+                      </button>
+                      <button onClick={() => toggleSubtask(task.id)} style={{ width:38, height:38, borderRadius:11, border:`1px solid ${done ? task.accent : "rgba(255,255,255,.1)"}`, background:done ? `${task.accent}18` : "rgba(255,255,255,.04)", color:done ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={done ? "Desmarcar" : "Completar"}>
+                        {done ? <CheckCircle2 size={17}/> : <Circle size={17}/>} 
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="g" style={{ padding:18 }}>
+            <div style={S.stitle}>Cronómetro</div>
+            <div style={{ fontFamily:T_FONT.display, fontSize:38, fontWeight:900, color:activeSubtaskId ? "#22d3ee" : T_COLOR.text, lineHeight:1 }}>{formatSeconds(totalElapsedSeconds)}</div>
+            <div style={{ fontSize:12, color:T_COLOR.muted, margin:"6px 0 12px" }}>{activeSubtaskId ? `Activo: ${plan.subtasks.find(t => t.id === activeSubtaskId)?.title || "bloque"}` : "Sin bloque activo"}</div>
+            <ProgresoBar pct={timePct} gradient="linear-gradient(90deg,#22d3ee,#7c3aed)" height={8}/>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(167,139,250,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+              <Brain size={18} color="#a78bfa"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Mental anti-tilt</div>
+            </div>
+            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55, marginBottom:14 }}>
+              Si perdiste 2 seguidas por tilt, no sigas ranked. Volvé a freeplay o cerrá sesión.
+            </div>
+
+            {[{ key:"moodBefore", label:"Mood antes" }, { key:"moodAfter", label:"Mood después" }, { key:"tiltLevel", label:"Tilt level" }].map(group => (
+              <div key={group.key} style={{ marginBottom:13 }}>
+                <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>{group.label}</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:6 }}>
+                  {moodOptions.map(v => {
+                    const on = mental[group.key] === v;
+                    return (
+                      <button key={`${group.key}-${v}`} onClick={() => updateMental(group.key, v)} style={{ minHeight:34, borderRadius:10, border:on ? "1px solid rgba(167,139,250,.45)" : "1px solid rgba(255,255,255,.08)", background:on ? "rgba(167,139,250,.16)" : "rgba(255,255,255,.035)", color:on ? "#c4b5fd" : T_COLOR.muted, fontWeight:900, cursor:"pointer" }}>{v}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>Nota rápida</div>
+            <textarea
+              value={mental.note || ""}
+              onChange={(e) => updateMental("note", e.target.value.slice(0, 600))}
+              placeholder="¿Qué error repetí hoy? ¿Qué hice bien aunque perdiera? ¿Cuándo empezó el tilt?"
+              style={{ width:"100%", minHeight:110, resize:"vertical", borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"rgba(0,0,0,.18)", color:T_COLOR.text, padding:12, outline:"none", fontFamily:"inherit", fontSize:12, lineHeight:1.5 }}
+            />
+            <button onClick={saveMental} style={{ marginTop:10, width:"100%", minHeight:42, borderRadius:12, border:"1px solid rgba(167,139,250,.32)", background:mental.saved ? "rgba(52,211,153,.14)" : "rgba(167,139,250,.14)", color:mental.saved ? "#34d399" : "#c4b5fd", fontWeight:900, cursor:"pointer" }}>
+              {mental.saved ? "Reflexión guardada" : "Guardar reflexión Rocket League"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QuestsView() {
   const { persistent, pDispatch } = useAppData();
   const { ui, uiDispatch }        = useAppUI();
@@ -1684,6 +2334,13 @@ function QuestsView() {
   const filtered     = useMemo(() => ui.questFilter === "all" ? activeQuests : activeQuests.filter(q => q.cat === ui.questFilter), [ui.questFilter, activeQuests]);
 
   const handleComplete = useCallback((q) => {
+    if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
+      const id = Date.now();
+      uiDispatch(AC.setView("rocketLeague"));
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "La misión se completa al terminar las submisiones"));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
+      return;
+    }
     const wasCompleted = completedSet.has(q.id);
     const deltaXp = wasCompleted ? -q.xp : q.xp;
     const oldNivel = SELECTORS.level(persistent.xp.total);
@@ -2977,6 +3634,7 @@ function SettingsView() {
 const NAV_ITEMS = [
   { id:"dashboard",    icon:Home,          label:"Inicio"       },
   { id:"quests",       icon:Target,        label:"Misiones"     },
+  { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
   { id:"schedule",     icon:Calendar,      label:"Horario"      },
   { id:"planner",      icon:Layers,        label:"Plan semanal" },
   { id:"achievements", icon:Trophy,        label:"Logros"       },
@@ -2992,6 +3650,11 @@ const VIEW_ALIASES = Object.freeze({
   terminal:     "dashboard",
   misiones:     "quests",
   quests:       "quests",
+  rocket:       "rocketLeague",
+  rocketleague: "rocketLeague",
+  rl:           "rocketLeague",
+  training:     "rocketLeague",
+  rocketLeague: "rocketLeague",
   horario:      "schedule",
   schedule:     "schedule",
   plan:         "planner",
@@ -3019,6 +3682,7 @@ const normalizeView = (view) => VIEW_ALIASES[String(view || "dashboard").toLower
 const VIEW_MAP = {
   dashboard:    DashboardView,
   quests:       QuestsView,
+  rocketLeague: RocketLeagueView,
   schedule:     ScheduleView,
   planner:      SmartPlannerView,
   achievements: AchievementsView,
