@@ -222,7 +222,7 @@ const QUEST_ACCENTS = ["#a78bfa", "#34d399", "#60a5fa", "#fbbf24", "#22d3ee", "#
 
 function sanitizeQuestItems(items = []) {
   const source = Array.isArray(items) && items.length > 0 ? items : QUESTS;
-  return source.slice(0, 12).map((q, i) => ({
+  return source.slice(0, 24).map((q, i) => ({
     id: Number(q.id) || i + 1,
     title: String(q.title || `Misión ${i + 1}`).slice(0, 80),
     sub: String(q.sub || "").slice(0, 120),
@@ -880,13 +880,68 @@ function buildTimed(startMin, blocks) {
   });
 }
 
-function getScheduleBlocks(dayIdx, swimDays) {
-  if (dayIdx === 5 || dayIdx === 6) return {
-    morning:   buildTimed(T(9),  SCHEDULE_BLOCKS.WE_MORNING),
-    afternoon: buildTimed(T(14), SCHEDULE_BLOCKS.WE_AFTERNOON),
-  };
-  if (dayIdx === 0) return { main: buildTimed(T(14), SCHEDULE_BLOCKS.WD_MONDAY) };
-  return { main: buildTimed(T(14), swimDays.includes(dayIdx) ? SCHEDULE_BLOCKS.WD_SWIM : SCHEDULE_BLOCKS.WD_NO_SWIM) };
+function parseQuestDurationMinutes(q, fallback = 30) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return ROCKET_LEAGUE_SESSION_MINUTES;
+  const matches = [...text.matchAll(/(\d+)\s*(?:–|-|a)?\s*(\d+)?\s*(?:min|m|minute|minutes)/g)];
+  if (matches.length) {
+    const values = matches.flatMap((m) => [m[1], m[2]]).filter(Boolean).map(Number).filter((n) => Number.isFinite(n));
+    if (values.length) return Math.max(5, Math.min(180, Math.max(...values)));
+  }
+  const hourMatch = text.match(/(\d+)\s*h/);
+  if (hourMatch) return Math.max(15, Math.min(180, Number(hourMatch[1]) * 60));
+  return fallback;
+}
+
+function questScheduleType(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return "FLOW";
+  if (text.includes("blender") || text.includes("3d")) return "CREATIVE";
+  if (text.includes("reflex") || text.includes("diario") || text.includes("medit")) return "RECOVERY";
+  if (text.includes("inglés") || text.includes("ingles") || text.includes("typing") || text.includes("lectura")) return "SKILL";
+  if (text.includes("cálculo") || text.includes("calculo") || text.includes("estudi")) return "FOCUS";
+  if (q?.cat === "body") return "PHYSICAL";
+  if (q?.cat === "mind") return "SKILL";
+  return "FOCUS";
+}
+
+function questScheduleFocus(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return ["Freeplay", "Speedflips", "Flicks", "Mental"];
+  if (text.includes("cálculo") || text.includes("calculo")) return ["Tema del día", "Ejercicios", "Corrección"];
+  if (text.includes("blender")) return ["Proyecto", "Práctica", "Low poly"];
+  if (text.includes("inglés") || text.includes("ingles")) return ["Listening", "Vocabulario", "Speaking"];
+  if (text.includes("reflex")) return ["Cierre", "Plan mañana", "Mental"];
+  return ["Misión", "Ejecución"];
+}
+
+function buildMissionScheduleBlocks(dayIdx, quests = QUESTS) {
+  const active = hydrateQuestItems(Array.isArray(quests) && quests.length ? quests : QUESTS);
+  const start = dayIdx >= 5 ? T(9) : T(14);
+  const blocks = [];
+
+  if (dayIdx < 5) blocks.push(B("buf0", "Preparación", "BUFFER", 15, "Abrí LifeOS · agua · cero distracciones"));
+  else blocks.push(B("ease", "Arranque suave", "RECOVERY", 10, "Sin prisa · prepará el día"));
+
+  active.forEach((q, idx) => {
+    const duration = parseQuestDurationMinutes(q, idx === 0 ? 60 : 30);
+    const type = questScheduleType(q);
+    blocks.push(B(`quest-${q.id}`, q.title, type, duration, q.sub || "Misión diaria", {
+      questId: q.id,
+      quest: q,
+      focus: questScheduleFocus(q),
+    }));
+    if (idx < active.length - 1) {
+      const bufferDur = q.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? 15 : 10;
+      blocks.push(B(`buf-${q.id}`, "Reset corto", idx >= active.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
+    }
+  });
+
+  return buildTimed(start, blocks);
+}
+
+function getScheduleBlocks(dayIdx, swimDays, quests = QUESTS) {
+  return { main: buildMissionScheduleBlocks(dayIdx, quests) };
 }
 
 function calcLoad(blocks) {
@@ -2046,8 +2101,9 @@ const QuestItem = memo(function QuestItem({ q, completed, onComplete, isBurst })
   );
 });
 
-const TimelineBlock = memo(function TimelineBlock({ block, showConnector }) {
-  const type = ACT_TYPES[block.type];
+const TimelineBlock = memo(function TimelineBlock({ block, showConnector, completed = false, onComplete }) {
+  const type = ACT_TYPES[block.type] || ACT_TYPES.SKILL;
+  const canComplete = Boolean(block.quest && typeof onComplete === "function");
   if (block.type === "BUFFER") {
     return (
       <div className="tl-buf" style={{ minHeight: block.duration >= 15 ? 34 : 26 }}>
@@ -2074,7 +2130,29 @@ const TimelineBlock = memo(function TimelineBlock({ block, showConnector }) {
           background:`radial-gradient(circle,${type.color}15 0%,transparent 70%)`, transform:"translate(30px,-30px)", pointerEvents:"none" }}/>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:3, position:"relative" }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#eef2f8", lineHeight:1.3 }}>{block.name}</div>
-          <div className="tl-type-chip" style={{ background:`${type.color}14`, color:type.color, border:`1px solid ${type.color}22`, marginTop:1 }}>{type.label}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
+            <div className="tl-type-chip" style={{ background:`${type.color}14`, color:type.color, border:`1px solid ${type.color}22`, marginTop:1 }}>{type.label}</div>
+            {canComplete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onComplete(block.quest); }}
+                style={{
+                  width:28,
+                  height:28,
+                  borderRadius:9,
+                  border:`1px solid ${completed ? type.color : "rgba(255,255,255,.1)"}`,
+                  background:completed ? `${type.color}18` : "rgba(255,255,255,.04)",
+                  color:completed ? type.color : "#64748b",
+                  cursor:"pointer",
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                }}
+                title={completed ? "Desmarcar misión" : "Completar misión"}
+              >
+                {completed ? <CheckCircle2 size={15}/> : <Circle size={15}/>} 
+              </button>
+            )}
+          </div>
         </div>
         <div style={{ fontSize:11, color:"#64748b", position:"relative" }}>
           <span style={{ fontWeight:600, color:"#4b5563" }}>{fmtDur(block.duration)}</span>
@@ -2649,25 +2727,54 @@ function ScheduleView() {
   const { persistent, pDispatch } = useAppData();
   const { ui, uiDispatch }        = useAppUI();
 
+  const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
+  const completedSet = useMemo(() => SELECTORS.completedSet(persistent.quests.completedIds), [persistent.quests.completedIds]);
   const swimDays  = useMemo(() => SELECTORS.swimDays(persistent.planner.swimPairIndex), [persistent.planner.swimPairIndex]);
   const sel       = ui.scheduleDay;
-  const sched     = useMemo(() => getScheduleBlocks(sel, swimDays), [sel, swimDays]);
+  const sched     = useMemo(() => getScheduleBlocks(sel, swimDays, activeQuests), [sel, swimDays, activeQuests]);
   const allBlocks = useMemo(() => [...(sched.main||[]),...(sched.morning||[]),...(sched.afternoon||[])], [sched]);
-  const weekLoad  = useMemo(() => SELECTORS.weekLoadData(swimDays), [swimDays]);
+  const missionBlocks = useMemo(() => allBlocks.filter(b => b.questId), [allBlocks]);
 
   const load   = useMemo(() => calcLoad(allBlocks.filter(b => b.type !== "BUFFER")), [allBlocks]);
   const li     = loadInfo(load);
-  const isWeekend = sel >= 5;
-  const hasSwim   = !isWeekend && sel !== 0 && swimDays.includes(sel);
 
-  const typeMins = (type) => allBlocks.filter(b => b.type === type).reduce((s,b) => s + b.duration, 0);
-  const focusMin = useMemo(() => typeMins("FOCUS"),    [allBlocks]);
-  const creMin   = useMemo(() => typeMins("CREATIVE"), [allBlocks]);
-  const flowMin  = useMemo(() => typeMins("FLOW"),     [allBlocks]);
-  const physMin  = useMemo(() => typeMins("PHYSICAL"), [allBlocks]);
-  const recMin   = useMemo(() => (typeMins("RECOVERY") + typeMins("BUFFER")), [allBlocks]);
+  const typeMins = useCallback((type) => allBlocks.filter(b => b.type === type).reduce((sum,b) => sum + b.duration, 0), [allBlocks]);
+  const focusMin = useMemo(() => typeMins("FOCUS"),    [typeMins]);
+  const creMin   = useMemo(() => typeMins("CREATIVE"), [typeMins]);
+  const flowMin  = useMemo(() => typeMins("FLOW"),     [typeMins]);
+  const skillMin = useMemo(() => typeMins("SKILL"),    [typeMins]);
+  const recMin   = useMemo(() => (typeMins("RECOVERY") + typeMins("BUFFER")), [typeMins]);
 
-  const handleRegen = useCallback(() => pDispatch(AC.plannerRegenSwim()), [pDispatch]);
+  const completedMissionCount = useMemo(() => missionBlocks.filter(b => completedSet.has(b.questId)).length, [missionBlocks, completedSet]);
+  const missionPct = missionBlocks.length ? Math.round((completedMissionCount / missionBlocks.length) * 100) : 0;
+
+  const handleQuestComplete = useCallback((q) => {
+    if (!q) return;
+    if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
+      const id = Date.now();
+      unlockLifeOSAudio();
+      playLifeOSSound("menu");
+      uiDispatch(AC.setView("rocketLeague"));
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "La misión se completa al terminar las submisiones"));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
+      return;
+    }
+    const wasCompleted = completedSet.has(q.id);
+    unlockLifeOSAudio();
+    if (!wasCompleted) playLifeOSSound("complete");
+    const deltaXp = wasCompleted ? -q.xp : q.xp;
+    const oldNivel = SELECTORS.level(persistent.xp.total);
+    pDispatch(AC.questComplete(q.id, q.xp, oldNivel));
+    const id = Date.now();
+    uiDispatch(AC.setBurst(q.id));
+    uiDispatch(AC.toastAdd(id, `${deltaXp > 0 ? "+" : ""}${deltaXp} XP`, wasCompleted ? `Desmarcado · ${q.title}` : `Completado desde Horario · ${q.title}`));
+    setTimeout(() => uiDispatch(AC.clearBurst()), 900);
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2900);
+    const newNivel = SELECTORS.level(Math.max(0, persistent.xp.total + deltaXp));
+    if (!wasCompleted && newNivel > oldNivel) {
+      setTimeout(() => { uiDispatch(AC.showNivelUp()); setTimeout(() => uiDispatch(AC.hideNivelUp()), 3200); }, 300);
+    }
+  }, [completedSet, persistent.xp.total, pDispatch, uiDispatch]);
 
   const TimelineSection = ({ blocks, label, labelColor, labelBg, labelBorder }) => (
     <div className="g" style={{ padding:"18px 16px 16px" }}>
@@ -2675,25 +2782,32 @@ function ScheduleView() {
         <div style={{ ...S.stitle, marginBottom:0, fontSize:15 }}>{DAY_FULL[sel]}</div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           {label && <span style={{ fontSize:10, fontWeight:700, letterSpacing:.6, color:labelColor, background:labelBg, border:`1px solid ${labelBorder}`, borderRadius:100, padding:"2px 9px" }}>{label}</span>}
-          {hasSwim && !label && <span style={{ fontSize:10, fontWeight:700, color:"#60a5fa", background:"rgba(96,165,250,.1)", border:"1px solid rgba(96,165,250,.25)", borderRadius:100, padding:"2px 9px" }}>🏊 Swim Day</span>}
           {blocks[0] && <span style={{ fontSize:11, color:"#475569" }}>{fmt(blocks[0].startMin)} – {fmt(blocks[blocks.length-1].endMin)}</span>}
         </div>
       </div>
       <div className="tl-wrap">
-        {blocks.map((b,i) => <TimelineBlock key={`${b.key}-${i}`} block={b} showConnector={i < blocks.length-1}/>)}
+        {blocks.map((b,i) => (
+          <TimelineBlock
+            key={`${b.key}-${i}`}
+            block={b}
+            showConnector={i < blocks.length-1}
+            completed={b.questId ? completedSet.has(b.questId) : false}
+            onComplete={handleQuestComplete}
+          />
+        ))}
       </div>
     </div>
   );
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
-      <div style={S.ptitle} className="mob-ptitle">Schedule</div>
-      <div style={S.psub} className="mob-psub">Adaptive pacing · sustainable consistency · anti-burnout design</div>
+      <div style={S.ptitle} className="mob-ptitle">Horario</div>
+      <div style={S.psub} className="mob-psub">Tus misiones diarias ordenadas por tiempo. Misiones = qué hacer · Horario = cuándo hacerlo.</div>
 
       <div className="sch-day-tabs">
         {DAY_NAMES.map((d, i) => (
-          <div key={i} className={`sdt${sel===i?" sel":""}${i===todayIdx&&sel!==i?" today":""}${swimDays.includes(i)?" swim-day":""}`} onClick={() => uiDispatch(AC.scheduleSelectDay(i))}>
-            {d}{swimDays.includes(i) && <span style={{ marginLeft:4, fontSize:9 }}>🏊</span>}
+          <div key={i} className={`sdt${sel===i?" sel":""}${i===todayIdx&&sel!==i?" today":""}`} onClick={() => uiDispatch(AC.scheduleSelectDay(i))}>
+            {d}
             {i===todayIdx && <span style={{ marginLeft:4, fontSize:10, color:"#22d3ee", verticalAlign:"middle" }}>•</span>}
           </div>
         ))}
@@ -2704,30 +2818,42 @@ function ScheduleView() {
           <div className="g load-bar-wrap" style={{ borderColor:`${li.color}20`, background:`${li.color}06` }}>
             <div style={{ flexShrink:0 }}>
               <div style={{ fontSize:10, fontWeight:700, letterSpacing:1, textTransform:"uppercase", color:li.color, marginBottom:2 }}>{li.label}</div>
-              <div style={{ fontSize:11, color:"#4b5563" }}>Cognitive load · {load}/100</div>
+              <div style={{ fontSize:11, color:"#4b5563" }}>Carga estimada · {load}/100</div>
             </div>
             <div className="load-bar-track"><div className="load-bar-fill" style={{ width:`${load}%`, background:li.bar }}/></div>
             <div style={{ fontSize:20, fontWeight:800, color:li.color, fontFamily:T_FONT.display, flexShrink:0 }}>{load}</div>
           </div>
 
-          {sched.main && <TimelineSection blocks={sched.main}/>}
+          {sched.main && <TimelineSection blocks={sched.main}/>} 
           {sched.morning && (
             <>
-              <TimelineSection blocks={sched.morning} label="Morning" labelColor="#34d399" labelBg="rgba(52,211,153,.1)" labelBorder="rgba(52,211,153,.22)"/>
-              <TimelineSection blocks={sched.afternoon} label="Afternoon" labelColor="#a78bfa" labelBg="rgba(167,139,250,.1)" labelBorder="rgba(167,139,250,.22)"/>
+              <TimelineSection blocks={sched.morning} label="Mañana" labelColor="#34d399" labelBg="rgba(52,211,153,.1)" labelBorder="rgba(52,211,153,.22)"/>
+              <TimelineSection blocks={sched.afternoon} label="Tarde" labelColor="#a78bfa" labelBg="rgba(167,139,250,.1)" labelBorder="rgba(167,139,250,.22)"/>
             </>
           )}
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
           <div className="g" style={{ padding:18 }}>
-            <div style={{ ...S.stitle, fontSize:14, marginBottom:12 }}>Day Breakdown</div>
+            <div style={{ ...S.stitle, fontSize:14, marginBottom:12 }}>Progreso del día</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <span style={{ fontSize:12, color:T_COLOR.muted }}>{completedMissionCount}/{missionBlocks.length} misiones</span>
+              <span style={{ fontSize:20, fontWeight:900, color:missionPct >= 100 ? "#34d399" : "#a78bfa", fontFamily:T_FONT.display }}>{missionPct}%</span>
+            </div>
+            <ProgresoBar pct={missionPct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)" height={8}/>
+            <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.6, marginTop:10 }}>
+              Si completás una tarjeta aquí, también se marca en Misiones. Si la desmarcás desde Misiones, el Horario se actualiza.
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18 }}>
+            <div style={{ ...S.stitle, fontSize:14, marginBottom:12 }}>Distribución</div>
             {[
-              { l:"Focus",     v: fmtDur(focusMin), c:"#a78bfa" },
-              { l:"Creative",  v: fmtDur(creMin),   c:"#22d3ee" },
-              { l:"Flow (RL)", v: fmtDur(flowMin),  c:"#34d399" },
-              { l:"Physical",  v: physMin > 0 ? fmtDur(physMin) : "—", c:"#60a5fa" },
-              { l:"Recovery",  v: fmtDur(recMin),   c:"#86efac" },
+              { l:"Estudio profundo", v: fmtDur(focusMin), c:"#a78bfa" },
+              { l:"Creativo",         v: fmtDur(creMin),   c:"#22d3ee" },
+              { l:"Rocket League",    v: fmtDur(flowMin),  c:"#34d399" },
+              { l:"Skill",            v: fmtDur(skillMin), c:"#fb923c" },
+              { l:"Reset/descanso",   v: fmtDur(recMin),   c:"#86efac" },
             ].map(s => (
               <div key={s.l} className="day-stat-row">
                 <div style={{ display:"flex", alignItems:"center", gap:7 }}>
@@ -2739,69 +2865,14 @@ function ScheduleView() {
             ))}
           </div>
 
-          <div className="g" style={{ padding:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div style={{ ...S.stitle, fontSize:14, marginBottom:0 }}>Swim Days</div>
-              <button onClick={handleRegen} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600, color:"#60a5fa", background:"rgba(96,165,250,.08)", border:"1px solid rgba(96,165,250,.22)", borderRadius:7, padding:"4px 9px", cursor:"pointer" }}>
-                <RefreshCw size={11}/>Regenerate
-              </button>
-            </div>
-            <div style={{ fontSize:11, color:"#4b5563", marginBottom:10 }}>This week · Tue–Fri · non-consecutive</div>
-            <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:12 }}>
-              {swimDays.map(d => <span key={d} className="swim-pill">🏊 {DAY_NAMES[d]} · 4:00 pm</span>)}
-            </div>
-            <div style={{ padding:"10px 12px", background:"rgba(96,165,250,.05)", border:"1px solid rgba(96,165,250,.12)", borderRadius:9, fontSize:11, color:"#475569", lineHeight:1.7 }}>
-              <div>⏱ Leave at 3:50 pm (10 min walk)</div>
-              <div>🏊 Pool: 4:00 – 5:30 pm (1h30)</div>
-              <div>🚶 Back home ~6:10 pm</div>
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18 }}>
+          <div className="g" style={{ padding:18, borderColor:"rgba(34,211,238,.16)", background:"rgba(34,211,238,.035)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <Layers size={15} color="#22d3ee"/>
-              <div style={{ ...S.stitle, fontSize:14, marginBottom:0 }}>Blender Mode</div>
+              <Lightbulb size={15} color="#22d3ee"/>
+              <div style={{ ...S.stitle, fontSize:14, marginBottom:0 }}>Arquitectura limpia</div>
             </div>
-            <div className="bm-toggle">
-              {[["continue","Continue Project"],["challenge","Random Challenge"]].map(([v,l]) => (
-                <button key={v} className={`bmt ${persistent.planner.blenderMode===v?"on":""}`} onClick={() => pDispatch(AC.plannerSetBlender(v))}>{l}</button>
-              ))}
+            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7 }}>
+              Plan semanal se fusionó con Horario para evitar duplicación. Editá tus misiones en Ajustes y este horario se reconstruye con esas mismas tareas.
             </div>
-            <div style={{ marginTop:10, fontSize:11, color:"#4b5563", lineHeight:1.6 }}>
-              {persistent.planner.blenderMode === "continue" ? "Resume active project · GitHub sync active · API integration available" : "AI-generated challenge · random difficulty + focus area · fresh creative constraint"}
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18 }}>
-            <div style={{ ...S.stitle, fontSize:14, marginBottom:12 }}>Week Balance</div>
-            <div style={{ display:"flex", gap:4, marginBottom:12 }}>
-              {weekLoad.map((wd, i) => {
-                const isToday = i === todayIdx;
-                const isSel   = i === sel;
-                const wli     = loadInfo(wd.load);
-                return (
-                  <div key={i} className={`week-day-cell${isSel?" wdc-sel":""}${isToday&&!isSel?" wdc-today":""}`} onClick={() => uiDispatch(AC.scheduleSelectDay(i))}>
-                    <span className={`wdc-name${isToday?" today":""}${isSel?" sel":""}`}>{wd.d}</span>
-                    <div className="wdc-bar" style={{ background:wli.bar, width:`${Math.round(wd.load * 0.28)}px`, minWidth:8, maxWidth:28 }}/>
-                    {wd.swim===1 && <div style={{ fontSize:9 }}>🏊</div>}
-                  </div>
-                );
-              })}
-            </div>
-            <ResponsiveContainer width="100%" height={70}>
-              <BarChart data={weekLoad} barSize={10} margin={{ top:0, right:0, left:-34, bottom:0 }}>
-                <defs>
-                  <linearGradient id="wbg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity={.85}/>
-                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={.35}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="d" tick={{ fill:"#475569", fontSize:9 }} axisLine={false} tickLine={false}/>
-                <YAxis hide domain={[0,100]}/>
-                <Tooltip contentStyle={{ background:"rgba(7,7,15,.97)", border:"1px solid rgba(255,255,255,.08)", borderRadius:8, fontSize:11, padding:"5px 10px" }} cursor={{ fill:"rgba(255,255,255,.03)" }} labelStyle={{ color:"#eef2f8", fontWeight:600 }} itemStyle={{ color:"#a78bfa" }} formatter={v => [`Load: ${v}`,""]}/>
-                <Bar dataKey="load" fill="url(#wbg)" radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -3716,6 +3787,42 @@ function SettingsView() {
     setQuestDraft((prev) => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
   }, []);
 
+  const addQuestDraft = useCallback(() => {
+    setQuestDraft((prev) => {
+      const nextId = Math.max(0, ...prev.map(q => Number(q.id) || 0)) + 1;
+      return sanitizeQuestItems([
+        ...prev,
+        {
+          id: nextId,
+          title: `Nueva misión ${nextId}`,
+          sub: "30 min · describí la tarea",
+          xp: 8,
+          iconKey: QUEST_ICON_KEYS[nextId % QUEST_ICON_KEYS.length],
+          diff: "MEDIO",
+          cat: "mind",
+          accent: QUEST_ACCENTS[nextId % QUEST_ACCENTS.length],
+          link: "",
+          linkLabel: "",
+          links: [],
+        },
+      ]);
+    });
+  }, []);
+
+  const removeQuestDraft = useCallback((idx) => {
+    setQuestDraft((prev) => prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const moveQuestDraft = useCallback((idx, dir) => {
+    setQuestDraft((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }, []);
+
   const saveQuestDraft = useCallback(() => {
     pDispatch(AC.questsCustomUpdate(questDraft));
     uiDispatch(AC.toastAdd(Date.now(), "Misiones actualizadas", "Tus misiones personalizadas se guardaron localmente."));
@@ -3837,22 +3944,31 @@ function SettingsView() {
 
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {questDraft.map((q, idx) => (
-            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.1fr 1.3fr 1.1fr 76px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
+            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.05fr 1.25fr 1fr 70px 112px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
               <input value={q.title} onChange={(e) => updateQuestDraft(idx, { title:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.text, borderRadius:9, padding:"10px 12px", fontWeight:700 }} />
-              <input value={q.sub} onChange={(e) => updateQuestDraft(idx, { sub:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.subtext, borderRadius:9, padding:"10px 12px" }} />
+              <input value={q.sub} onChange={(e) => updateQuestDraft(idx, { sub:e.target.value })} placeholder="Duración + descripción" style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.subtext, borderRadius:9, padding:"10px 12px" }} />
               <input value={q.link || ""} onChange={(e) => updateQuestDraft(idx, { link:e.target.value, linkLabel:q.linkLabel || "Abrir página" })} placeholder="Link opcional" style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:"#22d3ee", borderRadius:9, padding:"10px 12px" }} />
               <input type="number" min="0" max="999" value={q.xp} onChange={(e) => updateQuestDraft(idx, { xp:Number(e.target.value) || 0 })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:q.accent, borderRadius:9, padding:"10px 12px", fontWeight:900 }} />
+              <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                <button onClick={() => moveQuestDraft(idx, -1)} disabled={idx === 0} style={{ width:30, height:34, borderRadius:9, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:idx === 0 ? "#334155" : T_COLOR.muted, cursor:idx === 0 ? "not-allowed" : "pointer" }}>↑</button>
+                <button onClick={() => moveQuestDraft(idx, 1)} disabled={idx === questDraft.length - 1} style={{ width:30, height:34, borderRadius:9, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:idx === questDraft.length - 1 ? "#334155" : T_COLOR.muted, cursor:idx === questDraft.length - 1 ? "not-allowed" : "pointer" }}>↓</button>
+                <button onClick={() => removeQuestDraft(idx)} disabled={questDraft.length <= 1} style={{ width:34, height:34, borderRadius:9, border:"1px solid rgba(248,113,113,.18)", background:"rgba(248,113,113,.07)", color:questDraft.length <= 1 ? "#334155" : "#f87171", cursor:questDraft.length <= 1 ? "not-allowed" : "pointer", fontWeight:900 }}>×</button>
+              </div>
             </div>
           ))}
         </div>
 
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:16 }}>
+          <button onClick={addQuestDraft} disabled={questDraft.length >= 24} style={{ border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.08)", color:questDraft.length >= 24 ? "#475569" : "#34d399", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:questDraft.length >= 24 ? "not-allowed" : "pointer" }}>
+            Agregar misión
+          </button>
           <button onClick={saveQuestDraft} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
             Guardar misiones
           </button>
           <button onClick={resetQuestDraft} style={{ border:"1px solid rgba(251,191,36,.25)", background:"rgba(251,191,36,.08)", color:"#fbbf24", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
             Restaurar misiones base
           </button>
+          <span style={{ alignSelf:"center", fontSize:11, color:T_COLOR.muted }}>{questDraft.length}/24 misiones</span>
         </div>
       </div>
 
@@ -3890,7 +4006,6 @@ const NAV_ITEMS = [
   { id:"quests",       icon:Target,        label:"Misiones"     },
   { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
   { id:"schedule",     icon:Calendar,      label:"Horario"      },
-  { id:"planner",      icon:Layers,        label:"Plan semanal" },
   { id:"achievements", icon:Trophy,        label:"Logros"       },
   { id:"stats",        icon:BarChart2,     label:"Análisis"     },
   { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
@@ -3911,8 +4026,8 @@ const VIEW_ALIASES = Object.freeze({
   rocketLeague: "rocketLeague",
   horario:      "schedule",
   schedule:     "schedule",
-  plan:         "planner",
-  planner:      "planner",
+  plan:         "schedule",
+  planner:      "schedule",
   logros:       "achievements",
   logro:        "achievements",
   achievements: "achievements",
@@ -3938,7 +4053,6 @@ const VIEW_MAP = {
   quests:       QuestsView,
   rocketLeague: RocketLeagueView,
   schedule:     ScheduleView,
-  planner:      SmartPlannerView,
   achievements: AchievementsView,
   stats:        StatsView,
   reflection:   ReflectionView,
