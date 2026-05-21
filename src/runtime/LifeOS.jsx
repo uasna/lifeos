@@ -3749,7 +3749,7 @@ function AchievementsView() {
           </div>
           <div style={{ fontFamily:T_FONT.display, fontWeight:800, color:"#a78bfa", fontSize:18 }}>{pct}%</div>
         </div>
-        <ProgressBar pct={pct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)" height={6}/>
+        <ProgresoBar pct={pct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)" height={6}/>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:14 }}>
@@ -4361,12 +4361,24 @@ function ProfileView() {
 
 function WardrobeView() {
   const { persistent, pDispatch } = useAppData();
-  const { uiDispatch } = useAppUI();
   const wardrobe = persistent.wardrobe || createWardrobeInitial();
   const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
   const items = normalizeWardrobeItems(wardrobe.items);
   const [now, setNow] = useState(() => Date.now());
   const [draft, setDraft] = useState({ type:"top", name:"", color:"", style:"casual" });
+
+  const closetInputStyle = useCallback(() => ({
+    width: "100%",
+    minHeight: 42,
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(15,23,42,.42)",
+    color: T_COLOR.text,
+    padding: "0 12px",
+    outline: "none",
+    fontWeight: 700,
+    fontFamily: T_FONT.body,
+  }), []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -4419,9 +4431,9 @@ function WardrobeView() {
               <div style={{ ...S.stitle, marginBottom:0 }}>Perfil de estilo</div>
             </div>
             <div className="mob-layout-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-              <input value={profile.skinTone || ""} onChange={(e) => updateProfile("skinTone", e.target.value.slice(0, 32))} placeholder="Tono" style={inputStyle()} />
-              <input value={profile.style || ""} onChange={(e) => updateProfile("style", e.target.value.slice(0, 48))} placeholder="Estilo" style={inputStyle()} />
-              <input value={profile.notes || ""} onChange={(e) => updateProfile("notes", e.target.value.slice(0, 90))} placeholder="Notas" style={inputStyle()} />
+              <input value={profile.skinTone || ""} onChange={(e) => updateProfile("skinTone", e.target.value.slice(0, 32))} placeholder="Tono" style={closetInputStyle()} />
+              <input value={profile.style || ""} onChange={(e) => updateProfile("style", e.target.value.slice(0, 48))} placeholder="Estilo" style={closetInputStyle()} />
+              <input value={profile.notes || ""} onChange={(e) => updateProfile("notes", e.target.value.slice(0, 90))} placeholder="Notas" style={closetInputStyle()} />
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
               Para tono canela suelen favorecer crema, blanco cálido, camel, terracota, verde oliva, azul marino, borgoña, denim oscuro y gris carbón. Ajustalo con la ropa real que tengas.
@@ -4459,12 +4471,12 @@ function WardrobeView() {
               <div style={{ ...S.stitle, marginBottom:0 }}>Agregar prenda</div>
             </div>
             <div style={{ display:"grid", gap:9 }}>
-              <select value={draft.type} onChange={(e) => setDraft(d => ({ ...d, type:e.target.value }))} style={inputStyle()}>
+              <select value={draft.type} onChange={(e) => setDraft(d => ({ ...d, type:e.target.value }))} style={closetInputStyle()}>
                 {WARDROBE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camiseta blanca, jeans negro" style={inputStyle()} />
-              <input value={draft.color} onChange={(e) => setDraft(d => ({ ...d, color:e.target.value }))} placeholder="Color" style={inputStyle()} />
-              <input value={draft.style} onChange={(e) => setDraft(d => ({ ...d, style:e.target.value }))} placeholder="Estilo: casual, formal, deportivo" style={inputStyle()} />
+              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camiseta blanca, jeans negro" style={closetInputStyle()} />
+              <input value={draft.color} onChange={(e) => setDraft(d => ({ ...d, color:e.target.value }))} placeholder="Color" style={closetInputStyle()} />
+              <input value={draft.style} onChange={(e) => setDraft(d => ({ ...d, style:e.target.value }))} placeholder="Estilo: casual, formal, deportivo" style={closetInputStyle()} />
               <button onClick={addItem} style={{ minHeight:42, borderRadius:12, border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", fontWeight:900, cursor:"pointer" }}>Agregar al clóset</button>
             </div>
           </div>
