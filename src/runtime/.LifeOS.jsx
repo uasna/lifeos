@@ -43,6 +43,7 @@ const AT = Object.freeze({
   // ── Quest domain ─────────────────────────────────────────────
   QUEST_COMPLETE:             "QUEST_COMPLETE",
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
+  QUESTS_DAILY_SYNC:          "QUESTS_DAILY_SYNC",
   APP_SETTINGS_UPDATE:        "APP_SETTINGS_UPDATE",
   // ── Rocket League domain ─────────────────────────────────────
   RL_DAILY_SYNC:             "RL_DAILY_SYNC",
@@ -81,6 +82,7 @@ const AC = Object.freeze({
   // Persistent
   questComplete:           (questId, xpGained, newNivel) => ({ type: AT.QUEST_COMPLETE, questId, xpGained, newNivel }),
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
+  questsDailySync:         (dateKey) => ({ type: AT.QUESTS_DAILY_SYNC, dateKey }),
   appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
   rlDailySync:            (dateKey, planId) => ({ type: AT.RL_DAILY_SYNC, dateKey, planId }),
   rlSubtaskToggle:        (subtaskId) => ({ type: AT.RL_SUBTASK_TOGGLE, subtaskId }),
@@ -658,6 +660,72 @@ function getSecondsUntilNextLocalDay(nowMs = Date.now()) {
   return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
 }
 
+function getLifeOSDateKey(date = new Date()) {
+  return getRocketLeagueDateKey(date);
+}
+
+function normalizeQuestCompletedIdsForDate(completedIds = [], dailyLog = [], dateKey = getLifeOSDateKey()) {
+  const ids = Array.from(new Set((Array.isArray(completedIds) ? completedIds : []).filter(id => typeof id === "number")));
+  const log = Array.isArray(dailyLog) ? dailyLog : [];
+  const latestByQuest = new Map();
+
+  for (const entry of log) {
+    if (!entry || typeof entry !== "object" || typeof entry.questId !== "number") continue;
+    if (!ids.includes(entry.questId)) continue;
+    const time = new Date(entry.date || 0).getTime();
+    const prev = latestByQuest.get(entry.questId);
+    const prevTime = prev ? new Date(prev.date || 0).getTime() : -Infinity;
+    if (Number.isFinite(time) && time >= prevTime) latestByQuest.set(entry.questId, entry);
+  }
+
+  // If there is no dated quest log yet, preserve the current state instead of wiping it blindly.
+  if (latestByQuest.size === 0) return ids;
+
+  return ids.filter(id => {
+    const entry = latestByQuest.get(id);
+    if (!entry) return false;
+    const entryDateKey = getLifeOSDateKey(entry.date);
+    const wasCompleted = entry.action !== "undo" && Number(entry.amount || 0) >= 0;
+    return entryDateKey === dateKey && wasCompleted;
+  });
+}
+
+
+function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
+  if (!state || typeof state !== "object") return state;
+  const quests = state.quests || {};
+  const lastResetDate = typeof quests.lastResetDate === "string" ? quests.lastResetDate : null;
+
+  if (lastResetDate === dateKey) {
+    return state;
+  }
+
+  const activeIds = new Set(getActiveQuests(state).map(q => q.id));
+  const completedIds = Array.from(new Set((quests.completedIds || []).filter(id => activeIds.has(id))));
+  const shouldArchive = lastResetDate && completedIds.length > 0;
+  const archiveEntry = shouldArchive
+    ? {
+        dateKey: lastResetDate,
+        completedIds,
+        completedCount: completedIds.length,
+        totalCount: activeIds.size,
+        archivedAt: new Date().toISOString(),
+      }
+    : null;
+
+  return {
+    ...state,
+    quests: {
+      ...quests,
+      completedIds: [],
+      dailyHistory: archiveEntry
+        ? [...(Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []), archiveEntry].slice(-120)
+        : (Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []),
+      lastResetDate: dateKey,
+    },
+  };
+}
+
 function createAppSettingsInitial() {
   return {
     sound: {
@@ -1008,7 +1076,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 3; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 4; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1040,6 +1108,20 @@ const MIGRATIONS = Object.freeze({
       ? deepMerge(createAppSettingsInitial(), snap.appSettings)
       : createAppSettingsInitial(),
   }),
+  [3]: (snap) => {
+    const dateKey = getLifeOSDateKey();
+    const quests = snap?.quests && typeof snap.quests === "object" ? snap.quests : {};
+    const completedIds = Array.isArray(quests.completedIds) ? quests.completedIds : [];
+    return {
+      ...snap,
+      quests: {
+        ...quests,
+        completedIds: normalizeQuestCompletedIdsForDate(completedIds, snap?.xp?.dailyLog, dateKey),
+        dailyHistory: Array.isArray(quests.dailyHistory) ? quests.dailyHistory : [],
+        lastResetDate: dateKey,
+      },
+    };
+  },
 });
 
 // Chains migration functions from savedVersion → STORAGE_SCHEMA_VERSION.
@@ -1132,6 +1214,8 @@ function validateSnapshotIntegrity(snap) {
   const { quests } = snap;
   if (!Array.isArray(quests.completedIds)) return false;
   if (!quests.completedIds.every(id => typeof id === "number")) return false;
+  if (quests.dailyHistory !== undefined && !Array.isArray(quests.dailyHistory)) return false;
+  if (quests.lastResetDate !== undefined && typeof quests.lastResetDate !== "string") return false;
 
   // Racha domain
   const { streak } = snap;
@@ -1395,6 +1479,7 @@ const PERSISTENT_INITIAL = {
     completedIds: [],
     dailyHistory: [],
     customItems: null,
+    lastResetDate: getLifeOSDateKey(),
   },
   streak: {
     current:     0,
@@ -1475,6 +1560,10 @@ function persistentReducer(state, action) {
           completedIds: (state.quests.completedIds || []).filter(id => validIds.has(id)),
         },
       };
+    }
+
+    case AT.QUESTS_DAILY_SYNC: {
+      return applyDailyQuestReset(state, action.dateKey || getLifeOSDateKey());
     }
 
     case AT.RL_DAILY_SYNC: {
@@ -1618,7 +1707,7 @@ function persistentReducer(state, action) {
     }
 
     case AT.STATE_HYDRATE: {
-      const hydrated = { ...state, ...action.snapshot };
+      const hydrated = applyDailyQuestReset({ ...state, ...action.snapshot }, getLifeOSDateKey());
       if (hydrated.appSettings?.sound) persistAudioPrefs(hydrated.appSettings.sound);
       return hydrated;
     }
@@ -4377,6 +4466,8 @@ export default function LifeOS() {
   const [cloudMessage,   setCloudMessage]   = useState("");
   const cloudHydratedRef                    = useRef(false);
   const cloudSaveTimerRef                   = useRef(null);
+  const persistentRef                       = useRef(persistent);
+  persistentRef.current                     = persistent;
 
   const loadCloudState = useCallback(async (userId) => {
     if (!supabase || !userId) return;
@@ -4571,6 +4662,24 @@ export default function LifeOS() {
     };
   }, [persistent, cloudUser, hydrated]);
 
+  // ── Daily mission reset ───────────────────────────────────────
+  // Keeps normal missions aligned with the current local day, even if the app
+  // stays open past midnight. Rocket League keeps its own subtask reset.
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const syncDailyMissions = () => {
+      const today = getLifeOSDateKey();
+      if (persistentRef.current?.quests?.lastResetDate !== today) {
+        pDispatch(AC.questsDailySync(today));
+      }
+    };
+
+    syncDailyMissions();
+    const interval = setInterval(syncDailyMissions, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [hydrated, pDispatch]);
+
   // ── Debounced autosave ────────────────────────────────────────
   // Fires on every persistent state mutation after hydration completes.
   // 1.2s debounce window. Writes always flush on beforeunload (see below).
@@ -4604,9 +4713,6 @@ export default function LifeOS() {
   // ── beforeunload flush ────────────────────────────────────────
   // Tab close / navigation away: synchronously drain the debounce buffer.
   // Uses the current persistent ref to avoid stale closure capture.
-  const persistentRef = useRef(persistent);
-  persistentRef.current = persistent;
-
   useEffect(() => {
     const handleBeforeUnload = () => {
       // Flush debounce buffer with the most recent state snapshot.
