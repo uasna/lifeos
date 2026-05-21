@@ -43,6 +43,7 @@ const AT = Object.freeze({
   // ── Quest domain ─────────────────────────────────────────────
   QUEST_COMPLETE:             "QUEST_COMPLETE",
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
+  APP_SETTINGS_UPDATE:        "APP_SETTINGS_UPDATE",
   // ── Rocket League domain ─────────────────────────────────────
   RL_DAILY_SYNC:             "RL_DAILY_SYNC",
   RL_SUBTASK_TOGGLE:         "RL_SUBTASK_TOGGLE",
@@ -80,6 +81,7 @@ const AC = Object.freeze({
   // Persistent
   questComplete:           (questId, xpGained, newNivel) => ({ type: AT.QUEST_COMPLETE, questId, xpGained, newNivel }),
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
+  appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
   rlDailySync:            (dateKey, planId) => ({ type: AT.RL_DAILY_SYNC, dateKey, planId }),
   rlSubtaskToggle:        (subtaskId) => ({ type: AT.RL_SUBTASK_TOGGLE, subtaskId }),
   rlTimerCommit:          (subtaskId, secondsDelta) => ({ type: AT.RL_TIMER_COMMIT, subtaskId, secondsDelta }),
@@ -656,6 +658,32 @@ function getSecondsUntilNextLocalDay(nowMs = Date.now()) {
   return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
 }
 
+function createAppSettingsInitial() {
+  return {
+    sound: {
+      enabled: true,
+      menu: true,
+      complete: true,
+      timer: true,
+      mission: true,
+      volume: 0.75,
+    },
+  };
+}
+
+function getStoredAudioPrefs() {
+  try {
+    const raw = localStorage.getItem("lifeos:audio");
+    if (!raw) return createAppSettingsInitial().sound;
+    return deepMerge(createAppSettingsInitial().sound, JSON.parse(raw));
+  } catch {
+    return createAppSettingsInitial().sound;
+  }
+}
+
+function persistAudioPrefs(sound) {
+  try { localStorage.setItem("lifeos:audio", JSON.stringify(sound)); } catch {}
+}
 
 let lifeOSAudioCtx = null;
 
@@ -673,11 +701,19 @@ function unlockLifeOSAudio() {
 }
 
 function playLifeOSSound(kind = "complete") {
+  const prefs = getStoredAudioPrefs();
+  if (!prefs.enabled) return;
+  if (kind === "menu" && prefs.menu === false) return;
+  if (kind === "timer" && prefs.timer === false) return;
+  if (kind === "mission" && prefs.mission === false) return;
+  if ((kind === "complete" || !["menu","timer","mission"].includes(kind)) && prefs.complete === false) return;
+
   const ctx = getLifeOSAudioContext();
   if (!ctx) return;
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
   const now = ctx.currentTime;
+  const volume = Math.max(0, Math.min(1, Number(prefs.volume) || 0.75));
   const patterns = {
     menu: [440, 554.37],
     timer: [660, 880],
@@ -692,7 +728,7 @@ function playLifeOSSound(kind = "complete") {
     osc.type = kind === "timer" ? "triangle" : "sine";
     osc.frequency.setValueAtTime(freq, now + index * 0.09);
     gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-    gain.gain.exponentialRampToValueAtTime(kind === "mission" ? 0.055 : 0.04, now + index * 0.09 + 0.012);
+    gain.gain.exponentialRampToValueAtTime((kind === "mission" ? 0.055 : 0.04) * volume, now + index * 0.09 + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.12);
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -972,7 +1008,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 2; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 3; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -997,6 +1033,12 @@ const MIGRATIONS = Object.freeze({
     rocketLeague: snap?.rocketLeague && typeof snap.rocketLeague === "object"
       ? deepMerge(createRocketLeagueInitialState(), snap.rocketLeague)
       : createRocketLeagueInitialState(),
+  }),
+  [2]: (snap) => ({
+    ...snap,
+    appSettings: snap?.appSettings && typeof snap.appSettings === "object"
+      ? deepMerge(createAppSettingsInitial(), snap.appSettings)
+      : createAppSettingsInitial(),
   }),
 });
 
@@ -1078,7 +1120,7 @@ function validateSnapshotIntegrity(snap) {
   if (!snap || typeof snap !== "object") return false;
 
   // Required top-level domains
-  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague"];
+  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague", "appSettings"];
   if (!REQUIRED_DOMAINS.every(k => snap[k] !== null && typeof snap[k] === "object")) return false;
 
   // XP domain
@@ -1117,6 +1159,11 @@ function validateSnapshotIntegrity(snap) {
   if (!Array.isArray(rocketLeague.current.completedSubtaskIds)) return false;
   if (rocketLeague.current.elapsedBySubtask === null || typeof rocketLeague.current.elapsedBySubtask !== "object" || Array.isArray(rocketLeague.current.elapsedBySubtask)) return false;
   if (!rocketLeague.current.mental || typeof rocketLeague.current.mental !== "object") return false;
+
+  // App settings domain
+  const { appSettings } = snap;
+  if (!appSettings || typeof appSettings !== "object") return false;
+  if (!appSettings.sound || typeof appSettings.sound !== "object") return false;
 
   return true;
 }
@@ -1160,7 +1207,7 @@ const StorageAdapter = Object.freeze({
 // UI state is intentionally never serialized.
 
 const PERSISTENT_DOMAINS = Object.freeze([
-  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague"
+  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague", "appSettings"
 ]);
 
 function serializeAppState(persistentState) {
@@ -1376,6 +1423,7 @@ const PERSISTENT_INITIAL = {
     history: [],
   },
   rocketLeague: createRocketLeagueInitialState(),
+  appSettings: createAppSettingsInitial(),
 };
 
 const UI_INITIAL = {
@@ -1563,8 +1611,17 @@ function persistentReducer(state, action) {
     case AT.PLANNER_SET_BLENDER:
       return { ...state, planner: { ...state.planner, blenderMode: action.mode } };
 
-    case AT.STATE_HYDRATE:
-      return { ...state, ...action.snapshot };
+    case AT.APP_SETTINGS_UPDATE: {
+      const next = deepMerge(state.appSettings || createAppSettingsInitial(), action.patch || {});
+      if (next.sound) persistAudioPrefs(next.sound);
+      return { ...state, appSettings: next };
+    }
+
+    case AT.STATE_HYDRATE: {
+      const hydrated = { ...state, ...action.snapshot };
+      if (hydrated.appSettings?.sound) persistAudioPrefs(hydrated.appSettings.sound);
+      return hydrated;
+    }
 
     default:
       return state;
@@ -1684,7 +1741,7 @@ const MOB_NAV_ITEMS = [
   { id:"quests",     icon:Target,        label:"Misiones"  },
   { id:"rocketLeague", icon:Gamepad2,    label:"Rocket"    },
   { id:"schedule",   icon:Calendar,      label:"Horario"},
-  { id:"planner",    icon:Layers,        label:"Plan" },
+  { id:"focus",      icon:Timer,         label:"Sesión" },
   { id:"reflection", icon:MessageSquare, label:"Reflexión", accent:true },
   { id:"profile",    icon:User,          label:"Perfil" },
   { id:"settings",   icon:Settings,      label:"Ajustes" },
@@ -2191,6 +2248,36 @@ const ToastItem = memo(function ToastItem({ msg, sub }) {
   );
 });
 
+function buildXpHistoryData(dailyLog = [], days = 30) {
+  const now = new Date();
+  const byDate = new Map();
+  (Array.isArray(dailyLog) ? dailyLog : []).forEach((entry) => {
+    if (!entry?.date) return;
+    const key = new Date(entry.date).toISOString().slice(0, 10);
+    byDate.set(key, (byDate.get(key) || 0) + (Number(entry.amount) || 0));
+  });
+  return Array.from({ length: days }, (_, idx) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() - (days - 1 - idx));
+    const key = d.toISOString().slice(0, 10);
+    const label = days <= 7 ? DAY_NAMES[(d.getDay() + 6) % 7] : String(d.getDate());
+    return { d: label, key, xp: Math.max(0, Math.round(byDate.get(key) || 0)) };
+  });
+}
+
+function buildRecentQuestEvents(dailyLog = [], quests = QUESTS, limit = 10) {
+  const questMap = new Map((quests || QUESTS).map(q => [q.id, q]));
+  return (Array.isArray(dailyLog) ? dailyLog : [])
+    .filter(e => e && typeof e.questId === "number")
+    .slice(-limit)
+    .reverse()
+    .map(e => ({
+      ...e,
+      quest: questMap.get(e.questId),
+      when: e.date ? new Date(e.date).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "—",
+    }));
+}
+
 // ─────────────────────────────────────────────────────────────────
 // § 11 · DOMAIN VIEWS
 // ─────────────────────────────────────────────────────────────────
@@ -2207,6 +2294,8 @@ function DashboardView() {
   const triggers     = useMemo(() => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests), [persistent.quests.completedIds, persistent.streak.current, activeQuests]);
 
   const pct = completedSet.size / Math.max(activeQuests.length, 1) * 100;
+  const nextQuest = useMemo(() => activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0], [activeQuests, completedSet]);
+  const nextQuestMinutes = nextQuest ? parseQuestDurationMinutes(nextQuest, 30) : 0;
 
   const { pDispatch } = useAppData();
   const handleQuestComplete = useCallback((q) => {
@@ -2318,20 +2407,23 @@ function DashboardView() {
 
           <div className="g" style={{ padding:18 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ ...S.stitle, marginBottom:0, fontSize:15 }}>Logros</div>
-              <div style={{ fontSize:11, color:"#64748b" }}>{ACHIEVEMENTS.filter(a=>persistent.achievements.unlockedIds.includes(a.id)).length}/{ACHIEVEMENTS.length}</div>
+              <div style={{ ...S.stitle, marginBottom:0, fontSize:15 }}>Siguiente acción</div>
+              <span style={{ fontSize:11, color:"#22d3ee", fontWeight:800, background:"rgba(34,211,238,.10)", padding:"2px 8px", borderRadius:999 }}>{nextQuestMinutes} min</span>
             </div>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              {ACHIEVEMENTS.map(a => {
-                const I = a.icon;
-                const unlocked = persistent.achievements.unlockedIds.includes(a.id);
-                return (
-                  <div key={a.id} title={a.title} style={{ width:42, height:42, borderRadius:11, background: unlocked ? `${a.glow}15` : "rgba(255,255,255,.03)", border:`1.5px solid ${unlocked ? `${a.glow}35` : "rgba(255,255,255,.06)"}`, display:"flex", alignItems:"center", justifyContent:"center", color: unlocked ? a.glow : "#2d3748", boxShadow: unlocked ? `0 0 12px ${a.glow}20` : "none", transition:"all .2s ease" }}>
-                    {unlocked ? <I size={18}/> : <Lock size={14}/>}
-                  </div>
-                );
-              })}
-            </div>
+            {nextQuest ? (
+              <div>
+                <div style={{ fontSize:14, fontWeight:900, color:T_COLOR.text, marginBottom:5 }}>{nextQuest.title}</div>
+                <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55, marginBottom:14 }}>{nextQuest.sub}</div>
+                <button
+                  onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); uiDispatch(AC.setView("focus")); }}
+                  style={{ border:"1px solid rgba(34,211,238,.25)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}
+                >
+                  Iniciar sesión
+                </button>
+              </div>
+            ) : (
+              <div style={{ fontSize:12, color:T_COLOR.muted }}>Todas las misiones están completas.</div>
+            )}
           </div>
         </div>
       </div>
@@ -3331,31 +3423,35 @@ function AchievementsView() {
 
 function StatsView() {
   const { persistent } = useAppData();
-  const completedIds   = persistent.quests.completedIds;
-  const totalXp        = persistent.xp.total;
-  const streak         = persistent.streak.current;
+  const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
+  const completedIds   = persistent.quests.completedIds || [];
+  const totalXp        = persistent.xp.total || 0;
+  const monthData      = useMemo(() => buildXpHistoryData(persistent.xp.dailyLog, 30), [persistent.xp.dailyLog]);
+  const weekData       = useMemo(() => buildXpHistoryData(persistent.xp.dailyLog, 7), [persistent.xp.dailyLog]);
+  const recentEvents   = useMemo(() => buildRecentQuestEvents(persistent.xp.dailyLog, activeQuests, 12), [persistent.xp.dailyLog, activeQuests]);
 
-  const avgDay  = Math.round(MONTH_DATA.reduce((s,d) => s+d.xp, 0) / MONTH_DATA.length);
-  const bestDay = Math.max(...MONTH_DATA.map(d => d.xp));
-  const activeQuests = getActiveQuests(persistent);
+  const avgDay  = Math.round(monthData.reduce((s,d) => s+d.xp, 0) / Math.max(monthData.length, 1));
+  const bestDay = Math.max(0, ...monthData.map(d => d.xp));
   const rate    = Math.round((completedIds.length / Math.max(activeQuests.length, 1)) * 100);
+  const rlCurrent = persistent.rocketLeague?.current;
+  const rlTodaySeconds = Object.values(rlCurrent?.elapsedBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
       <div style={S.ptitle}>Análisis</div>
-      <div style={S.psub}>Tu rendimiento con el tiempo · Mantené la constancia y acumulá progreso</div>
+      <div style={S.psub}>Datos reales de tus misiones, XP, Rocket League y sesiones recientes.</div>
 
       <div className="s-grid" style={{ marginBottom:20 }}>
         <StatCard val={totalXp.toLocaleString()} label="XP total"     icon={Zap}        accent="#a78bfa"/>
         <StatCard val={avgDay}                   label="XP prom./día" icon={TrendingUp}  accent="#34d399"/>
         <StatCard val={bestDay}                  label="Mejor día"      icon={Award}       accent="#fbbf24"/>
-        <StatCard val={`${rate}%`}              label="Tasa de misiones"    icon={Target}      accent="#22d3ee"/>
+        <StatCard val={formatSeconds(rlTodaySeconds)} label="RL hoy" icon={Gamepad2} accent="#22d3ee"/>
       </div>
 
       <div className="g" style={{ padding:20, marginBottom:16 }}>
-        <div style={S.stitle}>Historial de XP · 30 días</div>
+        <div style={S.stitle}>Historial real de XP · 30 días</div>
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={MONTH_DATA} margin={{ top:5, right:5, left:-20, bottom:0 }}>
+          <AreaChart data={monthData} margin={{ top:5, right:5, left:-20, bottom:0 }}>
             <defs>
               <linearGradient id="ag1" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#7c3aed" stopOpacity={.4}/>
@@ -3370,26 +3466,189 @@ function StatsView() {
         </ResponsiveContainer>
       </div>
 
-      <div className="g" style={{ padding:20 }}>
-        <div style={S.stitle}>Esta semana</div>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={WEEK_DATA} barSize={22} margin={{ top:0, right:5, left:-20, bottom:0 }}>
-            <defs>
-              <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#06b6d4" stopOpacity={.85}/>
-                <stop offset="100%" stopColor="#0891b2" stopOpacity={.3}/>
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="d" tick={{ fill:"#64748b", fontSize:11 }} axisLine={false} tickLine={false}/>
-            <YAxis hide/>
-            <Tooltip contentStyle={{ background:"rgba(7,7,15,.96)", border:"1px solid rgba(255,255,255,.09)", borderRadius:9, fontSize:12 }} cursor={{ fill:"rgba(255,255,255,.03)" }} labelStyle={{ color:"#eef2f8" }} itemStyle={{ color:"#22d3ee" }}/>
-            <Bar dataKey="xp" fill="url(#bg2)" radius={[5,5,0,0]}/>
-          </BarChart>
-        </ResponsiveContainer>
+      <div style={{ display:"grid", gridTemplateColumns:"1.1fr .9fr", gap:16 }} className="mob-layout-grid">
+        <div className="g" style={{ padding:20 }}>
+          <div style={S.stitle}>Esta semana</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={weekData} barSize={22} margin={{ top:0, right:5, left:-20, bottom:0 }}>
+              <defs>
+                <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={.85}/>
+                  <stop offset="100%" stopColor="#0891b2" stopOpacity={.3}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="d" tick={{ fill:"#64748b", fontSize:11 }} axisLine={false} tickLine={false}/>
+              <YAxis hide/>
+              <Tooltip contentStyle={{ background:"rgba(7,7,15,.96)", border:"1px solid rgba(255,255,255,.09)", borderRadius:9, fontSize:12 }} cursor={{ fill:"rgba(255,255,255,.03)" }} labelStyle={{ color:"#eef2f8" }} itemStyle={{ color:"#22d3ee" }}/>
+              <Bar dataKey="xp" fill="url(#bg2)" radius={[5,5,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="g" style={{ padding:20 }}>
+          <div style={S.stitle}>Últimos movimientos</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:9, maxHeight:220, overflow:"auto" }}>
+            {recentEvents.length ? recentEvents.map((e, idx) => {
+              const positive = (Number(e.amount) || 0) >= 0;
+              return (
+                <div key={`${e.date}-${idx}`} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, padding:"9px 10px", borderRadius:10, background:"rgba(255,255,255,.025)", border:"1px solid rgba(255,255,255,.05)" }}>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text }}>{e.quest?.title || `Misión ${e.questId}`}</div>
+                    <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{e.when}</div>
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:900, color:positive ? "#34d399" : "#f87171" }}>{positive ? "+" : ""}{Number(e.amount) || 0} XP</div>
+                </div>
+              );
+            }) : (
+              <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.6 }}>Todavía no hay movimientos. Completá una misión para empezar tu historial real.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:18, marginTop:16, background: rate >= 70 ? "rgba(52,211,153,.055)" : "rgba(251,191,36,.055)", borderColor: rate >= 70 ? "rgba(52,211,153,.14)" : "rgba(251,191,36,.14)" }}>
+        <div style={{ fontSize:13, fontWeight:900, color: rate >= 70 ? "#34d399" : "#fbbf24", marginBottom:5 }}>
+          {rate >= 70 ? "Buen ritmo diario" : "Todavía queda margen"}
+        </div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.6 }}>
+          Llevás {completedIds.length}/{activeQuests.length} misiones de hoy. El historial ahora sale de tus completados reales, no de datos de muestra.
+        </div>
       </div>
     </div>
   );
 }
+
+
+function FocusSessionView() {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+  const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
+  const completedSet = useMemo(() => SELECTORS.completedSet(persistent.quests.completedIds || []), [persistent.quests.completedIds]);
+  const firstOpen = activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0];
+  const [selectedId, setSelectedId] = useState(() => firstOpen?.id || activeQuests[0]?.id || 1);
+  const selectedQuest = useMemo(() => activeQuests.find(q => q.id === selectedId) || firstOpen || activeQuests[0], [activeQuests, selectedId, firstOpen]);
+  const targetSeconds = useMemo(() => Math.max(60, parseQuestDurationMinutes(selectedQuest, 30) * 60), [selectedQuest]);
+  const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(false);
+  const soundedRef = useRef(false);
+
+  useEffect(() => {
+    if (!selectedQuest) return;
+    setElapsed(0);
+    setRunning(false);
+    soundedRef.current = false;
+  }, [selectedQuest?.id]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const timer = setInterval(() => {
+      setElapsed(prev => {
+        const next = prev + 1;
+        if (next >= targetSeconds && !soundedRef.current) {
+          soundedRef.current = true;
+          unlockLifeOSAudio();
+          playLifeOSSound("timer");
+          uiDispatch(AC.toastAdd(Date.now(), "Tiempo objetivo alcanzado", selectedQuest?.title || "Sesión"));
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [running, targetSeconds, selectedQuest?.title, uiDispatch]);
+
+  const pct = Math.min(100, (elapsed / Math.max(targetSeconds, 1)) * 100);
+  const isDone = selectedQuest ? completedSet.has(selectedQuest.id) : false;
+
+  const completeQuest = useCallback(() => {
+    if (!selectedQuest) return;
+    if (selectedQuest.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
+      unlockLifeOSAudio();
+      playLifeOSSound("menu");
+      uiDispatch(AC.setView("rocketLeague"));
+      const id = Date.now();
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "La misión padre se completa al terminar todas las submisiones."));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
+      return;
+    }
+    const wasCompleted = completedSet.has(selectedQuest.id);
+    unlockLifeOSAudio();
+    if (!wasCompleted) playLifeOSSound("mission");
+    const oldNivel = SELECTORS.level(persistent.xp.total);
+    pDispatch(AC.questComplete(selectedQuest.id, selectedQuest.xp, oldNivel));
+    const deltaXp = wasCompleted ? -selectedQuest.xp : selectedQuest.xp;
+    const id = Date.now();
+    uiDispatch(AC.toastAdd(id, `${deltaXp > 0 ? "+" : ""}${deltaXp} XP`, wasCompleted ? `Desmarcado · ${selectedQuest.title}` : `Completado · ${selectedQuest.title}`));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2900);
+    setRunning(false);
+  }, [selectedQuest, completedSet, persistent.xp.total, pDispatch, uiDispatch]);
+
+  const nextOpen = activeQuests.find(q => !completedSet.has(q.id) && q.id !== selectedQuest?.id);
+
+  return (
+    <div style={{ animation:"sldIn .3s ease", maxWidth:980 }}>
+      <div style={S.ptitle} className="mob-ptitle">Sesión de enfoque</div>
+      <div style={S.psub} className="mob-psub">Un modo limpio para trabajar una misión a la vez con temporizador, sonido y cierre claro.</div>
+
+      <div className="g" style={{ padding:22, marginBottom:16, background:"linear-gradient(135deg,rgba(124,58,237,.08),rgba(34,211,238,.04))", borderColor:"rgba(167,139,250,.18)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap", marginBottom:18 }}>
+          <div>
+            <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:1.2, color:T_COLOR.muted, fontWeight:900, marginBottom:6 }}>Misión actual</div>
+            <div style={{ fontFamily:T_FONT.display, fontSize:26, fontWeight:900, color:T_COLOR.text }}>{selectedQuest?.title || "Sin misión"}</div>
+            <div style={{ fontSize:13, color:T_COLOR.muted, lineHeight:1.6, marginTop:5 }}>{selectedQuest?.sub || "Agregá una misión en Ajustes."}</div>
+          </div>
+          <div style={{ minWidth:145, textAlign:"right" }}>
+            <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:900, color: elapsed >= targetSeconds ? "#fbbf24" : "#22d3ee", fontVariantNumeric:"tabular-nums" }}>{formatSeconds(elapsed)}</div>
+            <div style={{ fontSize:11, color:T_COLOR.muted }}>objetivo {formatSeconds(targetSeconds)}</div>
+          </div>
+        </div>
+
+        <ProgresoBar pct={pct} gradient={elapsed >= targetSeconds ? "linear-gradient(90deg,#fbbf24,#f97316)" : "linear-gradient(90deg,#7c3aed,#06b6d4)"} height={8}/>
+
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:18 }}>
+          <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); setRunning(v => !v); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+            {running ? <Pause size={16}/> : <Play size={16}/>} {running ? "Pausar" : "Iniciar"}
+          </button>
+          <button onClick={() => { setRunning(false); setElapsed(0); soundedRef.current = false; }} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:T_COLOR.muted, borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer" }}>
+            Reiniciar
+          </button>
+          <button onClick={completeQuest} disabled={!selectedQuest} style={{ border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.08)", color:isDone ? "#94a3b8" : "#34d399", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:selectedQuest ? "pointer" : "not-allowed", display:"flex", alignItems:"center", gap:8 }}>
+            <CheckCircle2 size={16}/> {isDone ? "Desmarcar misión" : "Completar misión"}
+          </button>
+          {nextOpen && (
+            <button onClick={() => setSelectedId(nextOpen.id)} style={{ border:"1px solid rgba(167,139,250,.25)", background:"rgba(167,139,250,.08)", color:"#a78bfa", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer" }}>
+              Siguiente pendiente
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:20 }}>
+        <div style={S.stitle}>Elegir misión</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:10 }}>
+          {activeQuests.map(q => {
+            const done = completedSet.has(q.id);
+            const on = selectedQuest?.id === q.id;
+            const I = q.icon || Target;
+            return (
+              <button key={q.id} onClick={() => setSelectedId(q.id)} style={{ textAlign:"left", border:`1px solid ${on ? `${q.accent}55` : "rgba(255,255,255,.06)"}`, background:on ? `${q.accent}10` : "rgba(255,255,255,.025)", borderRadius:13, padding:13, cursor:"pointer", color:T_COLOR.text }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                  <div style={{ width:32, height:32, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:`${q.accent}12`, color:q.accent }}><I size={15}/></div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{q.title}</div>
+                    <div style={{ fontSize:10.5, color:T_COLOR.muted }}>{parseQuestDurationMinutes(q, 30)} min · {q.xp} XP</div>
+                  </div>
+                  {done ? <CheckCircle2 size={15} color="#34d399"/> : <Circle size={15} color="#475569"/>}
+                </div>
+                <div style={{ fontSize:11, color:T_COLOR.muted, lineHeight:1.4 }}>{q.sub}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ReflectionView() {
   const { persistent, pDispatch } = useAppData();
@@ -3729,10 +3988,17 @@ function SettingsView() {
 
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const [questDraft, setQuestDraft] = useState(() => sanitizeQuestItems(activeQuests));
+  const audioSettings = deepMerge(createAppSettingsInitial().sound, persistent.appSettings?.sound || {});
 
   useEffect(() => {
     setQuestDraft(sanitizeQuestItems(activeQuests));
   }, [activeQuests]);
+
+  const updateAudioSetting = useCallback((key, value) => {
+    const nextSound = { ...audioSettings, [key]: value };
+    persistAudioPrefs(nextSound);
+    pDispatch(AC.appSettingsUpdate({ sound: nextSound }));
+  }, [audioSettings, pDispatch]);
 
   const clearLocalProgreso = useCallback(() => {
     const ok = window.confirm("¿Seguro que querés borrar el progreso guardado en este navegador?");
@@ -3901,6 +4167,32 @@ function SettingsView() {
       </div>
 
       <div className="g" style={{ padding:22, marginBottom:16 }}>
+        <div style={S.stitle}>Sonidos y avisos</div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:14 }}>
+          Controlá los sonidos de menú, misiones, cronómetros y misión padre. En móvil puede requerir tocar la pantalla una vez para activar audio.
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10, marginBottom:14 }}>
+          {[
+            ["enabled", "Sonido general"],
+            ["menu", "Menú"],
+            ["complete", "Misiones"],
+            ["timer", "Cronómetro"],
+            ["mission", "Misión padre"],
+          ].map(([key, label]) => (
+            <label key={key} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"11px 12px", borderRadius:12, background:"rgba(255,255,255,.025)", border:"1px solid rgba(255,255,255,.06)", color:T_COLOR.text, fontSize:12, fontWeight:800 }}>
+              <span>{label}</span>
+              <input type="checkbox" checked={audioSettings[key] !== false} onChange={(e) => updateAudioSetting(key, e.target.checked)} />
+            </label>
+          ))}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{ fontSize:12, color:T_COLOR.muted, minWidth:70 }}>Volumen</span>
+          <input type="range" min="0" max="1" step="0.05" value={Number(audioSettings.volume) || 0.75} onChange={(e) => updateAudioSetting("volume", Number(e.target.value))} style={{ flex:1 }} />
+          <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("mission"); }} style={{ border:"1px solid rgba(34,211,238,.25)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"8px 11px", fontWeight:900, cursor:"pointer" }}>Probar</button>
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:22, marginBottom:16 }}>
         <div style={S.stitle}>Links de páginas</div>
         <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:16 }}>
           Accesos rápidos a tus páginas externas para estudiar, practicar y ver tus proyectos.
@@ -4006,7 +4298,7 @@ const NAV_ITEMS = [
   { id:"quests",       icon:Target,        label:"Misiones"     },
   { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
   { id:"schedule",     icon:Calendar,      label:"Horario"      },
-  { id:"achievements", icon:Trophy,        label:"Logros"       },
+  { id:"focus",        icon:Timer,         label:"Sesión"       },
   { id:"stats",        icon:BarChart2,     label:"Análisis"     },
   { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
   { id:"profile",      icon:User,          label:"Perfil"       },
@@ -4028,12 +4320,16 @@ const VIEW_ALIASES = Object.freeze({
   schedule:     "schedule",
   plan:         "schedule",
   planner:      "schedule",
-  logros:       "achievements",
-  logro:        "achievements",
-  achievements: "achievements",
-  achievement:  "achievements",
-  trophies:     "achievements",
-  trofeos:      "achievements",
+  sesion:       "focus",
+  sesión:       "focus",
+  focus:        "focus",
+  enfoque:      "focus",
+  logros:       "focus",
+  logro:        "focus",
+  achievements: "focus",
+  achievement:  "focus",
+  trophies:     "focus",
+  trofeos:      "focus",
   analisis:     "stats",
   análisis:     "stats",
   stats:        "stats",
@@ -4053,7 +4349,7 @@ const VIEW_MAP = {
   quests:       QuestsView,
   rocketLeague: RocketLeagueView,
   schedule:     ScheduleView,
-  achievements: AchievementsView,
+  focus:        FocusSessionView,
   stats:        StatsView,
   reflection:   ReflectionView,
   profile:      ProfileView,
