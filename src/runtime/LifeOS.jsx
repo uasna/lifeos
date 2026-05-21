@@ -660,6 +660,63 @@ function getSecondsUntilNextLocalDay(nowMs = Date.now()) {
   return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
 }
 
+function formatLocalDateKey(date = new Date()) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function getScheduleWeekKey(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1; // Monday = 0
+  d.setDate(d.getDate() - dayIdx);
+  return formatLocalDateKey(d);
+}
+
+function getSecondsUntilNextScheduleWeek(nowMs = Date.now()) {
+  const now = new Date(nowMs);
+  const next = new Date(now);
+  const daysUntilMonday = now.getDay() === 0 ? 1 : 8 - now.getDay();
+  next.setDate(now.getDate() + daysUntilMonday);
+  next.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
+}
+
+function hashStringSeed(input = "lifeos") {
+  let h = 2166136261;
+  const str = String(input);
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededRandom(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle(items = [], seedInput = "lifeos") {
+  const arr = [...items];
+  const rand = seededRandom(hashStringSeed(seedInput));
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function isNightlyQuest(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  return text.includes("reflex") || text.includes("diario") || text.includes("nocturn") || text.includes("journal");
+}
+
 function getLifeOSDateKey(date = new Date()) {
   return getRocketLeagueDateKey(date);
 }
@@ -1019,33 +1076,45 @@ function questScheduleFocus(q) {
   return ["Misión", "Ejecución"];
 }
 
-function buildMissionScheduleBlocks(dayIdx, quests = QUESTS) {
+function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getScheduleWeekKey()) {
   const active = hydrateQuestItems(Array.isArray(quests) && quests.length ? quests : QUESTS);
-  const start = dayIdx >= 5 ? T(9) : T(14);
+  const seedBase = `${weekKey}:day-${dayIdx}:missions`;
+  const rand = seededRandom(hashStringSeed(seedBase));
+  const weekdayStarts = [T(13,45), T(14,0), T(14,15), T(14,30), T(14,45), T(15,0)];
+  const weekendStarts = [T(8,30), T(9,0), T(9,30), T(10,0), T(10,30)];
+  const startPool = dayIdx >= 5 ? weekendStarts : weekdayStarts;
+  const start = startPool[Math.floor(rand() * startPool.length)] || (dayIdx >= 5 ? T(9) : T(14));
   const blocks = [];
 
   if (dayIdx < 5) blocks.push(B("buf0", "Preparación", "BUFFER", 15, "Abrí LifeOS · agua · cero distracciones"));
   else blocks.push(B("ease", "Arranque suave", "RECOVERY", 10, "Sin prisa · prepará el día"));
 
-  active.forEach((q, idx) => {
+  const nightly = active.filter(isNightlyQuest);
+  const movable = active.filter(q => !isNightlyQuest(q));
+  const shuffled = seededShuffle(movable, seedBase);
+  const ordered = [...shuffled, ...nightly];
+
+  ordered.forEach((q, idx) => {
     const duration = parseQuestDurationMinutes(q, idx === 0 ? 60 : 30);
     const type = questScheduleType(q);
     blocks.push(B(`quest-${q.id}`, q.title, type, duration, q.sub || "Misión diaria", {
       questId: q.id,
       quest: q,
       focus: questScheduleFocus(q),
+      randomized: true,
+      scheduleWeekKey: weekKey,
     }));
-    if (idx < active.length - 1) {
+    if (idx < ordered.length - 1) {
       const bufferDur = q.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? 15 : 10;
-      blocks.push(B(`buf-${q.id}`, "Reset corto", idx >= active.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
+      blocks.push(B(`buf-${q.id}`, "Reset corto", idx >= ordered.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
     }
   });
 
   return buildTimed(start, blocks);
 }
 
-function getScheduleBlocks(dayIdx, swimDays, quests = QUESTS) {
-  return { main: buildMissionScheduleBlocks(dayIdx, quests) };
+function getScheduleBlocks(dayIdx, swimDays, quests = QUESTS, weekKey = getScheduleWeekKey()) {
+  return { main: buildMissionScheduleBlocks(dayIdx, quests, weekKey) };
 }
 
 function calcLoad(blocks) {
@@ -2912,8 +2981,17 @@ function ScheduleView() {
   const completedSet = useMemo(() => SELECTORS.completedSet(persistent.quests.completedIds), [persistent.quests.completedIds]);
   const swimDays  = useMemo(() => SELECTORS.swimDays(persistent.planner.swimPairIndex), [persistent.planner.swimPairIndex]);
   const sel       = ui.scheduleDay;
-  const sched     = useMemo(() => getScheduleBlocks(sel, swimDays, activeQuests), [sel, swimDays, activeQuests]);
+  const [scheduleNow, setScheduleNow] = useState(() => Date.now());
+  const scheduleWeekKey = getScheduleWeekKey(new Date(scheduleNow));
+  const missionResetCountdown = formatCountdownSeconds(getSecondsUntilNextLocalDay(scheduleNow));
+  const weeklyRemixCountdown = formatCountdownSeconds(getSecondsUntilNextScheduleWeek(scheduleNow));
+  const sched     = useMemo(() => getScheduleBlocks(sel, swimDays, activeQuests, scheduleWeekKey), [sel, swimDays, activeQuests, scheduleWeekKey]);
   const allBlocks = useMemo(() => [...(sched.main||[]),...(sched.morning||[]),...(sched.afternoon||[])], [sched]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setScheduleNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
   const missionBlocks = useMemo(() => allBlocks.filter(b => b.questId), [allBlocks]);
 
   const load   = useMemo(() => calcLoad(allBlocks.filter(b => b.type !== "BUFFER")), [allBlocks]);
@@ -2985,6 +3063,19 @@ function ScheduleView() {
       <div style={S.ptitle} className="mob-ptitle">Horario</div>
       <div style={S.psub} className="mob-psub">Tus misiones diarias ordenadas por tiempo. Misiones = qué hacer · Horario = cuándo hacerlo.</div>
 
+      <div className="g" style={{ padding:16, marginBottom:16, display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:12, borderColor:"rgba(34,211,238,.16)", background:"rgba(34,211,238,.035)" }}>
+        <div>
+          <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:4 }}>Reset diario de misiones</div>
+          <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#22d3ee", fontVariantNumeric:"tabular-nums" }}>{missionResetCountdown}</div>
+          <div style={{ fontSize:11, color:T_COLOR.muted, marginTop:3 }}>Al llegar a 00:00 se limpian las misiones completadas.</div>
+        </div>
+        <div>
+          <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:4 }}>Próxima randomización semanal</div>
+          <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#a78bfa", fontVariantNumeric:"tabular-nums" }}>{weeklyRemixCountdown}</div>
+          <div style={{ fontSize:11, color:T_COLOR.muted, marginTop:3 }}>Semana activa: {scheduleWeekKey} · las horas cambian cada 7 días.</div>
+        </div>
+      </div>
+
       <div className="sch-day-tabs">
         {DAY_NAMES.map((d, i) => (
           <div key={i} className={`sdt${sel===i?" sel":""}${i===todayIdx&&sel!==i?" today":""}`} onClick={() => uiDispatch(AC.scheduleSelectDay(i))}>
@@ -3052,7 +3143,7 @@ function ScheduleView() {
               <div style={{ ...S.stitle, fontSize:14, marginBottom:0 }}>Arquitectura limpia</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7 }}>
-              Plan semanal se fusionó con Horario para evitar duplicación. Editá tus misiones en Ajustes y este horario se reconstruye con esas mismas tareas.
+              Plan semanal se fusionó con Horario. Editá tus misiones en Ajustes: el horario las reordena con una rotación semanal estable para que no caigan siempre a la misma hora.
             </div>
           </div>
         </div>
