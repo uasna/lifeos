@@ -732,15 +732,30 @@ function seededShuffle(items = [], seedInput = "lifeos") {
 
 
 const WARDROBE_TYPES = Object.freeze([
-  { id: "top", label: "Arriba" },
+  { id: "top", label: "Camisa" },
   { id: "bottom", label: "Pantalón" },
-  { id: "shoes", label: "Zapatos" },
-  { id: "layer", label: "Capa" },
-  { id: "accessory", label: "Accesorio" },
+  { id: "shoes", label: "Tenis" },
 ]);
 
 const WARDROBE_COLOR_GUIDE = Object.freeze([
-  "crema", "blanco cálido", "camel", "terracota", "verde oliva", "azul marino", "borgoña", "denim oscuro", "negro", "gris carbón"
+  "negro", "terracota", "blanco cálido", "gris carbón", "verde oliva", "azul marino", "crema", "borgoña", "camel", "gris claro"
+]);
+
+const WARDROBE_FALLBACK_ITEMS = Object.freeze([
+  { id:"fb-top-black", type:"top", name:"Camisa negra", color:"negro", style:"casual limpio" },
+  { id:"fb-top-terra", type:"top", name:"Camisa terracota", color:"terracota", style:"casual cálido" },
+  { id:"fb-top-white", type:"top", name:"Camisa blanca", color:"blanco cálido", style:"casual limpio" },
+  { id:"fb-top-gray", type:"top", name:"Camisa gris", color:"gris", style:"casual neutro" },
+  { id:"fb-top-navy", type:"top", name:"Camisa azul marino", color:"azul marino", style:"casual profundo" },
+  { id:"fb-top-olive", type:"top", name:"Camisa verde oliva", color:"verde oliva", style:"casual tierra" },
+  { id:"fb-bottom-bone", type:"bottom", name:"Pantalón blanco hueso", color:"blanco hueso", style:"casual limpio" },
+  { id:"fb-bottom-beige", type:"bottom", name:"Pantalón beige", color:"beige", style:"casual cálido" },
+  { id:"fb-bottom-sky", type:"bottom", name:"Pantalón azul cielo desgastado", color:"azul cielo desgastado", style:"casual claro" },
+  { id:"fb-bottom-darkdenim", type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"casual base" },
+  { id:"fb-bottom-charcoal", type:"bottom", name:"Pantalón gris carbón", color:"gris carbón", style:"casual profundo" },
+  { id:"fb-shoes-black", type:"shoes", name:"Tenis negros", color:"negros", style:"base" },
+  { id:"fb-shoes-gray", type:"shoes", name:"Tenis grises", color:"grises", style:"neutro" },
+  { id:"fb-shoes-white", type:"shoes", name:"Tenis blancos", color:"blancos", style:"limpio" },
 ]);
 
 function createWardrobeInitial() {
@@ -757,10 +772,10 @@ function createWardrobeInitial() {
 
 function sanitizeWardrobeItem(item = {}) {
   const allowedTypes = new Set(WARDROBE_TYPES.map(t => t.id));
-  const type = allowedTypes.has(item.type) ? item.type : "top";
+  if (!allowedTypes.has(item.type)) return null;
   return {
-    id: typeof item.id === "number" ? item.id : Date.now(),
-    type,
+    id: typeof item.id === "number" || typeof item.id === "string" ? item.id : Date.now(),
+    type: item.type,
     name: String(item.name || "Prenda").slice(0, 48),
     color: String(item.color || "neutro").slice(0, 28),
     style: String(item.style || "casual").slice(0, 36),
@@ -768,37 +783,51 @@ function sanitizeWardrobeItem(item = {}) {
 }
 
 function normalizeWardrobeItems(items = []) {
-  return (Array.isArray(items) ? items : []).map(sanitizeWardrobeItem).slice(0, 80);
+  return (Array.isArray(items) ? items : []).map(sanitizeWardrobeItem).filter(Boolean).slice(0, 80);
 }
 
-function pickWardrobeItem(items, type, seed, fallbackName, fallbackColor) {
-  const pool = items.filter(item => item.type === type);
-  if (pool.length === 0) {
-    return { id: `fallback-${type}`, type, name: fallbackName, color: fallbackColor, style: "sugerido" };
-  }
-  const rand = seededRandom(hashStringSeed(`${seed}:${type}:${pool.length}`));
-  return pool[Math.floor(rand() * pool.length)] || pool[0];
+function getWardrobePool(items, type) {
+  const userItems = items.filter(item => item.type === type);
+  const fallbackItems = WARDROBE_FALLBACK_ITEMS.filter(item => item.type === type);
+  return userItems.length ? userItems : fallbackItems;
+}
+
+function pickFromWardrobePool(pool, seed, bannedIds = []) {
+  const blocked = new Set(bannedIds.filter(Boolean));
+  const available = pool.filter(item => !blocked.has(item.id));
+  const choices = available.length ? available : pool;
+  if (!choices.length) return null;
+  const rand = seededRandom(hashStringSeed(`${seed}:${choices.map(item => item.id).join("|")}`));
+  return choices[Math.floor(rand() * choices.length)] || choices[0];
 }
 
 function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey()) {
   const items = normalizeWardrobeItems(wardrobe.items);
   const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
-  const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}`).slice(0, 7);
+  const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}:${items.length}`).slice(0, 7);
+  const topPool = getWardrobePool(items, "top");
+  const bottomPool = seededShuffle(getWardrobePool(items, "bottom"), `wardrobe-bottoms:${weekKey}:${profile.style}:${items.length}`);
+  const shoePool = getWardrobePool(items, "shoes");
+  const bottomGap = bottomPool.length >= 3 ? 2 : 1;
+  const recentBottomIds = [];
+
   return DAY_NAMES.map((day, idx) => {
     const seed = `wardrobe:${weekKey}:${idx}:${items.length}:${profile.style}`;
     const mainColor = palette[idx % palette.length] || "crema";
-    const top = pickWardrobeItem(items, "top", seed, `Top ${mainColor}`, mainColor);
-    const bottom = pickWardrobeItem(items, "bottom", seed, "Pantalón denim oscuro", "denim oscuro");
-    const shoes = pickWardrobeItem(items, "shoes", seed, "Zapatos neutros", "blanco/negro");
-    const layer = pickWardrobeItem(items, "layer", seed, "Capa opcional", "gris carbón");
-    const accessory = pickWardrobeItem(items, "accessory", seed, "Accesorio simple", "dorado/negro");
+    const top = pickFromWardrobePool(topPool, `${seed}:top:${mainColor}`) || { id:`fallback-top-${idx}`, type:"top", name:`Camisa ${mainColor}`, color:mainColor, style:"sugerido" };
+    let bottom = pickFromWardrobePool(bottomPool, `${seed}:bottom`, recentBottomIds);
+    if (!bottom) bottom = { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+    recentBottomIds.push(bottom.id);
+    while (recentBottomIds.length > bottomGap) recentBottomIds.shift();
+    const shoes = pickFromWardrobePool(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`) || { id:`fallback-shoes-${idx}`, type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
+
     return {
       day,
       full: DAY_FULL[idx],
-      title: `${mainColor} + ${bottom.color}`,
+      title: `${top.color} + ${bottom.color}`,
       tone: mainColor,
-      items: [top, bottom, shoes, layer, accessory],
-      why: `Contraste limpio para tono ${profile.skinTone || "canela"}: ${mainColor}, neutros y base profunda. Estilo: ${profile.style || "casual"}.`,
+      items: [top, bottom, shoes],
+      why: `Look variado para tono ${profile.skinTone || "canela"}: ${top.color}, ${bottom.color} y tenis ${shoes.color}. Los pantalones no se repiten en días pegados cuando hay suficientes opciones. Estilo: ${profile.style || "casual"}.`,
     };
   });
 }
@@ -4414,7 +4443,7 @@ function WardrobeView() {
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
         <div>
           <div style={S.ptitle}>Clóset / Ropero</div>
-          <div style={S.psub}>Combinaciones semanales con tus colores, estilo y tono canela.</div>
+          <div style={S.psub}>Combinaciones semanales variadas con tus camisas, pantalones y tenis.</div>
         </div>
         <div className="g" style={{ padding:14, minWidth:220 }}>
           <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>Próxima randomización</div>
@@ -4436,7 +4465,7 @@ function WardrobeView() {
               <input value={profile.notes || ""} onChange={(e) => updateProfile("notes", e.target.value.slice(0, 90))} placeholder="Notas" style={closetInputStyle()} />
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
-              Para tono canela suelen favorecer crema, blanco cálido, camel, terracota, verde oliva, azul marino, borgoña, denim oscuro y gris carbón. Ajustalo con la ropa real que tengas.
+              Para tono canela suelen favorecer negro, terracota, crema, blanco cálido, camel, verde oliva, azul marino, borgoña, denim oscuro y gris carbón. LifeOS evita repetir pantalón en días seguidos cuando tiene suficientes opciones.
             </div>
           </div>
 
@@ -4474,7 +4503,7 @@ function WardrobeView() {
               <select value={draft.type} onChange={(e) => setDraft(d => ({ ...d, type:e.target.value }))} style={closetInputStyle()}>
                 {WARDROBE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camiseta blanca, jeans negro" style={closetInputStyle()} />
+              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camisa terracota, pantalón beige, tenis grises" style={closetInputStyle()} />
               <input value={draft.color} onChange={(e) => setDraft(d => ({ ...d, color:e.target.value }))} placeholder="Color" style={closetInputStyle()} />
               <input value={draft.style} onChange={(e) => setDraft(d => ({ ...d, style:e.target.value }))} placeholder="Estilo: casual, formal, deportivo" style={closetInputStyle()} />
               <button onClick={addItem} style={{ minHeight:42, borderRadius:12, border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", fontWeight:900, cursor:"pointer" }}>Agregar al clóset</button>
@@ -4484,7 +4513,7 @@ function WardrobeView() {
           <div className="g" style={{ padding:18 }}>
             <div style={S.stitle}>Prendas guardadas</div>
             {items.length === 0 ? (
-              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa combinaciones sugeridas. Agregá colores reales para que el ropero sea más preciso.</div>
+              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa camisas, pantalones y tenis sugeridos. Agregá tus colores reales para evitar looks repetidos.</div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {items.map(item => (
