@@ -32,6 +32,7 @@ import {
   Settings, Sparkles, Calendar, RefreshCw, Layers, MessageSquare,
   Heart, AlertTriangle, Battery, Activity, Edit3, Wind,
   ChevronDown, ChevronUp, ArrowRight, Lightbulb, Gamepad2, Timer, Play, Pause,
+  Shirt, Palette, Plus, Trash2,
 } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 
@@ -45,6 +46,10 @@ const AT = Object.freeze({
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
   QUESTS_DAILY_SYNC:          "QUESTS_DAILY_SYNC",
   APP_SETTINGS_UPDATE:        "APP_SETTINGS_UPDATE",
+  // ── Wardrobe / closet domain ─────────────────────────────────
+  WARDROBE_PROFILE_UPDATE:    "WARDROBE_PROFILE_UPDATE",
+  WARDROBE_ITEM_ADD:          "WARDROBE_ITEM_ADD",
+  WARDROBE_ITEM_DELETE:       "WARDROBE_ITEM_DELETE",
   // ── Rocket League domain ─────────────────────────────────────
   RL_DAILY_SYNC:             "RL_DAILY_SYNC",
   RL_SUBTASK_TOGGLE:         "RL_SUBTASK_TOGGLE",
@@ -84,6 +89,9 @@ const AC = Object.freeze({
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
   questsDailySync:         (dateKey) => ({ type: AT.QUESTS_DAILY_SYNC, dateKey }),
   appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
+  wardrobeProfileUpdate:   (patch) => ({ type: AT.WARDROBE_PROFILE_UPDATE, patch }),
+  wardrobeItemAdd:         (item) => ({ type: AT.WARDROBE_ITEM_ADD, item }),
+  wardrobeItemDelete:      (id) => ({ type: AT.WARDROBE_ITEM_DELETE, id }),
   rlDailySync:            (dateKey, planId) => ({ type: AT.RL_DAILY_SYNC, dateKey, planId }),
   rlSubtaskToggle:        (subtaskId) => ({ type: AT.RL_SUBTASK_TOGGLE, subtaskId }),
   rlTimerCommit:          (subtaskId, secondsDelta) => ({ type: AT.RL_TIMER_COMMIT, subtaskId, secondsDelta }),
@@ -600,6 +608,16 @@ function getRocketLeaguePlanForDate(dateKey = getRocketLeagueDateKey()) {
   return ROCKET_LEAGUE_TRAINING_PLANS[seed % ROCKET_LEAGUE_TRAINING_PLANS.length];
 }
 
+function getRocketLeaguePlanById(planId) {
+  return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.id === planId) || null;
+}
+
+function getRocketLeagueSubtaskTargetSeconds(planId, subtaskId) {
+  const plan = getRocketLeaguePlanById(planId);
+  const subtask = plan?.subtasks?.find(task => task.id === subtaskId);
+  return subtask ? Math.max(0, Math.floor(Number(subtask.minutes) || 0) * 60) : 0;
+}
+
 function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = getRocketLeaguePlanForDate(dateKey).id) {
   return {
     dateKey,
@@ -710,6 +728,79 @@ function seededShuffle(items = [], seedInput = "lifeos") {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+
+const WARDROBE_TYPES = Object.freeze([
+  { id: "top", label: "Arriba" },
+  { id: "bottom", label: "Pantalón" },
+  { id: "shoes", label: "Zapatos" },
+  { id: "layer", label: "Capa" },
+  { id: "accessory", label: "Accesorio" },
+]);
+
+const WARDROBE_COLOR_GUIDE = Object.freeze([
+  "crema", "blanco cálido", "camel", "terracota", "verde oliva", "azul marino", "borgoña", "denim oscuro", "negro", "gris carbón"
+]);
+
+function createWardrobeInitial() {
+  return {
+    profile: {
+      skinTone: "canela",
+      style: "casual limpio",
+      notes: "Priorizar tonos cálidos, neutros profundos y contrastes limpios.",
+    },
+    items: [],
+    history: [],
+  };
+}
+
+function sanitizeWardrobeItem(item = {}) {
+  const allowedTypes = new Set(WARDROBE_TYPES.map(t => t.id));
+  const type = allowedTypes.has(item.type) ? item.type : "top";
+  return {
+    id: typeof item.id === "number" ? item.id : Date.now(),
+    type,
+    name: String(item.name || "Prenda").slice(0, 48),
+    color: String(item.color || "neutro").slice(0, 28),
+    style: String(item.style || "casual").slice(0, 36),
+  };
+}
+
+function normalizeWardrobeItems(items = []) {
+  return (Array.isArray(items) ? items : []).map(sanitizeWardrobeItem).slice(0, 80);
+}
+
+function pickWardrobeItem(items, type, seed, fallbackName, fallbackColor) {
+  const pool = items.filter(item => item.type === type);
+  if (pool.length === 0) {
+    return { id: `fallback-${type}`, type, name: fallbackName, color: fallbackColor, style: "sugerido" };
+  }
+  const rand = seededRandom(hashStringSeed(`${seed}:${type}:${pool.length}`));
+  return pool[Math.floor(rand() * pool.length)] || pool[0];
+}
+
+function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey()) {
+  const items = normalizeWardrobeItems(wardrobe.items);
+  const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
+  const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}`).slice(0, 7);
+  return DAY_NAMES.map((day, idx) => {
+    const seed = `wardrobe:${weekKey}:${idx}:${items.length}:${profile.style}`;
+    const mainColor = palette[idx % palette.length] || "crema";
+    const top = pickWardrobeItem(items, "top", seed, `Top ${mainColor}`, mainColor);
+    const bottom = pickWardrobeItem(items, "bottom", seed, "Pantalón denim oscuro", "denim oscuro");
+    const shoes = pickWardrobeItem(items, "shoes", seed, "Zapatos neutros", "blanco/negro");
+    const layer = pickWardrobeItem(items, "layer", seed, "Capa opcional", "gris carbón");
+    const accessory = pickWardrobeItem(items, "accessory", seed, "Accesorio simple", "dorado/negro");
+    return {
+      day,
+      full: DAY_FULL[idx],
+      title: `${mainColor} + ${bottom.color}`,
+      tone: mainColor,
+      items: [top, bottom, shoes, layer, accessory],
+      why: `Contraste limpio para tono ${profile.skinTone || "canela"}: ${mainColor}, neutros y base profunda. Estilo: ${profile.style || "casual"}.`,
+    };
+  });
 }
 
 function isNightlyQuest(q) {
@@ -1145,7 +1236,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 4; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 5; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1191,6 +1282,12 @@ const MIGRATIONS = Object.freeze({
       },
     };
   },
+  [4]: (snap) => ({
+    ...snap,
+    wardrobe: snap?.wardrobe && typeof snap.wardrobe === "object"
+      ? deepMerge(createWardrobeInitial(), snap.wardrobe)
+      : createWardrobeInitial(),
+  }),
 });
 
 // Chains migration functions from savedVersion → STORAGE_SCHEMA_VERSION.
@@ -1271,7 +1368,7 @@ function validateSnapshotIntegrity(snap) {
   if (!snap || typeof snap !== "object") return false;
 
   // Required top-level domains
-  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague", "appSettings"];
+  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague", "appSettings", "wardrobe"];
   if (!REQUIRED_DOMAINS.every(k => snap[k] !== null && typeof snap[k] === "object")) return false;
 
   // XP domain
@@ -1318,6 +1415,13 @@ function validateSnapshotIntegrity(snap) {
   if (!appSettings || typeof appSettings !== "object") return false;
   if (!appSettings.sound || typeof appSettings.sound !== "object") return false;
 
+  // Wardrobe domain
+  const { wardrobe } = snap;
+  if (!wardrobe || typeof wardrobe !== "object") return false;
+  if (!wardrobe.profile || typeof wardrobe.profile !== "object") return false;
+  if (!Array.isArray(wardrobe.items)) return false;
+  if (!Array.isArray(wardrobe.history)) return false;
+
   return true;
 }
 
@@ -1360,7 +1464,7 @@ const StorageAdapter = Object.freeze({
 // UI state is intentionally never serialized.
 
 const PERSISTENT_DOMAINS = Object.freeze([
-  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague", "appSettings"
+  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague", "appSettings", "wardrobe"
 ]);
 
 function serializeAppState(persistentState) {
@@ -1578,6 +1682,7 @@ const PERSISTENT_INITIAL = {
   },
   rocketLeague: createRocketLeagueInitialState(),
   appSettings: createAppSettingsInitial(),
+  wardrobe: createWardrobeInitial(),
 };
 
 const UI_INITIAL = {
@@ -1664,6 +1769,15 @@ function persistentReducer(state, action) {
       const current = state.rocketLeague?.current || createRocketLeagueCurrent();
       const ids = Array.isArray(current.completedSubtaskIds) ? current.completedSubtaskIds : [];
       const exists = ids.includes(action.subtaskId);
+      const elapsed = current.elapsedBySubtask || {};
+      const currentElapsed = Math.max(0, Math.floor(Number(elapsed[action.subtaskId]) || 0));
+      const targetSeconds = getRocketLeagueSubtaskTargetSeconds(current.planId, action.subtaskId);
+      const nextElapsedBySubtask = exists
+        ? elapsed
+        : {
+            ...elapsed,
+            [action.subtaskId]: Math.max(currentElapsed, targetSeconds),
+          };
       return {
         ...state,
         rocketLeague: {
@@ -1671,6 +1785,7 @@ function persistentReducer(state, action) {
           current: {
             ...current,
             completedSubtaskIds: exists ? ids.filter(id => id !== action.subtaskId) : [...ids, action.subtaskId],
+            elapsedBySubtask: nextElapsedBySubtask,
           },
         },
       };
@@ -1768,6 +1883,43 @@ function persistentReducer(state, action) {
 
     case AT.PLANNER_SET_BLENDER:
       return { ...state, planner: { ...state.planner, blenderMode: action.mode } };
+
+    case AT.WARDROBE_PROFILE_UPDATE: {
+      const wardrobe = state.wardrobe || createWardrobeInitial();
+      return {
+        ...state,
+        wardrobe: {
+          ...wardrobe,
+          profile: {
+            ...(wardrobe.profile || createWardrobeInitial().profile),
+            ...(action.patch || {}),
+          },
+        },
+      };
+    }
+
+    case AT.WARDROBE_ITEM_ADD: {
+      const wardrobe = state.wardrobe || createWardrobeInitial();
+      const item = sanitizeWardrobeItem({ ...(action.item || {}), id: Date.now() });
+      return {
+        ...state,
+        wardrobe: {
+          ...wardrobe,
+          items: [...normalizeWardrobeItems(wardrobe.items), item].slice(0, 80),
+        },
+      };
+    }
+
+    case AT.WARDROBE_ITEM_DELETE: {
+      const wardrobe = state.wardrobe || createWardrobeInitial();
+      return {
+        ...state,
+        wardrobe: {
+          ...wardrobe,
+          items: normalizeWardrobeItems(wardrobe.items).filter(item => item.id !== action.id),
+        },
+      };
+    }
 
     case AT.APP_SETTINGS_UPDATE: {
       const next = deepMerge(state.appSettings || createAppSettingsInitial(), action.patch || {});
@@ -1893,46 +2045,78 @@ function useMobile() {
   return mobile;
 }
 
-// ── MOB_NAV_ITEMS ──────────────────────────────────────────────
-const MOB_NAV_ITEMS = [
-  { id:"dashboard",  icon:Home,          label:"Inicio"    },
-  { id:"quests",     icon:Target,        label:"Misiones"  },
-  { id:"rocketLeague", icon:Gamepad2,    label:"Rocket"    },
-  { id:"schedule",   icon:Calendar,      label:"Horario"},
-  { id:"focus",      icon:Timer,         label:"Sesión" },
+// ── MOBILE NAVIGATION ──────────────────────────────────────────
+const MOB_PRIMARY_ITEMS = [
+  { id:"dashboard",    icon:Home,     label:"Inicio"   },
+  { id:"quests",       icon:Target,   label:"Misiones" },
+  { id:"rocketLeague", icon:Gamepad2, label:"Rocket"   },
+];
+
+const MOB_MORE_ITEMS = [
+  { id:"schedule",   icon:Calendar,      label:"Horario"   },
+  { id:"focus",      icon:Timer,         label:"Sesión"    },
+  { id:"wardrobe",   icon:Shirt,         label:"Clóset"    },
+  { id:"stats",      icon:BarChart2,     label:"Análisis"  },
   { id:"reflection", icon:MessageSquare, label:"Reflexión", accent:true },
-  { id:"profile",    icon:User,          label:"Perfil" },
-  { id:"settings",   icon:Settings,      label:"Ajustes" },
+  { id:"profile",    icon:User,          label:"Perfil"    },
+  { id:"settings",   icon:Settings,      label:"Ajustes"   },
 ];
 
 const MobileBottomNav = memo(function MobileBottomNav() {
   const { ui, uiDispatch } = useAppUI();
   const { persistent }     = useAppData();
+  const [moreOpen, setMoreOpen] = useState(false);
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const triggers = useMemo(
     () => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests),
     [persistent.quests.completedIds, persistent.streak.current, activeQuests]
   );
+  const moreActive = MOB_MORE_ITEMS.some(n => n.id === ui.view);
   const handleNav = useCallback((id) => {
     unlockLifeOSAudio();
     if (ui.view !== id) playLifeOSSound("menu");
     uiDispatch(AC.setView(id));
+    setMoreOpen(false);
   }, [ui.view, uiDispatch]);
 
   return (
-    <nav className="mob-nav">
-      {MOB_NAV_ITEMS.map(n => {
-        const I  = n.icon;
-        const on = ui.view === n.id;
-        return (
-          <div key={n.id} className={`mob-nav-item ${on ? "on" : ""}`} onClick={() => handleNav(n.id)}>
-            {n.accent && !on && triggers.length > 0 && <span className="mob-nav-dot"/>}
-            <I size={20}/>
-            <span className="mob-nav-label">{n.label}</span>
+    <>
+      {moreOpen && <div className="mob-more-backdrop" onClick={() => setMoreOpen(false)}/>} 
+      {moreOpen && (
+        <div className="mob-more-panel">
+          <div className="mob-more-title">Más herramientas</div>
+          <div className="mob-more-grid">
+            {MOB_MORE_ITEMS.map(n => {
+              const I = n.icon;
+              const on = ui.view === n.id;
+              return (
+                <button key={n.id} className={`mob-more-btn ${on ? "on" : ""}`} onClick={() => handleNav(n.id)}>
+                  {n.accent && !on && triggers.length > 0 && <span className="mob-nav-dot"/>}
+                  <I size={18}/>
+                  <span>{n.label}</span>
+                </button>
+              );
+            })}
           </div>
-        );
-      })}
-    </nav>
+        </div>
+      )}
+      <nav className="mob-nav">
+        {MOB_PRIMARY_ITEMS.map(n => {
+          const I  = n.icon;
+          const on = ui.view === n.id;
+          return (
+            <div key={n.id} className={`mob-nav-item ${on ? "on" : ""}`} onClick={() => handleNav(n.id)}>
+              <I size={20}/>
+              <span className="mob-nav-label">{n.label}</span>
+            </div>
+          );
+        })}
+        <div className={`mob-nav-item ${moreActive || moreOpen ? "on" : ""}`} onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); setMoreOpen(v => !v); }}>
+          <Layers size={20}/>
+          <span className="mob-nav-label">Más</span>
+        </div>
+      </nav>
+    </>
   );
 });
 
@@ -1960,7 +2144,7 @@ const T_COLOR = Object.freeze({
 });
 
 const T_RADIUS = Object.freeze({ sm:8, md:11, lg:14, xl:16, pill:100 });
-const T_FONT   = Object.freeze({ display:"'Syne',sans-serif", body:"'DM Sans',system-ui,sans-serif" });
+const T_FONT   = Object.freeze({ display:"'Barlow',system-ui,sans-serif", body:"'Barlow',system-ui,sans-serif" });
 
 const S = Object.freeze({
   flexCenter:   { display:"flex", alignItems:"center" },
@@ -1980,16 +2164,16 @@ const S = Object.freeze({
 // ─────────────────────────────────────────────────────────────────
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-.los{display:flex;height:100vh;width:100%;background:#050508;font-family:'DM Sans',system-ui,sans-serif;color:#eef2f8;overflow:hidden;position:relative}
+.los{display:flex;height:100vh;width:100%;background:#050508;font-family:'Barlow',system-ui,sans-serif;color:#eef2f8;overflow:hidden;position:relative}
 .orb1,.orb2{position:fixed;border-radius:50%;pointer-events:none;z-index:0}
 .orb1{width:700px;height:700px;background:radial-gradient(circle,rgba(139,92,246,.09) 0%,transparent 65%);top:-280px;left:-180px;animation:orbF 10s ease-in-out infinite alternate}
 .orb2{width:650px;height:650px;background:radial-gradient(circle,rgba(34,211,238,.07) 0%,transparent 65%);bottom:-220px;right:-180px;animation:orbF 12s ease-in-out infinite alternate-reverse}
 .sb{width:220px;height:100vh;background:rgba(7,7,13,.97);border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;flex-shrink:0;position:relative;z-index:10;padding:22px 14px;backdrop-filter:blur(24px)}
 .sb-logo{display:flex;align-items:center;gap:10px;padding-bottom:22px;margin-bottom:18px;border-bottom:1px solid rgba(255,255,255,.06)}
 .sb-icon{width:34px;height:34px;background:linear-gradient(135deg,#7c3aed,#06b6d4);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 16px rgba(124,58,237,.4)}
-.sb-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;letter-spacing:.5px;background:linear-gradient(90deg,#f8fafc,#8892a4);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sb-name{font-family:'Barlow',system-ui,sans-serif;font-size:15px;font-weight:800;letter-spacing:.5px;background:linear-gradient(90deg,#f8fafc,#8892a4);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .sb-ver{font-size:9px;font-weight:600;color:#22d3ee;letter-spacing:1.8px;text-transform:uppercase;margin-top:-2px}
 .ni{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);color:#64748b;font-size:13.5px;font-weight:500;border:1px solid transparent;margin-bottom:3px;position:relative;overflow:hidden;user-select:none}
 .ni:hover{color:#eef2f8;transform:translateX(3px);background:rgba(255,255,255,.04)}
@@ -1999,7 +2183,7 @@ const CSS = `
 .sb-footer{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.06)}
 .user-card{display:flex;align-items:center;gap:10px;padding:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;cursor:pointer;transition:all .2s ease;animation:glowP 4s ease-in-out infinite}
 .user-card:hover{background:rgba(255,255,255,.07);border-color:rgba(124,58,237,.35)}
-.ava{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#7c3aed,#06b6d4);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:13px;font-weight:800;color:white;flex-shrink:0;box-shadow:0 0 0 2px rgba(124,58,237,.5),0 0 14px rgba(124,58,237,.3)}
+.ava{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#7c3aed,#06b6d4);display:flex;align-items:center;justify-content:center;font-family:'Barlow',system-ui,sans-serif;font-size:13px;font-weight:800;color:white;flex-shrink:0;box-shadow:0 0 0 2px rgba(124,58,237,.5),0 0 14px rgba(124,58,237,.3)}
 .los-main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:1}
 .tb{padding:13px 24px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(7,7,13,.85);backdrop-filter:blur(22px);flex-shrink:0}
 .tb-greet{margin-right:auto}
@@ -2016,7 +2200,7 @@ const CSS = `
 .s-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:20px}
 .sc{padding:18px;position:relative;overflow:hidden}
 .sc-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:13px}
-.sc-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;line-height:1;margin-bottom:4px}
+.sc-val{font-family:'Barlow',system-ui,sans-serif;font-size:26px;font-weight:800;line-height:1;margin-bottom:4px}
 .sc-lbl{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#64748b}
 .sc-sub{font-size:11px;color:#8892a4;margin-top:3px}
 .ql{display:flex;flex-direction:column;gap:9px}
@@ -2089,12 +2273,12 @@ const CSS = `
 .rf-cat.sel .rf-cat-label{color:#eef2f8}
 .rf-cat-desc{font-size:9.5px;color:#475569;margin-top:3px;line-height:1.4}
 .rf-prompt{padding:18px 22px;border-radius:14px;border-left-width:3px;margin-bottom:18px;border-left-style:solid}
-.rf-journal{width:100%;min-height:110px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;color:#c4ccd8;font-family:'DM Sans',system-ui,sans-serif;font-size:13px;line-height:1.7;resize:none;outline:none;transition:border-color .2s,box-shadow .2s}
+.rf-journal{width:100%;min-height:110px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;color:#c4ccd8;font-family:'Barlow',system-ui,sans-serif;font-size:13px;line-height:1.7;resize:none;outline:none;transition:border-color .2s,box-shadow .2s}
 .rf-journal:focus{border-color:rgba(124,58,237,.35);box-shadow:0 0 0 3px rgba(124,58,237,.08)}
 .rf-journal::placeholder{color:#374151}
 .rf-rec{display:flex;align-items:flex-start;gap:13px;padding:15px 18px;border-radius:13px;border:1px solid;transition:all .22s ease}
 .rf-rec:hover{transform:translateY(-2px)}
-.rf-save{display:flex;align-items:center;gap:8px;padding:12px 24px;border-radius:11px;background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(6,182,212,.18));border:1px solid rgba(124,58,237,.4);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);font-family:'DM Sans',system-ui,sans-serif}
+.rf-save{display:flex;align-items:center;gap:8px;padding:12px 24px;border-radius:11px;background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(6,182,212,.18));border:1px solid rgba(124,58,237,.4);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);font-family:'Barlow',system-ui,sans-serif}
 .rf-save:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(124,58,237,.25)}
 .rf-saved{display:flex;align-items:center;gap:8px;padding:12px 24px;border-radius:11px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#34d399;font-size:13px;font-weight:700}
 .rf-section{margin-bottom:20px}
@@ -2106,12 +2290,12 @@ const CSS = `
 .wp-day.wp-sel{border-color:rgba(124,58,237,.45);background:rgba(124,58,237,.1);box-shadow:0 8px 30px rgba(124,58,237,.14)}
 .wp-day-name{font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#475569;margin-bottom:7px}
 .wp-day-name.wdn-today{color:#22d3ee}.wp-day-name.wdn-sel{color:#a78bfa}
-.wp-load-num{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;line-height:1;margin:3px 0 4px}
+.wp-load-num{font-family:'Barlow',system-ui,sans-serif;font-size:17px;font-weight:800;line-height:1;margin:3px 0 4px}
 .wp-sys-dots{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:5px;min-height:10px}
 .wp-sys-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .wp-today-ring{position:absolute;inset:-1px;border-radius:13px;border:1.5px solid rgba(34,211,238,.45);pointer-events:none;animation:wpRing 3s ease-in-out infinite}
 .wp-mode-tabs{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.03);border-radius:9px;border:1px solid rgba(255,255,255,.07);margin-bottom:20px;width:fit-content}
-.wp-mode-btn{padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;color:#64748b;background:transparent;transition:all .2s ease;font-family:'DM Sans',system-ui,sans-serif;letter-spacing:.2px}
+.wp-mode-btn{padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;color:#64748b;background:transparent;transition:all .2s ease;font-family:'Barlow',system-ui,sans-serif;letter-spacing:.2px}
 .wp-mode-btn.on{background:rgba(124,58,237,.16);color:#a78bfa;border:1px solid rgba(124,58,237,.3)}
 .wp-sys-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
 .wp-sys-card{padding:16px 15px;border-radius:13px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);position:relative;overflow:hidden;transition:all .22s cubic-bezier(.34,1.56,.64,1)}
@@ -2167,6 +2351,14 @@ const CSS = `
 .mob-nav-item:active{animation:tapFeedback .18s ease;background:rgba(255,255,255,.06)}
 .mob-nav-label{font-size:9px;font-weight:700;letter-spacing:.3px;line-height:1;transition:color .2s}
 .mob-nav-dot{position:absolute;top:6px;right:calc(50% - 14px);width:7px;height:7px;border-radius:50%;background:#a78bfa;border:2px solid #050508;box-shadow:0 0 6px rgba(167,139,250,.8)}
+.mob-more-backdrop{display:none;position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.35);backdrop-filter:blur(6px)}
+.mob-more-panel{display:none;position:fixed;left:12px;right:12px;bottom:78px;z-index:220;padding:14px;background:rgba(9,9,18,.98);border:1px solid rgba(255,255,255,.09);border-radius:18px;box-shadow:0 20px 70px rgba(0,0,0,.6);backdrop-filter:blur(28px);animation:mobNavIn .22s ease}
+.mob-more-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#64748b;font-weight:900;margin:0 0 10px 2px}
+.mob-more-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.mob-more-btn{position:relative;display:flex;align-items:center;gap:9px;min-height:44px;padding:10px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.035);color:#94a3b8;font-family:'Barlow',system-ui,sans-serif;font-size:12px;font-weight:800;text-align:left}
+.mob-more-btn.on{color:#c4b5fd;background:rgba(167,139,250,.14);border-color:rgba(167,139,250,.35)}
+.wardrobe-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}
+.wardrobe-days{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 @media(max-width:860px){
   .sb{width:58px;padding:14px 8px}
   .sb-name,.sb-ver,.ni span,.user-info{display:none}
@@ -2176,11 +2368,13 @@ const CSS = `
   .ach-grid{grid-template-columns:repeat(2,1fr)}
   .rf-cat-grid{grid-template-columns:repeat(2,1fr)}
   .wp-sys-grid{grid-template-columns:repeat(2,1fr)}
-  .dash-main-grid,.sch-main-grid,.planner-tl-grid,.planner-hm-grid,.planner-intel-grid,.rf-main-grid,.profile-main-grid,.rl-main-grid{gap:14px}
+  .dash-main-grid,.sch-main-grid,.planner-tl-grid,.planner-hm-grid,.planner-intel-grid,.rf-main-grid,.profile-main-grid,.rl-main-grid,.wardrobe-grid{gap:14px}
 }
 @media(max-width:640px){
   .sb{display:none}
-  .mob-nav{display:flex}
+  .mob-nav{display:flex;justify-content:space-around;overflow-x:visible}
+  .mob-nav-item{flex:1;max-width:88px}
+  .mob-more-backdrop,.mob-more-panel{display:block}
   .mob-layout-grid{grid-template-columns:1fr!important}
   .mob-layout-grid input{width:100%;min-height:42px}
   .mob-layout-grid button{min-height:44px}
@@ -2197,6 +2391,8 @@ const CSS = `
   .rf-main-grid{grid-template-columns:1fr}
   .profile-main-grid{grid-template-columns:1fr}
   .rl-main-grid{grid-template-columns:1fr}
+  .wardrobe-grid{grid-template-columns:1fr}
+  .wardrobe-days{grid-template-columns:1fr}
   .s-grid{grid-template-columns:1fr 1fr}
   .ach-grid{grid-template-columns:1fr 1fr}
   .rf-cat-grid{grid-template-columns:1fr 1fr}
@@ -2676,9 +2872,14 @@ function RocketLeagueView() {
     const soundKey = `${current.dateKey}:${current.planId}:${activeSubtaskId}`;
     if (elapsed >= targetSeconds && !targetSoundedRef.current.has(soundKey)) {
       targetSoundedRef.current.add(soundKey);
+      unlockLifeOSAudio();
       playLifeOSSound("timer");
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([140, 60, 140]);
+      const id = Date.now();
+      uiDispatch(AC.toastAdd(id, `${activeTask.title}: tiempo objetivo`, `${activeTask.minutes} min completados`));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
     }
-  }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds]);
+  }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, uiDispatch]);
 
   const progressPct = Math.min(100, Math.round((doneCount / Math.max(plan.subtasks.length, 1)) * 100));
   const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
@@ -4157,6 +4358,141 @@ function ProfileView() {
   );
 }
 
+
+function WardrobeView() {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+  const wardrobe = persistent.wardrobe || createWardrobeInitial();
+  const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
+  const items = normalizeWardrobeItems(wardrobe.items);
+  const [now, setNow] = useState(() => Date.now());
+  const [draft, setDraft] = useState({ type:"top", name:"", color:"", style:"casual" });
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const weekKey = getScheduleWeekKey(new Date(now));
+  const remixCountdown = formatCountdownSeconds(getSecondsUntilNextScheduleWeek(now));
+  const outfits = useMemo(() => buildWardrobeWeek(wardrobe, weekKey), [wardrobe, weekKey]);
+
+  const addItem = useCallback(() => {
+    const name = draft.name.trim();
+    const color = draft.color.trim();
+    if (!name && !color) return;
+    unlockLifeOSAudio();
+    playLifeOSSound("complete");
+    pDispatch(AC.wardrobeItemAdd({ ...draft, name: name || `${WARDROBE_TYPES.find(t => t.id === draft.type)?.label || "Prenda"} ${color}`, color: color || "neutro" }));
+    setDraft({ type:draft.type, name:"", color:"", style:draft.style || "casual" });
+  }, [draft, pDispatch]);
+
+  const deleteItem = useCallback((id) => {
+    unlockLifeOSAudio();
+    playLifeOSSound("menu");
+    pDispatch(AC.wardrobeItemDelete(id));
+  }, [pDispatch]);
+
+  const updateProfile = useCallback((key, value) => {
+    pDispatch(AC.wardrobeProfileUpdate({ [key]: value }));
+  }, [pDispatch]);
+
+  return (
+    <div style={{ animation:"sldIn .3s ease" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
+        <div>
+          <div style={S.ptitle}>Clóset / Ropero</div>
+          <div style={S.psub}>Combinaciones semanales con tus colores, estilo y tono canela.</div>
+        </div>
+        <div className="g" style={{ padding:14, minWidth:220 }}>
+          <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>Próxima randomización</div>
+          <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#a78bfa", fontVariantNumeric:"tabular-nums" }}>{remixCountdown}</div>
+          <div style={{ fontSize:11, color:T_COLOR.muted }}>Semana activa: {weekKey}</div>
+        </div>
+      </div>
+
+      <div className="wardrobe-grid">
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="g" style={{ padding:18, borderColor:"rgba(34,211,238,.16)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <Palette size={18} color="#22d3ee"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Perfil de estilo</div>
+            </div>
+            <div className="mob-layout-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+              <input value={profile.skinTone || ""} onChange={(e) => updateProfile("skinTone", e.target.value.slice(0, 32))} placeholder="Tono" style={inputStyle()} />
+              <input value={profile.style || ""} onChange={(e) => updateProfile("style", e.target.value.slice(0, 48))} placeholder="Estilo" style={inputStyle()} />
+              <input value={profile.notes || ""} onChange={(e) => updateProfile("notes", e.target.value.slice(0, 90))} placeholder="Notas" style={inputStyle()} />
+            </div>
+            <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
+              Para tono canela suelen favorecer crema, blanco cálido, camel, terracota, verde oliva, azul marino, borgoña, denim oscuro y gris carbón. Ajustalo con la ropa real que tengas.
+            </div>
+          </div>
+
+          <div className="wardrobe-days">
+            {outfits.map((outfit, idx) => (
+              <div key={`${weekKey}-${outfit.day}`} className="g" style={{ padding:16, borderColor: idx === todayIdx ? "rgba(34,211,238,.32)" : "rgba(255,255,255,.07)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"center", marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:11, color:idx === todayIdx ? "#22d3ee" : T_COLOR.muted, fontWeight:900, textTransform:"uppercase", letterSpacing:.8 }}>{outfit.full}</div>
+                    <div style={{ fontFamily:T_FONT.display, fontSize:17, color:T_COLOR.text, fontWeight:900 }}>{outfit.title}</div>
+                  </div>
+                  <Shirt size={20} color={idx === todayIdx ? "#22d3ee" : "#a78bfa"}/>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:10 }}>
+                  {outfit.items.map(item => (
+                    <div key={`${outfit.day}-${item.type}`} style={{ display:"flex", justifyContent:"space-between", gap:8, padding:"7px 9px", borderRadius:10, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.055)", fontSize:12 }}>
+                      <span style={{ color:T_COLOR.text, fontWeight:800 }}>{item.name}</span>
+                      <span style={{ color:T_COLOR.muted }}>{item.color}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5 }}>{outfit.why}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="g" style={{ padding:18 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <Plus size={18} color="#34d399"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Agregar prenda</div>
+            </div>
+            <div style={{ display:"grid", gap:9 }}>
+              <select value={draft.type} onChange={(e) => setDraft(d => ({ ...d, type:e.target.value }))} style={inputStyle()}>
+                {WARDROBE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camiseta blanca, jeans negro" style={inputStyle()} />
+              <input value={draft.color} onChange={(e) => setDraft(d => ({ ...d, color:e.target.value }))} placeholder="Color" style={inputStyle()} />
+              <input value={draft.style} onChange={(e) => setDraft(d => ({ ...d, style:e.target.value }))} placeholder="Estilo: casual, formal, deportivo" style={inputStyle()} />
+              <button onClick={addItem} style={{ minHeight:42, borderRadius:12, border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", fontWeight:900, cursor:"pointer" }}>Agregar al clóset</button>
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18 }}>
+            <div style={S.stitle}>Prendas guardadas</div>
+            {items.length === 0 ? (
+              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa combinaciones sugeridas. Agregá colores reales para que el ropero sea más preciso.</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {items.map(item => (
+                  <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10, padding:10, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.06)" }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12.5, color:T_COLOR.text, fontWeight:900 }}>{item.name}</div>
+                      <div style={{ fontSize:11, color:T_COLOR.muted }}>{WARDROBE_TYPES.find(t => t.id === item.type)?.label || item.type} · {item.color} · {item.style}</div>
+                    </div>
+                    <button onClick={() => deleteItem(item.id)} style={{ width:34, height:34, borderRadius:10, border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", cursor:"pointer" }} title="Borrar"><Trash2 size={15}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsView() {
   const {
     persistent, pDispatch,
@@ -4479,6 +4815,7 @@ const NAV_ITEMS = [
   { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
   { id:"schedule",     icon:Calendar,      label:"Horario"      },
   { id:"focus",        icon:Timer,         label:"Sesión"       },
+  { id:"wardrobe",     icon:Shirt,         label:"Clóset"       },
   { id:"stats",        icon:BarChart2,     label:"Análisis"     },
   { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
   { id:"profile",      icon:User,          label:"Perfil"       },
@@ -4504,6 +4841,11 @@ const VIEW_ALIASES = Object.freeze({
   sesión:       "focus",
   focus:        "focus",
   enfoque:      "focus",
+  closet:       "wardrobe",
+  clóset:       "wardrobe",
+  ropero:       "wardrobe",
+  ropa:         "wardrobe",
+  wardrobe:     "wardrobe",
   logros:       "focus",
   logro:        "focus",
   achievements: "focus",
@@ -4530,6 +4872,7 @@ const VIEW_MAP = {
   rocketLeague: RocketLeagueView,
   schedule:     ScheduleView,
   focus:        FocusSessionView,
+  wardrobe:     WardrobeView,
   stats:        StatsView,
   reflection:   ReflectionView,
   profile:      ProfileView,
