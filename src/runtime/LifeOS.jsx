@@ -372,6 +372,16 @@ const RL_SPEEDFLIP_RIGHT_SUBTASK = Object.freeze({
   accent: "#f59e0b",
 });
 
+const RL_DRIBBLE_FLICK_SUBTASK = Object.freeze({
+  id: "dribble-flicks-fixed",
+  title: "Dribbling + flicks básicos",
+  type: RL_SUBTASK_TYPES.MECHANIC,
+  minutes: 10,
+  instruction: "Pelota encima del carro de esquina a esquina; terminá cada intento con front flick o diagonal flick simple. Si se cae, reset mental y repetí.",
+  focus: "control de suelo → amenaza real",
+  accent: "#fb7185",
+});
+
 const RL_MENTAL_SUBTASK = Object.freeze({
   id: "mental",
   title: "Mental reset + revisión corta",
@@ -440,6 +450,20 @@ const RL_MECHANIC_DRILLS = Object.freeze({
     "Freeplay/privada: practicá retroceder con cámara al balón, cubrir net y desafiar solo cuando el rival perdería control.",
     "#818cf8"
   ),
+  lowBoostDefense: makeRlMechanicSubtask(
+    "mechanic-low-boost-defense",
+    "Defensa con poco boost",
+    "pads pequeños + paciencia defensiva",
+    "Empezá con poco boost: cubrí net, tomá pads chicos y despejá a esquina. No saltes si el primer toque rival todavía no te amenaza.",
+    "#38bdf8"
+  ),
+  firstTouchControl: makeRlMechanicSubtask(
+    "mechanic-first-touch",
+    "Primer toque útil",
+    "control antes que pegar por pegar",
+    "En freeplay, cada balón debe tener intención: controlar, tirar, fakear o salir a pared. Si el toque te aleja de la jugada, repetí.",
+    "#22c55e"
+  ),
   airDribbleIntro: makeRlMechanicSubtask(
     "mechanic-air-dribble-intro",
     "Air dribble intro",
@@ -460,8 +484,8 @@ const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") =
   accent,
 });
 
-const makeRlPlan = (id, title, focus, mechanic, packA, packB, instructionA, instructionB) => Object.freeze({
-  id: `${id}-60m-v2`,
+const makeRlPlan = (id, title, focus, mechanic, pack, instruction) => Object.freeze({
+  id: `${id}-60m-v3`,
   title,
   focus,
   minutes: ROCKET_LEAGUE_SESSION_MINUTES,
@@ -469,9 +493,9 @@ const makeRlPlan = (id, title, focus, mechanic, packA, packB, instructionA, inst
     RL_FREEPLAY_SUBTASK,
     RL_SPEEDFLIP_LEFT_SUBTASK,
     RL_SPEEDFLIP_RIGHT_SUBTASK,
+    RL_DRIBBLE_FLICK_SUBTASK,
     mechanic,
-    makeRlPackSubtask("pack-a", packA, 10, instructionA, "#34d399"),
-    makeRlPackSubtask("pack-b", packB, 10, instructionB, "#60a5fa"),
+    makeRlPackSubtask("pack-random", pack, 10, instruction, "#34d399"),
     RL_MENTAL_SUBTASK,
   ]),
 });
@@ -479,23 +503,19 @@ const makeRlPlan = (id, title, focus, mechanic, packA, packB, instructionA, inst
 const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
   makeRlPlan(
     "drift-cut-day",
-    "Drift Cut Control",
-    "Recuperar balón con derrape y salir con ventaja",
+    "Drift Cut + Shot Control",
+    "Derrapar para recuperar balón y terminar con tiro simple",
     RL_MECHANIC_DRILLS.driftCuts,
-    ROCKET_LEAGUE_PACKS.groundShots,
     ROCKET_LEAGUE_PACKS.powershots,
-    "Tiro simple después del cut: no busqués clip, buscá recuperar posesión.",
-    "Powershot solo si el primer toque te deja ángulo real."
+    "Después del drift cut, tirá fuerte solo si el balón queda delante. Si queda atrás, control primero."
   ),
   makeRlPlan(
     "flick-day",
-    "Dribble + Flick Day",
+    "Flick Threat Day",
     "Convertir tu dribbling de suelo en amenaza real",
-    RL_MECHANIC_DRILLS.basicFlicks,
+    RL_MECHANIC_DRILLS.firstTouchControl,
     ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss,
-    ROCKET_LEAGUE_PACKS.groundShots,
-    "No fallar tiros ganables después de controlar la pelota.",
-    "Apuntá a esquinas grandes primero; después ajustá precisión."
+    "No fallar tiros ganables después del primer toque o flick. Apuntá grande, luego precisión."
   ),
   makeRlPlan(
     "saves-day",
@@ -503,9 +523,7 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     "Salvar sin pánico y despejar con intención",
     RL_MECHANIC_DRILLS.savePathing,
     ROCKET_LEAGUE_PACKS.hardSaves,
-    ROCKET_LEAGUE_PACKS.overheadSaves,
-    "Salvá fuerte hacia esquina, no hacia el centro.",
-    "Aguantá el salto hasta leer altura y velocidad."
+    "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento."
   ),
   makeRlPlan(
     "shadow-day",
@@ -513,9 +531,15 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     "Defender sin overcommit ni regalar espacio",
     RL_MECHANIC_DRILLS.shadowPatience,
     ROCKET_LEAGUE_PACKS.shadowDefense,
+    "Mantené distancia útil: ni muy encima ni regalando cancha. Desafiá cuando el rival pierda control."
+  ),
+  makeRlPlan(
+    "low-boost-day",
+    "Low Boost Defense",
+    "Sobrevivir con pads pequeños y clear seguro",
+    RL_MECHANIC_DRILLS.lowBoostDefense,
     ROCKET_LEAGUE_PACKS.saveConsistency,
-    "Mantené distancia útil: ni muy encima ni regalando cancha.",
-    "Repetí hasta que el primer movimiento no sea pánico."
+    "No dependás de boost grande: salvada, pad pequeño, salida por lateral."
   ),
   makeRlPlan(
     "ground-to-air-day",
@@ -523,9 +547,7 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     "Aprender setups limpios antes de intentar air dribble real",
     RL_MECHANIC_DRILLS.groundToAirIntro,
     ROCKET_LEAGUE_PACKS.aerialsOffWall,
-    ROCKET_LEAGUE_PACKS.platDiamond,
-    "Salí al aire solo cuando el primer toque levanta bien la pelota.",
-    "Jugá simple: primer toque sólido, recovery rápido."
+    "Salí al aire solo cuando el primer toque levanta bien la pelota. Setup limpio antes que clip."
   ),
   makeRlPlan(
     "wall-control-day",
@@ -533,9 +555,7 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     "Pared útil, no freestyle",
     RL_MECHANIC_DRILLS.wallControl,
     ROCKET_LEAGUE_PACKS.backboardReads,
-    ROCKET_LEAGUE_PACKS.aerialsOffWall,
-    "Leé pared antes de saltar; si llegás tarde, defendé.",
-    "Tocá desde pared y aterrizá listo para la siguiente jugada."
+    "Leé pared antes de saltar; si llegás tarde, defendé. Aterrizá listo para la siguiente jugada."
   ),
   makeRlPlan(
     "recovery-speed-day",
@@ -543,29 +563,23 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     "Ser más rápido sin jugar desesperado",
     RL_MECHANIC_DRILLS.recoveryChain,
     ROCKET_LEAGUE_PACKS.basicRebounds,
-    ROCKET_LEAGUE_PACKS.powershots,
-    "Cada rebote termina en recovery, no en mirar la pelota.",
-    "Cada shot debe tener intención: gol, pase o presión."
+    "Cada rebote termina en recovery, no en mirar la pelota. Wavedash o powerslide al caer."
   ),
   makeRlPlan(
     "air-dribble-intro-day",
     "Air Dribble Intro",
     "Toques aéreos básicos sin quemar fundamentos",
     RL_MECHANIC_DRILLS.airDribbleIntro,
-    ROCKET_LEAGUE_PACKS.aerialsOffWall,
-    ROCKET_LEAGUE_PACKS.backboardReads,
-    "Uno o dos toques limpios valen más que perder control en el aire.",
-    "Priorizá lectura y caída segura antes que continuar la jugada."
+    ROCKET_LEAGUE_PACKS.platDiamond,
+    "Uno o dos toques limpios valen más que perder control en el aire. Recovery obligatorio."
   ),
   makeRlPlan(
     "one-v-one-day",
     "1v1 Decision Day",
     "No regalar posesión y castigar errores",
-    RL_MECHANIC_DRILLS.basicFlicks,
+    RL_MECHANIC_DRILLS.firstTouchControl,
     ROCKET_LEAGUE_PACKS.groundShots,
-    ROCKET_LEAGUE_PACKS.shadowDefense,
-    "Tiro simple, fake si el rival se tira, recovery inmediato.",
-    "En shadow, defendé el ángulo peligroso y no la pelota."
+    "Tiro simple, fake si el rival se tira, recovery inmediato. No regales la pelota por apurarte."
   ),
 ]);
 
@@ -627,6 +641,21 @@ function formatSeconds(totalSeconds = 0) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatCountdownSeconds(totalSeconds = 0) {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getSecondsUntilNextLocalDay(nowMs = Date.now()) {
+  const now = new Date(nowMs);
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
+}
+
 
 let lifeOSAudioCtx = null;
 
@@ -650,6 +679,7 @@ function playLifeOSSound(kind = "complete") {
 
   const now = ctx.currentTime;
   const patterns = {
+    menu: [440, 554.37],
     timer: [660, 880],
     complete: [523.25, 659.25, 783.99],
     mission: [392, 523.25, 659.25, 987.77],
@@ -1613,13 +1643,19 @@ const MobileBottomNav = memo(function MobileBottomNav() {
     () => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests),
     [persistent.quests.completedIds, persistent.streak.current, activeQuests]
   );
+  const handleNav = useCallback((id) => {
+    unlockLifeOSAudio();
+    if (ui.view !== id) playLifeOSSound("menu");
+    uiDispatch(AC.setView(id));
+  }, [ui.view, uiDispatch]);
+
   return (
     <nav className="mob-nav">
       {MOB_NAV_ITEMS.map(n => {
         const I  = n.icon;
         const on = ui.view === n.id;
         return (
-          <div key={n.id} className={`mob-nav-item ${on ? "on" : ""}`} onClick={() => uiDispatch(AC.setView(n.id))}>
+          <div key={n.id} className={`mob-nav-item ${on ? "on" : ""}`} onClick={() => handleNav(n.id)}>
             {n.accent && !on && triggers.length > 0 && <span className="mob-nav-dot"/>}
             <I size={20}/>
             <span className="mob-nav-label">{n.label}</span>
@@ -2098,12 +2134,16 @@ function DashboardView() {
   const handleQuestComplete = useCallback((q) => {
     if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
       const id = Date.now();
+      unlockLifeOSAudio();
+      playLifeOSSound("menu");
       uiDispatch(AC.setView("rocketLeague"));
       uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá todas las submisiones para ganar XP"));
       setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
       return;
     }
     const wasCompleted = completedSet.has(q.id);
+    unlockLifeOSAudio();
+    if (!wasCompleted) playLifeOSSound("complete");
     const deltaXp = wasCompleted ? -q.xp : q.xp;
     const oldNivel = SELECTORS.level(persistent.xp.total);
     pDispatch(AC.questComplete(q.id, q.xp, oldNivel));
@@ -2226,7 +2266,7 @@ function RocketLeagueView() {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
 
-  const dateKey = useMemo(() => getRocketLeagueDateKey(), []);
+  const [dateKey, setDateKey] = useState(() => getRocketLeagueDateKey());
   const plan = useMemo(() => getRocketLeaguePlanForDate(dateKey), [dateKey]);
   const current = persistent.rocketLeague?.current || createRocketLeagueCurrent(dateKey, plan.id);
   const completedIds = current.completedSubtaskIds || [];
@@ -2268,10 +2308,16 @@ function RocketLeagueView() {
   }, [current.dateKey, current.planId]);
 
   useEffect(() => {
-    if (!activeSubtaskId) return undefined;
-    const timer = setInterval(() => setTickNow(Date.now()), 1000);
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setTickNow(now);
+      setDateKey(prev => {
+        const next = getRocketLeagueDateKey(new Date(now));
+        return prev === next ? prev : next;
+      });
+    }, 1000);
     return () => clearInterval(timer);
-  }, [activeSubtaskId]);
+  }, []);
 
   useEffect(() => () => commitActiveTimer(), [commitActiveTimer]);
 
@@ -2288,6 +2334,10 @@ function RocketLeagueView() {
     () => plan.subtasks.reduce((sum, task) => sum + getElapsedSeconds(task.id), 0),
     [plan.subtasks, getElapsedSeconds]
   );
+
+  const nextRotationSeconds = getSecondsUntilNextLocalDay(tickNow);
+  const tomorrowDateKey = getRocketLeagueDateKey(new Date(tickNow + 24 * 60 * 60 * 1000));
+  const tomorrowPlan = useMemo(() => getRocketLeaguePlanForDate(tomorrowDateKey), [tomorrowDateKey]);
 
   useEffect(() => {
     if (!activeSubtaskId) return;
@@ -2401,7 +2451,7 @@ function RocketLeagueView() {
                 <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
               </div>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }} className="mob-layout-grid">
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }} className="mob-layout-grid">
               <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                 <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Duración</div>
                 <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
@@ -2413,6 +2463,11 @@ function RocketLeagueView() {
               <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
                 <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
                 <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>No ranked frío</div>
+              </div>
+              <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
+                <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próxima rotación</div>
+                <div style={{ fontSize:18, fontWeight:900, color:"#c4b5fd", fontVariantNumeric:"tabular-nums" }}>{formatCountdownSeconds(nextRotationSeconds)}</div>
+                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Mañana: {tomorrowPlan.title}</div>
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
@@ -2531,12 +2586,16 @@ function QuestsView() {
   const handleComplete = useCallback((q) => {
     if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
       const id = Date.now();
+      unlockLifeOSAudio();
+      playLifeOSSound("menu");
       uiDispatch(AC.setView("rocketLeague"));
       uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "La misión se completa al terminar las submisiones"));
       setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
       return;
     }
     const wasCompleted = completedSet.has(q.id);
+    unlockLifeOSAudio();
+    if (!wasCompleted) playLifeOSSound("complete");
     const deltaXp = wasCompleted ? -q.xp : q.xp;
     const oldNivel = SELECTORS.level(persistent.xp.total);
     pDispatch(AC.questComplete(q.id, q.xp, oldNivel));
@@ -4173,6 +4232,12 @@ export default function LifeOS() {
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Buenos días" : hour < 17 ? "Buenas tardes" : "Buenas noches";
 
+  const handleNavClick = useCallback((id) => {
+    unlockLifeOSAudio();
+    if (ui.view !== id) playLifeOSSound("menu");
+    uiDispatch(AC.setView(id));
+  }, [ui.view, uiDispatch]);
+
   return (
     <AppDataCtx.Provider value={dataCtxValue}>
       <AppUICtx.Provider value={uiCtxValue}>
@@ -4231,7 +4296,7 @@ export default function LifeOS() {
                   <div
                     key={n.id}
                     className={`ni ${on ? "on" : ""}`}
-                    onClick={() => uiDispatch(AC.setView(n.id))}
+                    onClick={() => handleNavClick(n.id)}
                     style={n.accent && !on ? { borderColor:"rgba(167,139,250,.12)", background:"rgba(167,139,250,.04)" } : {}}
                   >
                     {on && <span className="ni-bar"/>}
