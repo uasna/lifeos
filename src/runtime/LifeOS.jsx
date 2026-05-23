@@ -56,6 +56,7 @@ const AT = Object.freeze({
   RL_TIMER_COMMIT:           "RL_TIMER_COMMIT",
   RL_MENTAL_UPDATE:          "RL_MENTAL_UPDATE",
   RL_MENTAL_SAVE:            "RL_MENTAL_SAVE",
+  RL_MATCH_PROGRESS:        "RL_MATCH_PROGRESS",
   // ── Reflection domain ─────────────────────────────────────────
   REFLECTION_FIELD_UPDATE:    "REFLECTION_FIELD_UPDATE",
   REFLECTION_TOGGLE_CATEGORY: "REFLECTION_TOGGLE_CATEGORY",
@@ -97,6 +98,7 @@ const AC = Object.freeze({
   rlTimerCommit:          (subtaskId, secondsDelta) => ({ type: AT.RL_TIMER_COMMIT, subtaskId, secondsDelta }),
   rlMentalUpdate:         (key, value) => ({ type: AT.RL_MENTAL_UPDATE, key, value }),
   rlMentalSave:           () => ({ type: AT.RL_MENTAL_SAVE }),
+  rlMatchProgress:        (subtaskId, delta) => ({ type: AT.RL_MATCH_PROGRESS, subtaskId, delta }),
   reflectionFieldUpdate:   (key, value)   => ({ type: AT.REFLECTION_FIELD_UPDATE, key, value }),
   reflectionToggleCategory:(id)           => ({ type: AT.REFLECTION_TOGGLE_CATEGORY, id }),
   reflectionSave:          ()             => ({ type: AT.REFLECTION_SAVE }),
@@ -349,6 +351,7 @@ const RL_SUBTASK_TYPES = Object.freeze({
   SPEEDFLIP: "Speedflip",
   MECHANIC: "Mecánica",
   PACK: "Training Pack",
+  MATCHES: "Partidas",
   MENTAL: "Mental",
 });
 
@@ -392,6 +395,18 @@ const RL_DRIBBLE_FLICK_SUBTASK = Object.freeze({
   instruction: "Pelota encima del carro de esquina a esquina; terminá cada intento con front flick o diagonal flick simple. Si se cae, reset mental y repetí.",
   focus: "control de suelo → amenaza real",
   accent: "#fb7185",
+});
+
+const RL_ONE_V_ONE_SUBTASK = Object.freeze({
+  id: "one-v-one-before-friends",
+  title: "1v1 antes de jugar con amigos",
+  type: RL_SUBTASK_TYPES.MATCHES,
+  minutes: 0,
+  targetCount: 3,
+  noTimer: true,
+  instruction: "Jugá 3 partidas de 1v1 como práctica real: kickoff, paciencia, no regalar posesión y reset mental antes de jugar con amigos.",
+  focus: "3 partidas · warmup competitivo",
+  accent: "#60a5fa",
 });
 
 const RL_MENTAL_SUBTASK = Object.freeze({
@@ -508,6 +523,7 @@ const makeRlPlan = (id, title, focus, mechanic, pack, instruction) => Object.fre
     RL_DRIBBLE_FLICK_SUBTASK,
     mechanic,
     makeRlPackSubtask("pack-random", pack, 10, instruction, "#34d399"),
+    RL_ONE_V_ONE_SUBTASK,
     RL_MENTAL_SUBTASK,
   ]),
 });
@@ -624,6 +640,7 @@ function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = 
     planId,
     completedSubtaskIds: [],
     elapsedBySubtask: {},
+    matchCountBySubtask: {},
     mental: {
       moodBefore: null,
       moodAfter: null,
@@ -644,10 +661,12 @@ function createRocketLeagueInitialState() {
 function hasRocketLeagueProgress(current) {
   if (!current || typeof current !== "object") return false;
   const elapsed = Object.values(current.elapsedBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
+  const matchCount = Object.values(current.matchCountBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
   const mental = current.mental || {};
   return (
     (current.completedSubtaskIds || []).length > 0 ||
     elapsed > 0 ||
+    matchCount > 0 ||
     mental.moodBefore !== null ||
     mental.moodAfter !== null ||
     mental.tiltLevel !== null ||
@@ -912,6 +931,11 @@ function createAppSettingsInitial() {
       timer: true,
       mission: true,
       volume: 0.75,
+    },
+    pwa: {
+      mobileNotifications: false,
+      reminderLeadMinutes: 10,
+      installDismissed: false,
     },
   };
 }
@@ -1265,7 +1289,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 5; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 7; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1316,6 +1340,26 @@ const MIGRATIONS = Object.freeze({
     wardrobe: snap?.wardrobe && typeof snap.wardrobe === "object"
       ? deepMerge(createWardrobeInitial(), snap.wardrobe)
       : createWardrobeInitial(),
+  }),
+  [5]: (snap) => ({
+    ...snap,
+    rocketLeague: snap?.rocketLeague && typeof snap.rocketLeague === "object"
+      ? {
+          ...deepMerge(createRocketLeagueInitialState(), snap.rocketLeague),
+          current: {
+            ...deepMerge(createRocketLeagueCurrent(), snap.rocketLeague?.current || {}),
+            matchCountBySubtask: snap.rocketLeague?.current?.matchCountBySubtask && typeof snap.rocketLeague.current.matchCountBySubtask === "object" && !Array.isArray(snap.rocketLeague.current.matchCountBySubtask)
+              ? snap.rocketLeague.current.matchCountBySubtask
+              : {},
+          },
+        }
+      : createRocketLeagueInitialState(),
+  }),
+  [6]: (snap) => ({
+    ...snap,
+    appSettings: snap?.appSettings && typeof snap.appSettings === "object"
+      ? deepMerge(createAppSettingsInitial(), snap.appSettings)
+      : createAppSettingsInitial(),
   }),
 });
 
@@ -1437,12 +1481,14 @@ function validateSnapshotIntegrity(snap) {
   if (!Array.isArray(rocketLeague.history)) return false;
   if (!Array.isArray(rocketLeague.current.completedSubtaskIds)) return false;
   if (rocketLeague.current.elapsedBySubtask === null || typeof rocketLeague.current.elapsedBySubtask !== "object" || Array.isArray(rocketLeague.current.elapsedBySubtask)) return false;
+  if (rocketLeague.current.matchCountBySubtask === null || typeof rocketLeague.current.matchCountBySubtask !== "object" || Array.isArray(rocketLeague.current.matchCountBySubtask)) return false;
   if (!rocketLeague.current.mental || typeof rocketLeague.current.mental !== "object") return false;
 
   // App settings domain
   const { appSettings } = snap;
   if (!appSettings || typeof appSettings !== "object") return false;
   if (!appSettings.sound || typeof appSettings.sound !== "object") return false;
+  if (appSettings.pwa !== undefined && (appSettings.pwa === null || typeof appSettings.pwa !== "object" || Array.isArray(appSettings.pwa))) return false;
 
   // Wardrobe domain
   const { wardrobe } = snap;
@@ -1799,13 +1845,23 @@ function persistentReducer(state, action) {
       const ids = Array.isArray(current.completedSubtaskIds) ? current.completedSubtaskIds : [];
       const exists = ids.includes(action.subtaskId);
       const elapsed = current.elapsedBySubtask || {};
+      const matchCounts = current.matchCountBySubtask || {};
       const currentElapsed = Math.max(0, Math.floor(Number(elapsed[action.subtaskId]) || 0));
       const targetSeconds = getRocketLeagueSubtaskTargetSeconds(current.planId, action.subtaskId);
-      const nextElapsedBySubtask = exists
+      const plan = getRocketLeaguePlanById(current.planId);
+      const task = plan?.subtasks?.find(t => t.id === action.subtaskId);
+      const targetCount = Math.max(0, Math.floor(Number(task?.targetCount) || 0));
+      const nextElapsedBySubtask = exists || task?.noTimer
         ? elapsed
         : {
             ...elapsed,
             [action.subtaskId]: Math.max(currentElapsed, targetSeconds),
+          };
+      const nextMatchCountBySubtask = !targetCount
+        ? matchCounts
+        : {
+            ...matchCounts,
+            [action.subtaskId]: exists ? 0 : Math.max(Math.floor(Number(matchCounts[action.subtaskId]) || 0), targetCount),
           };
       return {
         ...state,
@@ -1815,6 +1871,7 @@ function persistentReducer(state, action) {
             ...current,
             completedSubtaskIds: exists ? ids.filter(id => id !== action.subtaskId) : [...ids, action.subtaskId],
             elapsedBySubtask: nextElapsedBySubtask,
+            matchCountBySubtask: nextMatchCountBySubtask,
           },
         },
       };
@@ -1834,6 +1891,37 @@ function persistentReducer(state, action) {
             elapsedBySubtask: {
               ...elapsed,
               [action.subtaskId]: Math.max(0, Math.floor(Number(elapsed[action.subtaskId]) || 0)) + delta,
+            },
+          },
+        },
+      };
+    }
+
+    case AT.RL_MATCH_PROGRESS: {
+      const delta = Math.floor(Number(action.delta) || 0);
+      if (!action.subtaskId || delta === 0) return state;
+      const current = state.rocketLeague?.current || createRocketLeagueCurrent();
+      const plan = getRocketLeaguePlanById(current.planId);
+      const task = plan?.subtasks?.find(t => t.id === action.subtaskId);
+      const targetCount = Math.max(1, Math.floor(Number(task?.targetCount) || 1));
+      const matchCounts = current.matchCountBySubtask || {};
+      const ids = Array.isArray(current.completedSubtaskIds) ? current.completedSubtaskIds : [];
+      const currentCount = Math.max(0, Math.floor(Number(matchCounts[action.subtaskId]) || 0));
+      const nextCount = Math.min(targetCount, Math.max(0, currentCount + delta));
+      const shouldComplete = nextCount >= targetCount;
+      const nextIds = shouldComplete
+        ? (ids.includes(action.subtaskId) ? ids : [...ids, action.subtaskId])
+        : ids.filter(id => id !== action.subtaskId);
+      return {
+        ...state,
+        rocketLeague: {
+          ...(state.rocketLeague || createRocketLeagueInitialState()),
+          current: {
+            ...current,
+            completedSubtaskIds: nextIds,
+            matchCountBySubtask: {
+              ...matchCounts,
+              [action.subtaskId]: nextCount,
             },
           },
         },
@@ -2824,6 +2912,7 @@ function RocketLeagueView() {
   const current = persistent.rocketLeague?.current || createRocketLeagueCurrent(dateKey, plan.id);
   const completedIds = current.completedSubtaskIds || [];
   const elapsedBySubtask = current.elapsedBySubtask || {};
+  const matchCountBySubtask = current.matchCountBySubtask || {};
   const completedSet = useMemo(() => new Set(completedIds), [completedIds]);
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const parentQuest = useMemo(
@@ -2883,6 +2972,10 @@ function RocketLeagueView() {
     return persisted;
   }, [elapsedBySubtask, tickNow]);
 
+  const getMatchCount = useCallback((subtaskId) => {
+    return Math.max(0, Math.floor(Number(matchCountBySubtask[subtaskId]) || 0));
+  }, [matchCountBySubtask]);
+
   const totalElapsedSeconds = useMemo(
     () => plan.subtasks.reduce((sum, task) => sum + getElapsedSeconds(task.id), 0),
     [plan.subtasks, getElapsedSeconds]
@@ -2937,6 +3030,20 @@ function RocketLeagueView() {
     if (!wasDone) playLifeOSSound("complete");
   }, [commitActiveTimer, completedSet, pDispatch]);
 
+  const updateMatchProgress = useCallback((task, delta) => {
+    unlockLifeOSAudio();
+    const before = getMatchCount(task.id);
+    const target = Math.max(1, Math.floor(Number(task.targetCount) || 1));
+    const after = Math.min(target, Math.max(0, before + delta));
+    pDispatch(AC.rlMatchProgress(task.id, delta));
+    if (before < target && after >= target) {
+      playLifeOSSound("complete");
+      const id = Date.now();
+      uiDispatch(AC.toastAdd(id, `${task.title}: completado`, `${target} partidas de 1v1 listas`));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
+    }
+  }, [getMatchCount, pDispatch, uiDispatch]);
+
   const updateMental = useCallback((key, value) => {
     pDispatch(AC.rlMentalUpdate(key, value));
   }, [pDispatch]);
@@ -2979,7 +3086,7 @@ function RocketLeagueView() {
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min diarios · Plat III → Diamond · mecánicas útiles + mental</div>
+          <div style={S.psub}>60 min diarios + 3 partidas 1v1 · Plat III → Diamond · mecánicas útiles + mental</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -3029,7 +3136,7 @@ function RocketLeagueView() {
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: primero completá el bloque de {plan.minutes} min. Si perdés 2 seguidas por tilt, no sigas ranked.
+              No ranked frío: primero completá el bloque de {plan.minutes} min y 3 partidas de 1v1. Si perdés 2 seguidas por tilt, no sigas ranked.
             </div>
           </div>
 
@@ -3038,10 +3145,15 @@ function RocketLeagueView() {
               const done = completedSet.has(task.id);
               const active = activeSubtaskId === task.id;
               const elapsed = getElapsedSeconds(task.id);
+              const isMatchTask = task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer;
+              const matchCount = isMatchTask ? getMatchCount(task.id) : 0;
+              const targetCount = Math.max(1, Math.floor(Number(task.targetCount) || 1));
               const target = task.minutes * 60;
-              const pct = Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
-              const over = elapsed > target;
-              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : Target;
+              const pct = isMatchTask
+                ? Math.min(100, Math.round((matchCount / targetCount) * 100))
+                : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
+              const over = !isMatchTask && elapsed > target;
+              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : Target;
               return (
                 <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -3063,15 +3175,28 @@ function RocketLeagueView() {
                       )}
                       <div style={{ marginTop:10 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:over ? "#fbbf24" : T_COLOR.muted, marginBottom:6 }}>
-                          <span><Timer size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {formatSeconds(elapsed)}</span>
-                          <span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span>
+                          {isMatchTask ? (
+                            <>
+                              <span><Sword size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {matchCount}/{targetCount} partidas</span>
+                              <span>sin cronómetro</span>
+                            </>
+                          ) : (
+                            <>
+                              <span><Timer size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {formatSeconds(elapsed)}</span>
+                              <span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span>
+                            </>
+                          )}
                         </div>
                         <ProgresoBar pct={pct} gradient={over ? "linear-gradient(90deg,#fbbf24,#fb923c)" : `linear-gradient(90deg,${task.accent}88,${task.accent})`} height={6}/>
                       </div>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:8, flexShrink:0 }}>
-                      <button onClick={() => toggleTimer(task.id)} style={{ width:38, height:38, borderRadius:11, border:`1px solid ${active ? task.accent : "rgba(255,255,255,.1)"}`, background:active ? `${task.accent}18` : "rgba(255,255,255,.04)", color:active ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={active ? "Pausar" : "Iniciar"}>
-                        {active ? <Pause size={16}/> : <Play size={16}/>} 
+                      <button
+                        onClick={() => isMatchTask ? updateMatchProgress(task, 1) : toggleTimer(task.id)}
+                        style={{ width:38, height:38, borderRadius:11, border:`1px solid ${active || isMatchTask ? task.accent : "rgba(255,255,255,.1)"}`, background:active || isMatchTask ? `${task.accent}18` : "rgba(255,255,255,.04)", color:active || isMatchTask ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
+                        title={isMatchTask ? "+1 partida" : active ? "Pausar" : "Iniciar"}
+                      >
+                        {isMatchTask ? <Plus size={16}/> : active ? <Pause size={16}/> : <Play size={16}/>} 
                       </button>
                       <button onClick={() => toggleSubtask(task.id)} style={{ width:38, height:38, borderRadius:11, border:`1px solid ${done ? task.accent : "rgba(255,255,255,.1)"}`, background:done ? `${task.accent}18` : "rgba(255,255,255,.04)", color:done ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={done ? "Desmarcar" : "Completar"}>
                         {done ? <CheckCircle2 size={17}/> : <Circle size={17}/>} 
@@ -4534,6 +4659,48 @@ function WardrobeView() {
   );
 }
 
+
+function isLifeOSStandalone() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone === true;
+}
+
+function isLikelyMobileDevice() {
+  if (typeof window === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent || "") || window.matchMedia?.("(max-width: 760px)")?.matches;
+}
+
+async function showLifeOSLocalNotification(title, body) {
+  if (typeof window === "undefined" || !("Notification" in window)) return false;
+  if (Notification.permission !== "granted") return false;
+
+  const options = {
+    body,
+    tag: "lifeos-local-test",
+    renotify: true,
+    icon: "/pwa-192.png",
+    badge: "/pwa-192.png",
+    data: { url: "/" },
+  };
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, options);
+      return true;
+    }
+    new Notification(title, options);
+    return true;
+  } catch {
+    try {
+      new Notification(title, options);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function SettingsView() {
   const {
     persistent, pDispatch,
@@ -4546,16 +4713,96 @@ function SettingsView() {
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const [questDraft, setQuestDraft] = useState(() => sanitizeQuestItems(activeQuests));
   const audioSettings = deepMerge(createAppSettingsInitial().sound, persistent.appSettings?.sound || {});
+  const pwaSettings = deepMerge(createAppSettingsInitial().pwa, persistent.appSettings?.pwa || {});
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [isInstalledPWA, setIsInstalledPWA] = useState(() => isLifeOSStandalone());
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+    return Notification.permission;
+  });
+  const isMobilePWADevice = useMemo(() => isLikelyMobileDevice(), []);
 
   useEffect(() => {
     setQuestDraft(sanitizeQuestItems(activeQuests));
   }, [activeQuests]);
+
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event);
+    };
+    const onAppInstalled = () => {
+      setIsInstalledPWA(true);
+      setDeferredInstallPrompt(null);
+      uiDispatch(AC.toastAdd(Date.now(), "LifeOS instalado", "La app quedó instalada en este dispositivo."));
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, [uiDispatch]);
 
   const updateAudioSetting = useCallback((key, value) => {
     const nextSound = { ...audioSettings, [key]: value };
     persistAudioPrefs(nextSound);
     pDispatch(AC.appSettingsUpdate({ sound: nextSound }));
   }, [audioSettings, pDispatch]);
+
+  const updatePWASetting = useCallback((key, value) => {
+    const nextPWA = { ...pwaSettings, [key]: value };
+    pDispatch(AC.appSettingsUpdate({ pwa: nextPWA }));
+  }, [pwaSettings, pDispatch]);
+
+  const installLifeOSApp = useCallback(async () => {
+    if (isInstalledPWA) {
+      uiDispatch(AC.toastAdd(Date.now(), "LifeOS ya está instalado", "Abrilo desde el icono de la pantalla principal."));
+      return;
+    }
+    if (!deferredInstallPrompt) {
+      uiDispatch(AC.toastAdd(Date.now(), "Instalación manual", "En Android: menú del navegador → Agregar a pantalla principal / Instalar app."));
+      return;
+    }
+    try {
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      setDeferredInstallPrompt(null);
+      if (choice?.outcome === "accepted") {
+        setIsInstalledPWA(true);
+        uiDispatch(AC.toastAdd(Date.now(), "Instalando LifeOS", "La app se agregará al celular."));
+      } else {
+        updatePWASetting("installDismissed", true);
+      }
+    } catch {
+      uiDispatch(AC.toastAdd(Date.now(), "No se pudo instalar", "Probá desde el menú del navegador."));
+    }
+  }, [deferredInstallPrompt, isInstalledPWA, uiDispatch, updatePWASetting]);
+
+  const requestMobileNotifications = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      uiDispatch(AC.toastAdd(Date.now(), "Notificaciones no disponibles", "Este navegador no soporta notificaciones web."));
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      updatePWASetting("mobileNotifications", permission === "granted");
+      if (permission === "granted") {
+        await showLifeOSLocalNotification("LifeOS", "Notificaciones móviles activas.");
+        uiDispatch(AC.toastAdd(Date.now(), "Notificaciones activadas", "El celular ya puede recibir avisos de LifeOS."));
+      } else {
+        uiDispatch(AC.toastAdd(Date.now(), "Permiso no concedido", "Activá las notificaciones del sitio desde el navegador."));
+      }
+    } catch {
+      uiDispatch(AC.toastAdd(Date.now(), "No se pudo pedir permiso", "El navegador bloqueó la solicitud de notificaciones."));
+    }
+  }, [uiDispatch, updatePWASetting]);
+
+  const testMobileNotification = useCallback(async () => {
+    const ok = await showLifeOSLocalNotification("LifeOS", "Prueba de recordatorio móvil funcionando.");
+    if (!ok) uiDispatch(AC.toastAdd(Date.now(), "Sin permiso de notificación", "Primero activá notificaciones móviles."));
+  }, [uiDispatch]);
 
   const clearLocalProgreso = useCallback(() => {
     const ok = window.confirm("¿Seguro que querés borrar el progreso guardado en este navegador?");
@@ -4692,6 +4939,53 @@ function SettingsView() {
             {cloudMessage && <div style={{ width:"100%", fontSize:12, color:T_COLOR.subtext }}>{cloudMessage}</div>}
           </div>
         )}
+      </div>
+
+      <div className="g" style={{ padding:22, marginBottom:16 }}>
+        <div style={S.stitle}>App móvil / PWA</div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:16 }}>
+          Instalá LifeOS como app en el celular. Los cambios siguen saliendo por GitHub → Vercel, así que web y app usan la misma versión. Las notificaciones están pensadas para móvil; en PC no hace falta activarlas.
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:12 }}>
+          <div style={{ padding:14, borderRadius:14, border:"1px solid rgba(255,255,255,.07)", background:"rgba(255,255,255,.025)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, color:T_COLOR.text, fontWeight:900, fontSize:13, marginBottom:7 }}>
+              <Home size={16} /> Estado de instalación
+            </div>
+            <div style={{ fontSize:12, color:isInstalledPWA ? "#34d399" : "#fbbf24", fontWeight:900, marginBottom:10 }}>
+              {isInstalledPWA ? "Instalada como app" : "Todavía en navegador"}
+            </div>
+            <button onClick={installLifeOSApp} style={{ border:"1px solid rgba(34,211,238,.25)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"10px 12px", fontWeight:900, cursor:"pointer", width:"100%" }}>
+              {isInstalledPWA ? "Abrir desde pantalla principal" : "Instalar LifeOS"}
+            </button>
+            {!deferredInstallPrompt && !isInstalledPWA && (
+              <div style={{ fontSize:11, color:T_COLOR.muted, lineHeight:1.6, marginTop:9 }}>
+                Si el botón no abre el instalador: menú del navegador → Agregar a pantalla principal / Instalar app.
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding:14, borderRadius:14, border:"1px solid rgba(255,255,255,.07)", background:"rgba(255,255,255,.025)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, color:T_COLOR.text, fontWeight:900, fontSize:13, marginBottom:7 }}>
+              <Bell size={16} /> Notificaciones móviles
+            </div>
+            <div style={{ fontSize:12, color:notificationPermission === "granted" ? "#34d399" : T_COLOR.muted, lineHeight:1.6, marginBottom:10 }}>
+              Estado: {notificationPermission === "unsupported" ? "no soportadas" : notificationPermission === "granted" ? "activas" : notificationPermission === "denied" ? "bloqueadas" : "pendientes"}
+              {!isMobilePWADevice ? " · activalas mejor desde el celular" : ""}
+            </div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button onClick={requestMobileNotifications} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.08)", color:"#34d399", borderRadius:10, padding:"10px 12px", fontWeight:900, cursor:"pointer", flex:"1 1 140px" }}>
+                Activar
+              </button>
+              <button onClick={testMobileNotification} style={{ border:"1px solid rgba(167,139,250,.25)", background:"rgba(167,139,250,.08)", color:"#a78bfa", borderRadius:10, padding:"10px 12px", fontWeight:900, cursor:"pointer", flex:"1 1 120px" }}>
+                Probar
+              </button>
+            </div>
+            <div style={{ fontSize:11, color:T_COLOR.muted, lineHeight:1.6, marginTop:9 }}>
+              Para avisos cuando la app esté cerrada se necesitará una fase con push/server. Este paso deja LifeOS instalable y listo para permisos móviles.
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }} className="mob-layout-grid">

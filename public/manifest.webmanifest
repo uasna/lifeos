@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "LifeOS",
+  "short_name": "LifeOS",
+  "description": "Misiones, horario, Rocket League, clóset y progreso personal.",
+  "lang": "es-HN",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "categories": ["productivity", "lifestyle", "education"],
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Misiones", "short_name": "Misiones", "url": "/?view=quests", "icons": [{ "src": "/pwa-192.png", "sizes": "192x192" }] },
+    { "name": "Rocket League", "short_name": "Rocket", "url": "/?view=rocketLeague", "icons": [{ "src": "/pwa-192.png", "sizes": "192x192" }] }
+  ]
+}
