@@ -49,7 +49,10 @@ const AT = Object.freeze({
   // ── Wardrobe / closet domain ─────────────────────────────────
   WARDROBE_PROFILE_UPDATE:    "WARDROBE_PROFILE_UPDATE",
   WARDROBE_ITEM_ADD:          "WARDROBE_ITEM_ADD",
+  WARDROBE_ITEM_UPDATE:       "WARDROBE_ITEM_UPDATE",
   WARDROBE_ITEM_DELETE:       "WARDROBE_ITEM_DELETE",
+  WARDROBE_OUTFIT_MARK:       "WARDROBE_OUTFIT_MARK",
+  DOMAIN_RESET:               "DOMAIN_RESET",
   // ── Rocket League domain ─────────────────────────────────────
   RL_DAILY_SYNC:             "RL_DAILY_SYNC",
   RL_SUBTASK_TOGGLE:         "RL_SUBTASK_TOGGLE",
@@ -92,7 +95,10 @@ const AC = Object.freeze({
   appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
   wardrobeProfileUpdate:   (patch) => ({ type: AT.WARDROBE_PROFILE_UPDATE, patch }),
   wardrobeItemAdd:         (item) => ({ type: AT.WARDROBE_ITEM_ADD, item }),
+  wardrobeItemUpdate:      (id, patch) => ({ type: AT.WARDROBE_ITEM_UPDATE, id, patch }),
   wardrobeItemDelete:      (id) => ({ type: AT.WARDROBE_ITEM_DELETE, id }),
+  wardrobeOutfitMark:      (entry) => ({ type: AT.WARDROBE_OUTFIT_MARK, entry }),
+  domainReset:             (domain) => ({ type: AT.DOMAIN_RESET, domain }),
   rlDailySync:            (dateKey, planId) => ({ type: AT.RL_DAILY_SYNC, dateKey, planId }),
   rlSubtaskToggle:        (subtaskId) => ({ type: AT.RL_SUBTASK_TOGGLE, subtaskId }),
   rlTimerCommit:          (subtaskId, secondsDelta) => ({ type: AT.RL_TIMER_COMMIT, subtaskId, secondsDelta }),
@@ -783,6 +789,8 @@ function createWardrobeInitial() {
       skinTone: "canela",
       style: "casual limpio",
       notes: "Priorizar tonos cálidos, neutros profundos y contrastes limpios.",
+      weather: "normal",
+      occasion: "universidad",
     },
     items: [],
     history: [],
@@ -792,12 +800,15 @@ function createWardrobeInitial() {
 function sanitizeWardrobeItem(item = {}) {
   const allowedTypes = new Set(WARDROBE_TYPES.map(t => t.id));
   if (!allowedTypes.has(item.type)) return null;
+  const unavailableUntil = typeof item.unavailableUntil === "string" ? item.unavailableUntil.slice(0, 10) : "";
   return {
     id: typeof item.id === "number" || typeof item.id === "string" ? item.id : Date.now(),
     type: item.type,
     name: String(item.name || "Prenda").slice(0, 48),
     color: String(item.color || "neutro").slice(0, 28),
     style: String(item.style || "casual").slice(0, 36),
+    favorite: Boolean(item.favorite),
+    unavailableUntil,
   };
 }
 
@@ -805,48 +816,78 @@ function normalizeWardrobeItems(items = []) {
   return (Array.isArray(items) ? items : []).map(sanitizeWardrobeItem).filter(Boolean).slice(0, 80);
 }
 
-function getWardrobePool(items, type) {
-  const userItems = items.filter(item => item.type === type);
-  const fallbackItems = WARDROBE_FALLBACK_ITEMS.filter(item => item.type === type);
-  return userItems.length ? userItems : fallbackItems;
+function isWardrobeItemAvailable(item, dateKey = getLifeOSDateKey()) {
+  if (!item?.unavailableUntil) return true;
+  return String(item.unavailableUntil).slice(0, 10) < dateKey;
 }
 
-function pickFromWardrobePool(pool, seed, bannedIds = []) {
+function getWardrobePool(items, type, dateKey = getLifeOSDateKey()) {
+  const availableUserItems = items.filter(item => item.type === type && isWardrobeItemAvailable(item, dateKey));
+  const fallbackItems = WARDROBE_FALLBACK_ITEMS.filter(item => item.type === type);
+  return availableUserItems.length ? availableUserItems : fallbackItems;
+}
+
+function pickFromWardrobePool(pool, seed, bannedIds = [], preferFavorite = false) {
   const blocked = new Set(bannedIds.filter(Boolean));
   const available = pool.filter(item => !blocked.has(item.id));
-  const choices = available.length ? available : pool;
+  let choices = available.length ? available : pool;
+  const favorites = choices.filter(item => item.favorite);
+  if (preferFavorite && favorites.length) choices = favorites;
   if (!choices.length) return null;
   const rand = seededRandom(hashStringSeed(`${seed}:${choices.map(item => item.id).join("|")}`));
   return choices[Math.floor(rand() * choices.length)] || choices[0];
 }
 
+function getWardrobeOutfitSignature(items = []) {
+  return items.map(item => `${item.type}:${item.id}`).join("|");
+}
+
 function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey()) {
   const items = normalizeWardrobeItems(wardrobe.items);
+  const history = Array.isArray(wardrobe.history) ? wardrobe.history : [];
   const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
-  const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}:${items.length}`).slice(0, 7);
-  const topPool = getWardrobePool(items, "top");
-  const bottomPool = seededShuffle(getWardrobePool(items, "bottom"), `wardrobe-bottoms:${weekKey}:${profile.style}:${items.length}`);
-  const shoePool = getWardrobePool(items, "shoes");
-  const bottomGap = bottomPool.length >= 3 ? 2 : 1;
+  const dateKey = getLifeOSDateKey();
+  const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}:${profile.weather}:${profile.occasion}:${items.length}`).slice(0, 7);
+  const topPool = getWardrobePool(items, "top", dateKey);
+  const bottomPool = seededShuffle(getWardrobePool(items, "bottom", dateKey), `wardrobe-bottoms:${weekKey}:${profile.style}:${items.length}`);
+  const shoePool = getWardrobePool(items, "shoes", dateKey);
+  const bottomGap = bottomPool.length >= 4 ? 2 : bottomPool.length >= 2 ? 1 : 0;
   const recentBottomIds = [];
+  const usedThisWeek = new Set();
+  const disliked = new Set(history.filter(h => h?.action === "dislike").map(h => h.signature).filter(Boolean));
+  const recentlyUsed = new Set(history.filter(h => h?.action === "used").slice(-14).map(h => h.signature).filter(Boolean));
 
   return DAY_NAMES.map((day, idx) => {
-    const seed = `wardrobe:${weekKey}:${idx}:${items.length}:${profile.style}`;
-    const mainColor = palette[idx % palette.length] || "crema";
-    const top = pickFromWardrobePool(topPool, `${seed}:top:${mainColor}`) || { id:`fallback-top-${idx}`, type:"top", name:`Camisa ${mainColor}`, color:mainColor, style:"sugerido" };
-    let bottom = pickFromWardrobePool(bottomPool, `${seed}:bottom`, recentBottomIds);
-    if (!bottom) bottom = { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+    let chosen = null;
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      const seed = `wardrobe:${weekKey}:${idx}:${attempt}:${items.length}:${profile.style}:${profile.weather}:${profile.occasion}`;
+      const mainColor = palette[(idx + attempt) % palette.length] || "crema";
+      const top = pickFromWardrobePool(topPool, `${seed}:top:${mainColor}`, [], attempt % 3 === 0) || { id:`fallback-top-${idx}`, type:"top", name:`Camisa ${mainColor}`, color:mainColor, style:"sugerido" };
+      const bottom = pickFromWardrobePool(bottomPool, `${seed}:bottom`, recentBottomIds) || { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+      const shoes = pickFromWardrobePool(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, [], attempt % 4 === 0) || { id:`fallback-shoes-${idx}`, type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
+      const outfitItems = [top, bottom, shoes];
+      const signature = getWardrobeOutfitSignature(outfitItems);
+      const scorePenalty = (usedThisWeek.has(signature) ? 3 : 0) + (disliked.has(signature) ? 2 : 0) + (recentlyUsed.has(signature) ? 1 : 0);
+      if (!chosen || scorePenalty < chosen.scorePenalty) chosen = { top, bottom, shoes, mainColor, signature, scorePenalty };
+      if (scorePenalty === 0) break;
+    }
+
+    const top = chosen.top;
+    const bottom = chosen.bottom;
+    const shoes = chosen.shoes;
+    const mainColor = chosen.mainColor;
+    usedThisWeek.add(chosen.signature);
     recentBottomIds.push(bottom.id);
     while (recentBottomIds.length > bottomGap) recentBottomIds.shift();
-    const shoes = pickFromWardrobePool(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`) || { id:`fallback-shoes-${idx}`, type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
 
     return {
       day,
       full: DAY_FULL[idx],
       title: `${top.color} + ${bottom.color}`,
       tone: mainColor,
+      signature: chosen.signature,
       items: [top, bottom, shoes],
-      why: `Look variado para tono ${profile.skinTone || "canela"}: ${top.color}, ${bottom.color} y tenis ${shoes.color}. Los pantalones no se repiten en días pegados cuando hay suficientes opciones. Estilo: ${profile.style || "casual"}.`,
+      why: `Look para tono ${profile.skinTone || "canela"}, clima ${profile.weather || "normal"} y ocasión ${profile.occasion || "casual"}. Evita repetir pantalón pegado cuando hay opciones y baja prioridad a combinaciones que marcaste como repetidas o feas.`,
     };
   });
 }
@@ -979,6 +1020,10 @@ function createAppSettingsInitial() {
     },
     penalties: {
       missedQuestXp: true,
+    },
+    backup: {
+      lastExportAt: null,
+      lastImportAt: null,
     },
   };
 }
@@ -1332,7 +1377,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 8; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 9; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1412,6 +1457,15 @@ const MIGRATIONS = Object.freeze({
     quests: snap?.quests && typeof snap.quests === "object"
       ? { ...snap.quests, dailyHistory: Array.isArray(snap.quests.dailyHistory) ? snap.quests.dailyHistory : [] }
       : PERSISTENT_INITIAL.quests,
+  }),
+  [8]: (snap) => ({
+    ...snap,
+    wardrobe: snap?.wardrobe && typeof snap.wardrobe === "object"
+      ? deepMerge(createWardrobeInitial(), snap.wardrobe)
+      : createWardrobeInitial(),
+    appSettings: snap?.appSettings && typeof snap.appSettings === "object"
+      ? deepMerge(createAppSettingsInitial(), snap.appSettings)
+      : createAppSettingsInitial(),
   }),
 });
 
@@ -2070,11 +2124,37 @@ function persistentReducer(state, action) {
     case AT.WARDROBE_ITEM_ADD: {
       const wardrobe = state.wardrobe || createWardrobeInitial();
       const item = sanitizeWardrobeItem({ ...(action.item || {}), id: Date.now() });
+      if (!item) return state;
       return {
         ...state,
         wardrobe: {
           ...wardrobe,
           items: [...normalizeWardrobeItems(wardrobe.items), item].slice(0, 80),
+        },
+      };
+    }
+
+    case AT.WARDROBE_ITEM_UPDATE: {
+      const wardrobe = state.wardrobe || createWardrobeInitial();
+      const items = normalizeWardrobeItems(wardrobe.items).map(item => {
+        if (item.id !== action.id) return item;
+        return sanitizeWardrobeItem({ ...item, ...(action.patch || {}) }) || item;
+      });
+      return { ...state, wardrobe: { ...wardrobe, items } };
+    }
+
+    case AT.WARDROBE_OUTFIT_MARK: {
+      const wardrobe = state.wardrobe || createWardrobeInitial();
+      const entry = {
+        date: new Date().toISOString(),
+        weekKey: getScheduleWeekKey(),
+        ...(action.entry || {}),
+      };
+      return {
+        ...state,
+        wardrobe: {
+          ...wardrobe,
+          history: [...(Array.isArray(wardrobe.history) ? wardrobe.history : []), entry].slice(-160),
         },
       };
     }
@@ -2088,6 +2168,12 @@ function persistentReducer(state, action) {
           items: normalizeWardrobeItems(wardrobe.items).filter(item => item.id !== action.id),
         },
       };
+    }
+
+    case AT.DOMAIN_RESET: {
+      if (action.domain === "rocketLeague") return { ...state, rocketLeague: createRocketLeagueInitialState() };
+      if (action.domain === "wardrobe") return { ...state, wardrobe: createWardrobeInitial() };
+      return state;
     }
 
     case AT.APP_SETTINGS_UPDATE: {
@@ -2512,6 +2598,7 @@ const CSS = `
 .rl-chip-row{display:flex;gap:8px;flex-wrap:wrap}
 .rl-task-card{padding:16px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075);transition:all .22s ease}
 .rl-task-card:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.14)}
+	.rl-sticky-timer{position:sticky;top:12px;z-index:20;backdrop-filter:blur(22px)}
 .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,10,.98);border-top:1px solid rgba(255,255,255,.07);padding:6px 8px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(28px);animation:mobNavIn .32s cubic-bezier(.34,1.56,.64,1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .mob-nav::-webkit-scrollbar{display:none}
 .mob-nav-item{flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 5px;border-radius:11px;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);color:#4b5563;position:relative;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -2562,6 +2649,7 @@ const CSS = `
   .rl-main-grid{grid-template-columns:1fr}
   .wardrobe-grid{grid-template-columns:1fr}
   .wardrobe-days{grid-template-columns:1fr}
+	  .rl-sticky-timer{position:relative;top:auto}
   .s-grid{grid-template-columns:1fr 1fr}
   .ach-grid{grid-template-columns:1fr 1fr}
   .rf-cat-grid{grid-template-columns:1fr 1fr}
@@ -3145,6 +3233,24 @@ function RocketLeagueView() {
 
   const mental = current.mental || createRocketLeagueCurrent().mental;
   const moodOptions = [1, 2, 3, 4, 5];
+  const activeTask = activeSubtaskId ? plan.subtasks.find(task => task.id === activeSubtaskId) : null;
+  const nextIncompleteTask = plan.subtasks.find(task => !completedSet.has(task.id));
+  const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer).every(task => completedSet.has(task.id));
+  const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
+  const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
+
+  const startNextBlock = useCallback(() => {
+    const task = plan.subtasks.find(t => !completedSet.has(t.id) && !t.noTimer);
+    if (!task) return;
+    toggleTimer(task.id);
+  }, [plan.subtasks, completedSet, toggleTimer]);
+
+  const completeCurrentOrNext = useCallback(() => {
+    const target = activeTask || nextIncompleteTask;
+    if (!target) return;
+    if (target.noTimer) return;
+    toggleSubtask(target.id);
+  }, [activeTask, nextIncompleteTask, toggleSubtask]);
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
@@ -3202,6 +3308,21 @@ function RocketLeagueView() {
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
               No ranked frío: primero completá el bloque de {plan.minutes} min y 3 partidas de 1v1. Si perdés 2 seguidas por tilt, no sigas ranked.
+            </div>
+          </div>
+
+          <div className="g rl-sticky-timer" style={{ padding:16, borderColor:activeTask ? "rgba(34,211,238,.32)" : "rgba(255,255,255,.08)", background:activeTask ? "rgba(34,211,238,.055)" : "rgba(255,255,255,.025)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+              <div style={{ minWidth:0, flex:1 }}>
+                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>{activeTask ? "Bloque activo" : "Siguiente bloque"}</div>
+                <div style={{ fontFamily:T_FONT.display, fontSize:18, color:T_COLOR.text, fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{activeTask?.title || nextIncompleteTask?.title || "Entrenamiento completo"}</div>
+                <div style={{ fontSize:11.5, color:T_COLOR.muted }}>{activeTask ? `${formatSeconds(getElapsedSeconds(activeTask.id))} / ${activeTask.minutes}:00` : nextIncompleteTask ? "Tocá iniciar para seguir sin perderte" : "Revisá el resumen final"}</div>
+              </div>
+              <div style={{ fontFamily:T_FONT.display, fontSize:32, fontWeight:900, color:activeTask ? "#22d3ee" : T_COLOR.text, fontVariantNumeric:"tabular-nums" }}>{activeTask ? formatSeconds(getElapsedSeconds(activeTask.id)) : formatSeconds(totalElapsedSeconds)}</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button onClick={activeTask ? () => toggleTimer(activeTask.id) : startNextBlock} disabled={!activeTask && !nextIncompleteTask} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.10)", color:"#22d3ee", borderRadius:11, padding:"9px 12px", fontWeight:900, cursor:"pointer", opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>{activeTask ? "Pausar" : "Iniciar siguiente"}</button>
+                <button onClick={completeCurrentOrNext} disabled={!activeTask && !nextIncompleteTask} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.09)", color:"#34d399", borderRadius:11, padding:"9px 12px", fontWeight:900, cursor:"pointer", opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>Completar bloque</button>
+              </div>
             </div>
           </div>
 
@@ -3280,6 +3401,18 @@ function RocketLeagueView() {
             <div style={{ fontFamily:T_FONT.display, fontSize:38, fontWeight:900, color:activeSubtaskId ? "#22d3ee" : T_COLOR.text, lineHeight:1 }}>{formatSeconds(totalElapsedSeconds)}</div>
             <div style={{ fontSize:12, color:T_COLOR.muted, margin:"6px 0 12px" }}>{activeSubtaskId ? `Activo: ${plan.subtasks.find(t => t.id === activeSubtaskId)?.title || "bloque"}` : "Sin bloque activo"}</div>
             <ProgresoBar pct={timePct} gradient="linear-gradient(90deg,#22d3ee,#7c3aed)" height={8}/>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:allComplete ? "rgba(52,211,153,.22)" : "rgba(251,191,36,.16)" }}>
+            <div style={S.stitle}>Resumen Rocket</div>
+            <div style={{ display:"grid", gap:8, fontSize:12 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 60 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>1v1 antes de amigos</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mental</span><b style={{ color:mental.saved ? "#34d399" : "#64748b" }}>{mental.saved ? "Guardado" : "Sin guardar"}</b></div>
+            </div>
+            <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
+              Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.
+            </div>
           </div>
 
           <div className="g" style={{ padding:18, borderColor:"rgba(167,139,250,.18)" }}>
@@ -4039,6 +4172,17 @@ function StatsView() {
   const rate    = Math.round((completedIds.length / Math.max(activeQuests.length, 1)) * 100);
   const rlCurrent = persistent.rocketLeague?.current;
   const rlTodaySeconds = Object.values(rlCurrent?.elapsedBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
+  const questHistory = Array.isArray(persistent.quests?.dailyHistory) ? persistent.quests.dailyHistory : [];
+  const last7History = questHistory.slice(-7);
+  const histCompleted = last7History.reduce((sum, d) => sum + Math.max(0, Number(d.completedCount) || 0), 0);
+  const histTotal = last7History.reduce((sum, d) => sum + Math.max(0, Number(d.totalCount) || 0), 0);
+  const histRate = histTotal ? Math.round((histCompleted / histTotal) * 100) : rate;
+  const penaltyLast7 = last7History.reduce((sum, d) => sum + Math.max(0, Number(d.penaltyXp) || 0), 0);
+  const missedFrequency = useMemo(() => {
+    const map = new Map();
+    questHistory.slice(-30).forEach(day => (day.missedIds || []).forEach(id => map.set(id, (map.get(id) || 0) + 1)));
+    return [...map.entries()].sort((a,b) => b[1] - a[1]).slice(0, 5).map(([id, count]) => ({ quest: activeQuests.find(q => q.id === id) || { title:`Misión ${id}` }, count }));
+  }, [questHistory, activeQuests]);
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
@@ -4050,6 +4194,8 @@ function StatsView() {
         <StatCard val={avgDay}                   label="XP prom./día" icon={TrendingUp}  accent="#34d399"/>
         <StatCard val={bestDay}                  label="Mejor día"      icon={Award}       accent="#fbbf24"/>
         <StatCard val={formatSeconds(rlTodaySeconds)} label="RL hoy" icon={Gamepad2} accent="#22d3ee"/>
+        <StatCard val={`${histRate}%`} label="Cumplimiento 7d" icon={CheckCircle2} accent={histRate >= 70 ? "#34d399" : "#fbbf24"}/>
+        <StatCard val={`-${penaltyLast7}`} label="XP perdido 7d" icon={AlertTriangle} accent={penaltyLast7 > 0 ? "#f87171" : "#34d399"}/>
       </div>
 
       <div className="g" style={{ padding:20, marginBottom:16 }}>
@@ -4107,6 +4253,18 @@ function StatsView() {
               <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.6 }}>Todavía no hay movimientos. Completá una misión para empezar tu historial real.</div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:18, marginTop:16 }}>
+        <div style={S.stitle}>Misiones que más se te escapan</div>
+        <div style={{ display:"grid", gap:8 }}>
+          {missedFrequency.length ? missedFrequency.map(row => (
+            <div key={row.quest.id || row.quest.title} style={{ display:"flex", justifyContent:"space-between", gap:12, padding:"9px 10px", borderRadius:10, background:"rgba(248,113,113,.045)", border:"1px solid rgba(248,113,113,.10)" }}>
+              <span style={{ color:T_COLOR.text, fontSize:12, fontWeight:800 }}>{row.quest.title}</span>
+              <span style={{ color:"#f87171", fontSize:12, fontWeight:900 }}>{row.count} fallos / 30d</span>
+            </div>
+          )) : <div style={{ color:T_COLOR.muted, fontSize:12 }}>Todavía no hay suficientes resets diarios para detectar patrones.</div>}
         </div>
       </div>
 
@@ -4584,6 +4742,7 @@ function ProfileView() {
 
 function WardrobeView() {
   const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
   const wardrobe = persistent.wardrobe || createWardrobeInitial();
   const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
   const items = normalizeWardrobeItems(wardrobe.items);
@@ -4609,8 +4768,11 @@ function WardrobeView() {
   }, []);
 
   const weekKey = getScheduleWeekKey(new Date(now));
+  const todayKey = getLifeOSDateKey(new Date(now));
+  const laundryUntil = getLifeOSDateKey(new Date(now + 2 * 24 * 60 * 60 * 1000));
   const remixCountdown = formatCountdownSeconds(getSecondsUntilNextScheduleWeek(now));
   const outfits = useMemo(() => buildWardrobeWeek(wardrobe, weekKey), [wardrobe, weekKey]);
+  const lastUsedOutfit = useMemo(() => (Array.isArray(wardrobe.history) ? [...wardrobe.history].reverse().find(h => h?.action === "used") : null), [wardrobe.history]);
 
   const addItem = useCallback(() => {
     const name = draft.name.trim();
@@ -4632,12 +4794,41 @@ function WardrobeView() {
     pDispatch(AC.wardrobeProfileUpdate({ [key]: value }));
   }, [pDispatch]);
 
+  const markOutfit = useCallback((outfit, action) => {
+    unlockLifeOSAudio();
+    playLifeOSSound(action === "used" ? "complete" : "menu");
+    pDispatch(AC.wardrobeOutfitMark({
+      action,
+      day: outfit.full,
+      signature: outfit.signature,
+      items: outfit.items.map(item => ({ id:item.id, type:item.type, name:item.name, color:item.color })),
+    }));
+    const msg = action === "used" ? "Outfit marcado como usado" : "Combinación evitada";
+    const sub = action === "used" ? "LifeOS la baja de prioridad en próximas semanas." : "No debería repetirse tan fácil.";
+    uiDispatch(AC.toastAdd(Date.now(), msg, sub));
+  }, [pDispatch, uiDispatch]);
+
+  const toggleFavorite = useCallback((item) => {
+    pDispatch(AC.wardrobeItemUpdate(item.id, { favorite: !item.favorite }));
+  }, [pDispatch]);
+
+  const toggleLaundry = useCallback((item) => {
+    const next = item.unavailableUntil && item.unavailableUntil >= todayKey ? "" : laundryUntil;
+    pDispatch(AC.wardrobeItemUpdate(item.id, { unavailableUntil: next }));
+  }, [pDispatch, todayKey, laundryUntil]);
+
+  const resetCloset = useCallback(() => {
+    if (!window.confirm("¿Borrar prendas, perfil e historial del clóset?")) return;
+    pDispatch(AC.domainReset("wardrobe"));
+    uiDispatch(AC.toastAdd(Date.now(), "Clóset reiniciado", "Volvió a la base sugerida."));
+  }, [pDispatch, uiDispatch]);
+
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
         <div>
           <div style={S.ptitle}>Clóset / Ropero</div>
-          <div style={S.psub}>Combinaciones semanales variadas con tus camisas, pantalones y tenis.</div>
+          <div style={S.psub}>Outfits semanales sin parecer retrato: camisa, pantalón y tenis con rotación inteligente.</div>
         </div>
         <div className="g" style={{ padding:14, minWidth:220 }}>
           <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>Próxima randomización</div>
@@ -4653,14 +4844,23 @@ function WardrobeView() {
               <Palette size={18} color="#22d3ee"/>
               <div style={{ ...S.stitle, marginBottom:0 }}>Perfil de estilo</div>
             </div>
-            <div className="mob-layout-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+            <div className="mob-layout-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:10 }}>
               <input value={profile.skinTone || ""} onChange={(e) => updateProfile("skinTone", e.target.value.slice(0, 32))} placeholder="Tono" style={closetInputStyle()} />
               <input value={profile.style || ""} onChange={(e) => updateProfile("style", e.target.value.slice(0, 48))} placeholder="Estilo" style={closetInputStyle()} />
               <input value={profile.notes || ""} onChange={(e) => updateProfile("notes", e.target.value.slice(0, 90))} placeholder="Notas" style={closetInputStyle()} />
             </div>
-            <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
-              Para tono canela suelen favorecer negro, terracota, crema, blanco cálido, camel, verde oliva, azul marino, borgoña, denim oscuro y gris carbón. LifeOS evita repetir pantalón en días seguidos cuando tiene suficientes opciones.
+            <div className="mob-layout-grid" style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+              <select value={profile.weather || "normal"} onChange={(e) => updateProfile("weather", e.target.value)} style={closetInputStyle()}>
+                <option value="calor">Calor</option><option value="normal">Normal</option><option value="fresco">Fresco</option><option value="lluvia">Lluvia</option>
+              </select>
+              <select value={profile.occasion || "universidad"} onChange={(e) => updateProfile("occasion", e.target.value)} style={closetInputStyle()}>
+                <option value="universidad">Universidad</option><option value="casa">Casa</option><option value="salida casual">Salida casual</option><option value="presentable">Presentable</option>
+              </select>
             </div>
+            <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
+              LifeOS separa pantalones, evita repetir combinaciones usadas/no gustadas y prioriza tonos que favorecen piel canela: negro, terracota, crema, blanco cálido, camel, verde oliva, azul marino, borgoña, denim oscuro y gris carbón.
+            </div>
+            {lastUsedOutfit && <div style={{ marginTop:10, fontSize:11.5, color:T_COLOR.muted }}>Último outfit usado: {new Date(lastUsedOutfit.date).toLocaleDateString("es-ES")} · {lastUsedOutfit.day}</div>}
           </div>
 
           <div className="wardrobe-days">
@@ -4681,7 +4881,11 @@ function WardrobeView() {
                     </div>
                   ))}
                 </div>
-                <div style={{ color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5 }}>{outfit.why}</div>
+                <div style={{ color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5, marginBottom:10 }}>{outfit.why}</div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <button onClick={() => markOutfit(outfit, "used")} style={{ border:"1px solid rgba(52,211,153,.22)", background:"rgba(52,211,153,.08)", color:"#34d399", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>Usé este outfit</button>
+                  <button onClick={() => markOutfit(outfit, "dislike")} style={{ border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>No me gusta</button>
+                </div>
               </div>
             ))}
           </div>
@@ -4705,20 +4909,28 @@ function WardrobeView() {
           </div>
 
           <div className="g" style={{ padding:18 }}>
-            <div style={S.stitle}>Prendas guardadas</div>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"center", marginBottom:10 }}>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Prendas guardadas</div>
+              <button onClick={resetCloset} style={{ border:"1px solid rgba(248,113,113,.2)", background:"rgba(248,113,113,.06)", color:"#f87171", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>Reset</button>
+            </div>
             {items.length === 0 ? (
               <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa camisas, pantalones y tenis sugeridos. Agregá tus colores reales para evitar looks repetidos.</div>
             ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {items.map(item => (
-                  <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10, padding:10, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.06)" }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:12.5, color:T_COLOR.text, fontWeight:900 }}>{item.name}</div>
-                      <div style={{ fontSize:11, color:T_COLOR.muted }}>{WARDROBE_TYPES.find(t => t.id === item.type)?.label || item.type} · {item.color} · {item.style}</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:520, overflow:"auto" }}>
+                {items.map(item => {
+                  const unavailable = item.unavailableUntil && item.unavailableUntil >= todayKey;
+                  return (
+                    <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10, padding:10, borderRadius:12, background:unavailable ? "rgba(248,113,113,.05)" : "rgba(255,255,255,.035)", border:unavailable ? "1px solid rgba(248,113,113,.14)" : "1px solid rgba(255,255,255,.06)" }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12.5, color:T_COLOR.text, fontWeight:900 }}>{item.favorite ? "★ " : ""}{item.name}</div>
+                        <div style={{ fontSize:11, color:T_COLOR.muted }}>{WARDROBE_TYPES.find(t => t.id === item.type)?.label || item.type} · {item.color} · {item.style}{unavailable ? ` · lavando hasta ${item.unavailableUntil}` : ""}</div>
+                      </div>
+                      <button onClick={() => toggleFavorite(item)} style={{ width:34, height:34, borderRadius:10, border:"1px solid rgba(251,191,36,.22)", background:item.favorite ? "rgba(251,191,36,.14)" : "rgba(255,255,255,.035)", color:item.favorite ? "#fbbf24" : T_COLOR.muted, cursor:"pointer" }} title="Favorito"><Star size={14}/></button>
+                      <button onClick={() => toggleLaundry(item)} style={{ width:34, height:34, borderRadius:10, border:"1px solid rgba(34,211,238,.22)", background:unavailable ? "rgba(34,211,238,.12)" : "rgba(255,255,255,.035)", color:unavailable ? "#22d3ee" : T_COLOR.muted, cursor:"pointer" }} title={unavailable ? "Disponible" : "Lavando"}><RefreshCw size={14}/></button>
+                      <button onClick={() => deleteItem(item.id)} style={{ width:34, height:34, borderRadius:10, border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", cursor:"pointer" }} title="Borrar"><Trash2 size={15}/></button>
                     </div>
-                    <button onClick={() => deleteItem(item.id)} style={{ width:34, height:34, borderRadius:10, border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", cursor:"pointer" }} title="Borrar"><Trash2 size={15}/></button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -4783,6 +4995,7 @@ function SettingsView() {
   const [questDraft, setQuestDraft] = useState(() => sanitizeQuestItems(activeQuests));
   const audioSettings = deepMerge(createAppSettingsInitial().sound, persistent.appSettings?.sound || {});
   const pwaSettings = deepMerge(createAppSettingsInitial().pwa, persistent.appSettings?.pwa || {});
+  const backupSettings = deepMerge(createAppSettingsInitial().backup, persistent.appSettings?.backup || {});
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [isInstalledPWA, setIsInstalledPWA] = useState(() => isLifeOSStandalone());
   const [notificationPermission, setNotificationPermission] = useState(() => {
@@ -4896,11 +5109,12 @@ function SettingsView() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      pDispatch(AC.appSettingsUpdate({ backup: { lastExportAt: new Date().toISOString() } }));
       uiDispatch(AC.toastAdd(Date.now(), "Respaldo exportado", "Guardá el archivo JSON en una carpeta segura."));
     } catch {
       uiDispatch(AC.toastAdd(Date.now(), "No se pudo exportar", "El navegador bloqueó la descarga del respaldo."));
     }
-  }, [persistent, uiDispatch]);
+  }, [persistent, pDispatch, uiDispatch]);
 
   const importBackup = useCallback((event) => {
     const file = event.target.files?.[0];
@@ -4914,6 +5128,7 @@ function SettingsView() {
         if (!slice) throw new Error("Archivo inválido");
         const snapshot = deepMerge(PERSISTENT_INITIAL, slice);
         pDispatch(AC.stateHydrate(snapshot));
+        pDispatch(AC.appSettingsUpdate({ backup: { lastImportAt: new Date().toISOString() } }));
         uiDispatch(AC.toastAdd(Date.now(), "Respaldo importado", "Tus datos fueron restaurados en este navegador."));
       } catch {
         uiDispatch(AC.toastAdd(Date.now(), "No se pudo importar", "El archivo no parece ser un respaldo válido de LifeOS."));
@@ -4921,6 +5136,24 @@ function SettingsView() {
     };
     reader.readAsText(file);
   }, [pDispatch, uiDispatch]);
+
+  const resetRocketLeagueData = useCallback(() => {
+    if (!window.confirm("¿Resetear solo Rocket League? Se borrará el progreso de entrenamiento y 1v1, no tus misiones generales.")) return;
+    pDispatch(AC.domainReset("rocketLeague"));
+    uiDispatch(AC.toastAdd(Date.now(), "Rocket League reiniciado", "El sistema Rocket volvió a cero."));
+  }, [pDispatch, uiDispatch]);
+
+  const resetWardrobeData = useCallback(() => {
+    if (!window.confirm("¿Resetear solo Clóset/Ropero? Se borrarán prendas e historial de outfits.")) return;
+    pDispatch(AC.domainReset("wardrobe"));
+    uiDispatch(AC.toastAdd(Date.now(), "Clóset reiniciado", "El ropero volvió a la base sugerida."));
+  }, [pDispatch, uiDispatch]);
+
+  const formatBackupDate = useCallback((value) => {
+    if (!value) return "Nunca";
+    try { return new Date(value).toLocaleString("es-ES", { dateStyle:"short", timeStyle:"short" }); }
+    catch { return "Registrado"; }
+  }, []);
 
   const updateQuestDraft = useCallback((idx, patch) => {
     setQuestDraft((prev) => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
@@ -5088,9 +5321,13 @@ function SettingsView() {
         </div>
 
         <div className="g" style={{ padding:22 }}>
-          <div style={S.stitle}>Respaldo de datos</div>
+          <div style={S.stitle}>Respaldo y resets seguros</div>
           <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7 }}>
-            Tus datos viven en este navegador. Exportá un JSON antes de hacer cambios grandes o limpiar el navegador.
+            Exportá un JSON antes de cambios grandes. También podés resetear solo sistemas específicos sin tocar todo LifeOS.
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12, fontSize:11.5, color:T_COLOR.muted }}>
+            <div style={{ padding:9, borderRadius:10, border:"1px solid rgba(255,255,255,.06)", background:"rgba(255,255,255,.025)" }}>Último export: <b style={{ color:T_COLOR.text }}>{formatBackupDate(backupSettings.lastExportAt)}</b></div>
+            <div style={{ padding:9, borderRadius:10, border:"1px solid rgba(255,255,255,.06)", background:"rgba(255,255,255,.025)" }}>Última importación: <b style={{ color:T_COLOR.text }}>{formatBackupDate(backupSettings.lastImportAt)}</b></div>
           </div>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:16 }}>
             <button onClick={exportBackup} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.08)", color:"#34d399", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
@@ -5098,6 +5335,12 @@ function SettingsView() {
             </button>
             <button onClick={() => importRef.current?.click()} style={{ border:"1px solid rgba(167,139,250,.25)", background:"rgba(167,139,250,.08)", color:"#a78bfa", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
               Importar respaldo
+            </button>
+            <button onClick={resetRocketLeagueData} style={{ border:"1px solid rgba(34,211,238,.22)", background:"rgba(34,211,238,.07)", color:"#22d3ee", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
+              Reset Rocket
+            </button>
+            <button onClick={resetWardrobeData} style={{ border:"1px solid rgba(251,191,36,.22)", background:"rgba(251,191,36,.07)", color:"#fbbf24", borderRadius:10, padding:"10px 14px", fontWeight:800, cursor:"pointer" }}>
+              Reset Clóset
             </button>
             <input ref={importRef} type="file" accept="application/json,.json" onChange={importBackup} style={{ display:"none" }} />
           </div>
@@ -5231,18 +5474,35 @@ function SettingsView() {
 // § 12 · NAVIGATION DEFINITION
 // ─────────────────────────────────────────────────────────────────
 
-const NAV_ITEMS = [
-  { id:"dashboard",    icon:Home,          label:"Hoy"          },
-  { id:"quests",       icon:Target,        label:"Misiones"     },
-  { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
-  { id:"schedule",     icon:Calendar,      label:"Horario"      },
-  { id:"focus",        icon:Timer,         label:"Sesión"       },
-  { id:"wardrobe",     icon:Shirt,         label:"Clóset"       },
-  { id:"stats",        icon:BarChart2,     label:"Análisis"     },
-  { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
-  { id:"profile",      icon:User,          label:"Perfil"       },
-  { id:"settings",     icon:Settings,      label:"Ajustes"      },
+const NAV_GROUPS = [
+  {
+    title: "Día",
+    items: [
+      { id:"dashboard",    icon:Home,     label:"Hoy"      },
+      { id:"quests",       icon:Target,   label:"Misiones" },
+      { id:"schedule",     icon:Calendar, label:"Horario"  },
+      { id:"focus",        icon:Timer,    label:"Sesión"   },
+    ],
+  },
+  {
+    title: "Sistemas",
+    items: [
+      { id:"rocketLeague", icon:Gamepad2, label:"Rocket" },
+      { id:"wardrobe",     icon:Shirt,    label:"Clóset" },
+      { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
+    ],
+  },
+  {
+    title: "Control",
+    items: [
+      { id:"stats",        icon:BarChart2, label:"Análisis" },
+      { id:"profile",      icon:User,      label:"Perfil"   },
+      { id:"settings",     icon:Settings,  label:"Ajustes"  },
+    ],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap(group => group.items);
 
 const VIEW_ALIASES = Object.freeze({
   inicio:       "dashboard",
@@ -5704,27 +5964,31 @@ export default function LifeOS() {
               <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v3.2</div></div>
             </div>
 
-            <nav style={{ flex:1 }}>
-              {NAV_ITEMS.map(n => {
-                const I  = n.icon;
-                const on = ui.view === n.id;
-                return (
-                  <div
-                    key={n.id}
-                    className={`ni ${on ? "on" : ""}`}
-                    onClick={() => handleNavClick(n.id)}
-                    style={n.accent && !on ? { borderColor:"rgba(167,139,250,.12)", background:"rgba(167,139,250,.04)" } : {}}
-                  >
-                    {on && <span className="ni-bar"/>}
-                    <I size={17} style={{ flexShrink:0, color: n.accent && !on ? "#a78bfa80" : "" }}/>
-                    <span>{n.label}</span>
-                    {n.accent && !on && triggers.length > 0 && (
-                      <span style={{ width:7, height:7, borderRadius:"50%", background:"#a78bfa", flexShrink:0, boxShadow:"0 0 6px #a78bfa" }}/>
-                    )}
-                  </div>
-                );
-              })}
-
+            <nav style={{ flex:1, overflow:"auto", paddingRight:2 }}>
+              {NAV_GROUPS.map(group => (
+                <div key={group.title} style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:"#475569", fontWeight:900, letterSpacing:1.1, textTransform:"uppercase", padding:"0 12px 6px" }}>{group.title}</div>
+                  {group.items.map(n => {
+                    const I  = n.icon;
+                    const on = ui.view === n.id;
+                    return (
+                      <div
+                        key={n.id}
+                        className={`ni ${on ? "on" : ""}`}
+                        onClick={() => handleNavClick(n.id)}
+                        style={n.accent && !on ? { borderColor:"rgba(167,139,250,.12)", background:"rgba(167,139,250,.04)" } : {}}
+                      >
+                        {on && <span className="ni-bar"/>}
+                        <I size={17} style={{ flexShrink:0, color: n.accent && !on ? "#a78bfa80" : "" }}/>
+                        <span>{n.label}</span>
+                        {n.accent && !on && triggers.length > 0 && (
+                          <span style={{ width:7, height:7, borderRadius:"50%", background:"#a78bfa", flexShrink:0, boxShadow:"0 0 6px #a78bfa" }}/>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
 
             <div className="sb-footer">
