@@ -860,6 +860,18 @@ function getLifeOSDateKey(date = new Date()) {
   return getRocketLeagueDateKey(date);
 }
 
+function calculateMissedQuestPenalty(state, completedIds = []) {
+  const activeQuests = getActiveQuests(state);
+  const completedSet = new Set(Array.isArray(completedIds) ? completedIds : []);
+  const missedQuests = activeQuests.filter(q => !completedSet.has(q.id));
+  const missedXp = missedQuests.reduce((sum, q) => sum + Math.max(0, Number(q.xp) || 0), 0);
+  return { missedQuests, missedXp };
+}
+
+function shouldApplyMissedQuestPenalty(state) {
+  return state?.appSettings?.penalties?.missedQuestXp !== false;
+}
+
 function normalizeQuestCompletedIdsForDate(completedIds = [], dailyLog = [], dateKey = getLifeOSDateKey()) {
   const ids = Array.from(new Set((Array.isArray(completedIds) ? completedIds : []).filter(id => typeof id === "number")));
   const log = Array.isArray(dailyLog) ? dailyLog : [];
@@ -898,19 +910,39 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
 
   const activeIds = new Set(getActiveQuests(state).map(q => q.id));
   const completedIds = Array.from(new Set((quests.completedIds || []).filter(id => activeIds.has(id))));
-  const shouldArchive = lastResetDate && completedIds.length > 0;
-  const archiveEntry = shouldArchive
+  const hasPreviousDay = Boolean(lastResetDate);
+  const { missedQuests, missedXp } = calculateMissedQuestPenalty(state, completedIds);
+  const penaltyEnabled = hasPreviousDay && shouldApplyMissedQuestPenalty(state) && missedXp > 0;
+  const archiveEntry = hasPreviousDay
     ? {
         dateKey: lastResetDate,
         completedIds,
+        missedIds: missedQuests.map(q => q.id),
         completedCount: completedIds.length,
+        missedCount: missedQuests.length,
         totalCount: activeIds.size,
+        penaltyXp: penaltyEnabled ? missedXp : 0,
         archivedAt: new Date().toISOString(),
       }
     : null;
 
+  const penaltyLog = penaltyEnabled
+    ? missedQuests.map(q => ({
+        date: new Date().toISOString(),
+        amount: -Math.max(0, Number(q.xp) || 0),
+        questId: q.id,
+        action: "missed",
+        missedDateKey: lastResetDate,
+      }))
+    : [];
+
   return {
     ...state,
+    xp: {
+      ...(state.xp || { total: 0, dailyLog: [] }),
+      total: Math.max(0, Number(state.xp?.total || 0) - (penaltyEnabled ? missedXp : 0)),
+      dailyLog: [...(Array.isArray(state.xp?.dailyLog) ? state.xp.dailyLog : []), ...penaltyLog],
+    },
     quests: {
       ...quests,
       completedIds: [],
@@ -918,6 +950,12 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
         ? [...(Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []), archiveEntry].slice(-120)
         : (Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []),
       lastResetDate: dateKey,
+      lastPenalty: archiveEntry ? {
+        dateKey: lastResetDate,
+        missedCount: missedQuests.length,
+        penaltyXp: penaltyEnabled ? missedXp : 0,
+        appliedAt: new Date().toISOString(),
+      } : quests.lastPenalty,
     },
   };
 }
@@ -936,6 +974,11 @@ function createAppSettingsInitial() {
       mobileNotifications: false,
       reminderLeadMinutes: 10,
       installDismissed: false,
+      taskReminders: true,
+      notifyTaskStart: true,
+    },
+    penalties: {
+      missedQuestXp: true,
     },
   };
 }
@@ -1289,7 +1332,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 7; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 8; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1360,6 +1403,15 @@ const MIGRATIONS = Object.freeze({
     appSettings: snap?.appSettings && typeof snap.appSettings === "object"
       ? deepMerge(createAppSettingsInitial(), snap.appSettings)
       : createAppSettingsInitial(),
+  }),
+  [7]: (snap) => ({
+    ...snap,
+    appSettings: snap?.appSettings && typeof snap.appSettings === "object"
+      ? deepMerge(createAppSettingsInitial(), snap.appSettings)
+      : createAppSettingsInitial(),
+    quests: snap?.quests && typeof snap.quests === "object"
+      ? { ...snap.quests, dailyHistory: Array.isArray(snap.quests.dailyHistory) ? snap.quests.dailyHistory : [] }
+      : PERSISTENT_INITIAL.quests,
   }),
 });
 
@@ -2164,7 +2216,7 @@ function useMobile() {
 
 // ── MOBILE NAVIGATION ──────────────────────────────────────────
 const MOB_PRIMARY_ITEMS = [
-  { id:"dashboard",    icon:Home,     label:"Inicio"   },
+  { id:"dashboard",    icon:Home,     label:"Hoy"      },
   { id:"quests",       icon:Target,   label:"Misiones" },
   { id:"rocketLeague", icon:Gamepad2, label:"Rocket"   },
 ];
@@ -2732,7 +2784,7 @@ function buildXpHistoryData(dailyLog = [], days = 30) {
     d.setDate(now.getDate() - (days - 1 - idx));
     const key = d.toISOString().slice(0, 10);
     const label = days <= 7 ? DAY_NAMES[(d.getDay() + 6) % 7] : String(d.getDate());
-    return { d: label, key, xp: Math.max(0, Math.round(byDate.get(key) || 0)) };
+    return { d: label, key, xp: Math.round(byDate.get(key) || 0) };
   });
 }
 
@@ -2763,6 +2815,8 @@ function DashboardView() {
   const xpPct        = useMemo(() => SELECTORS.levelPct(persistent.xp.total),  [persistent.xp.total]);
   const todayXp      = useMemo(() => SELECTORS.todayXp(persistent.quests.completedIds, activeQuests), [persistent.quests.completedIds, activeQuests]);
   const triggers     = useMemo(() => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests), [persistent.quests.completedIds, persistent.streak.current, activeQuests]);
+  const missedRisk   = useMemo(() => calculateMissedQuestPenalty(persistent, persistent.quests.completedIds), [persistent, persistent.quests.completedIds]);
+  const lastPenalty  = persistent.quests?.lastPenalty;
 
   const pct = completedSet.size / Math.max(activeQuests.length, 1) * 100;
   const nextQuest = useMemo(() => activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0], [activeQuests, completedSet]);
@@ -2798,15 +2852,26 @@ function DashboardView() {
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
-      <div style={S.ptitle} className="mob-ptitle">Centro de mando</div>
-      <div style={S.psub} className="mob-psub">{completedSet.size}/{activeQuests.length} misiones completadas · {todayXp} XP ganados hoy</div>
+      <div style={S.ptitle} className="mob-ptitle">Hoy</div>
+      <div style={S.psub} className="mob-psub">{completedSet.size}/{activeQuests.length} misiones completadas · {todayXp} XP ganados hoy · riesgo si termina el día: -{missedRisk.missedXp} XP</div>
 
       <div className="s-grid">
         <StatCard val={`Lv.${level}`} label="Nivel actual"  icon={Crown}  accent="#fbbf24" sub={SELECTORS.rank(level)}/>
         <StatCard val={todayXp}       label="XP hoy"       icon={Zap}    accent="#a78bfa"/>
         <StatCard val={`${persistent.streak.current}d`} label="Racha" icon={Flame} accent="#f87171" sub="¡Mantenela viva!"/>
         <StatCard val={`${completedSet.size}/${activeQuests.length}`} label="Misiones hechas" icon={Target} accent="#34d399"/>
+        <StatCard val={`-${missedRisk.missedXp}`} label="XP en riesgo" icon={AlertTriangle} accent={missedRisk.missedXp > 0 ? "#f87171" : "#34d399"} sub={missedRisk.missedXp > 0 ? `${missedRisk.missedQuests.length} pendientes` : "Sin castigo"}/>
       </div>
+
+      {lastPenalty?.penaltyXp > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:13, padding:"13px 16px", marginBottom:18, borderRadius:13, background:"rgba(248,113,113,.075)", border:"1px solid rgba(248,113,113,.2)" }}>
+          <AlertTriangle size={18} color="#f87171"/>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:900, color:"#f87171" }}>Castigo aplicado al reset diario</div>
+            <div style={{ fontSize:11.5, color:T_COLOR.muted }}>Ayer quedaron {lastPenalty.missedCount} misiones sin completar · -{lastPenalty.penaltyXp} XP</div>
+          </div>
+        </div>
+      )}
 
       {triggers.length > 0 && (
         <div
@@ -3361,6 +3426,7 @@ function ScheduleView() {
 
   const completedMissionCount = useMemo(() => missionBlocks.filter(b => completedSet.has(b.questId)).length, [missionBlocks, completedSet]);
   const missionPct = missionBlocks.length ? Math.round((completedMissionCount / missionBlocks.length) * 100) : 0;
+  const missedRisk = useMemo(() => calculateMissedQuestPenalty(persistent, persistent.quests.completedIds), [persistent, persistent.quests.completedIds]);
 
   const handleQuestComplete = useCallback((q) => {
     if (!q) return;
@@ -3422,7 +3488,7 @@ function ScheduleView() {
         <div>
           <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:4 }}>Reset diario de misiones</div>
           <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#22d3ee", fontVariantNumeric:"tabular-nums" }}>{missionResetCountdown}</div>
-          <div style={{ fontSize:11, color:T_COLOR.muted, marginTop:3 }}>Al llegar a 00:00 se limpian las misiones completadas.</div>
+          <div style={{ fontSize:11, color:T_COLOR.muted, marginTop:3 }}>Al llegar a 00:00 se limpian completadas y las pendientes restan XP.</div>
         </div>
         <div>
           <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:4 }}>Próxima randomización semanal</div>
@@ -3470,6 +3536,9 @@ function ScheduleView() {
             <ProgresoBar pct={missionPct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)" height={8}/>
             <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.6, marginTop:10 }}>
               Si completás una tarjeta aquí, también se marca en Misiones. Si la desmarcás desde Misiones, el Horario se actualiza.
+            </div>
+            <div style={{ marginTop:10, padding:"10px 11px", borderRadius:12, background:missedRisk.missedXp > 0 ? "rgba(248,113,113,.07)" : "rgba(52,211,153,.06)", border:`1px solid ${missedRisk.missedXp > 0 ? "rgba(248,113,113,.18)" : "rgba(52,211,153,.16)"}`, color:missedRisk.missedXp > 0 ? "#f87171" : "#34d399", fontSize:12, fontWeight:900 }}>
+              XP en riesgo al reset: -{missedRisk.missedXp}
             </div>
           </div>
 
@@ -4670,13 +4739,13 @@ function isLikelyMobileDevice() {
   return /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent || "") || window.matchMedia?.("(max-width: 760px)")?.matches;
 }
 
-async function showLifeOSLocalNotification(title, body) {
+async function showLifeOSLocalNotification(title, body, tag = "lifeos-local") {
   if (typeof window === "undefined" || !("Notification" in window)) return false;
   if (Notification.permission !== "granted") return false;
 
   const options = {
     body,
-    tag: "lifeos-local-test",
+    tag,
     renotify: true,
     icon: "/pwa-192.png",
     badge: "/pwa-192.png",
@@ -4982,10 +5051,28 @@ function SettingsView() {
               </button>
             </div>
             <div style={{ fontSize:11, color:T_COLOR.muted, lineHeight:1.6, marginTop:9 }}>
-              Para avisos cuando la app esté cerrada se necesitará una fase con push/server. Este paso deja LifeOS instalable y listo para permisos móviles.
+              Los avisos de horario funcionan mejor con LifeOS instalada y abierta en segundo plano. Push con servidor queda para otra fase.
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:10 }}>
+              <button onClick={() => updatePWASetting("taskReminders", !pwaSettings.taskReminders)} style={{ border:"1px solid rgba(255,255,255,.08)", background:pwaSettings.taskReminders ? "rgba(52,211,153,.08)" : "rgba(255,255,255,.03)", color:pwaSettings.taskReminders ? "#34d399" : T_COLOR.muted, borderRadius:10, padding:"9px 10px", fontWeight:900, cursor:"pointer" }}>
+                Recordatorios de tareas: {pwaSettings.taskReminders ? "ON" : "OFF"}
+              </button>
+              <button onClick={() => updatePWASetting("notifyTaskStart", !pwaSettings.notifyTaskStart)} style={{ border:"1px solid rgba(255,255,255,.08)", background:pwaSettings.notifyTaskStart ? "rgba(34,211,238,.08)" : "rgba(255,255,255,.03)", color:pwaSettings.notifyTaskStart ? "#22d3ee" : T_COLOR.muted, borderRadius:10, padding:"9px 10px", fontWeight:900, cursor:"pointer" }}>
+                Avisar al iniciar tarea: {pwaSettings.notifyTaskStart ? "ON" : "OFF"}
+              </button>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="g" style={{ padding:22, marginBottom:16, borderColor:"rgba(248,113,113,.16)", background:"rgba(248,113,113,.035)" }}>
+        <div style={S.stitle}>XP y castigos</div>
+        <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:12 }}>
+          Si una misión queda pendiente al reset diario, LifeOS resta el XP de esa misión. Esto no borra tus misiones ni tus datos; solo evita subir de nivel por inercia.
+        </div>
+        <button onClick={() => pDispatch(AC.appSettingsUpdate({ penalties:{ missedQuestXp: !(persistent.appSettings?.penalties?.missedQuestXp !== false) } }))} style={{ border:"1px solid rgba(248,113,113,.25)", background:(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "rgba(248,113,113,.08)" : "rgba(255,255,255,.03)", color:(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "#f87171" : T_COLOR.muted, borderRadius:10, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
+          Castigo por misiones fallidas: {(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "ON" : "OFF"}
+        </button>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }} className="mob-layout-grid">
@@ -5145,7 +5232,7 @@ function SettingsView() {
 // ─────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { id:"dashboard",    icon:Home,          label:"Inicio"       },
+  { id:"dashboard",    icon:Home,          label:"Hoy"          },
   { id:"quests",       icon:Target,        label:"Misiones"     },
   { id:"rocketLeague", icon:Gamepad2,      label:"Rocket League"},
   { id:"schedule",     icon:Calendar,      label:"Horario"      },
@@ -5159,6 +5246,8 @@ const NAV_ITEMS = [
 
 const VIEW_ALIASES = Object.freeze({
   inicio:       "dashboard",
+  hoy:          "dashboard",
+  today:        "dashboard",
   home:         "dashboard",
   terminal:     "dashboard",
   misiones:     "quests",
@@ -5510,6 +5599,48 @@ export default function LifeOS() {
     () => SELECTORS.reflectionTriggers(persistent.quests.completedIds, streak, activeQuests),
     [persistent.quests.completedIds, streak, activeQuests]
   );
+
+  const notificationSentRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const prefs = deepMerge(createAppSettingsInitial().pwa, persistent.appSettings?.pwa || {});
+    if (!prefs.mobileNotifications || !prefs.taskReminders || typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+    if (!isLikelyMobileDevice()) return;
+
+    const checkScheduleNotifications = () => {
+      const now = new Date();
+      const today = (now.getDay() + 6) % 7;
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const lead = Math.max(1, Math.min(60, Math.floor(Number(prefs.reminderLeadMinutes) || 10)));
+      const weekKey = getScheduleWeekKey(now);
+      const swimDays = SELECTORS.swimDays(persistentRef.current?.planner?.swimPairIndex || 0);
+      const quests = getActiveQuests(persistentRef.current || persistent);
+      const blocks = getScheduleBlocks(today, swimDays, quests, weekKey);
+      const allBlocks = [...(blocks.main || []), ...(blocks.morning || []), ...(blocks.afternoon || [])].filter(b => b.questId && b.type !== "BUFFER");
+      const dateKey = getLifeOSDateKey(now);
+
+      for (const block of allBlocks) {
+        const quest = quests.find(q => q.id === block.questId);
+        if (!quest) continue;
+        const diff = block.startMin - nowMin;
+        const beforeKey = `${dateKey}:${block.key}:before`;
+        const startKey = `${dateKey}:${block.key}:start`;
+        if (diff <= lead && diff >= lead - 1 && !notificationSentRef.current.has(beforeKey)) {
+          notificationSentRef.current.add(beforeKey);
+          showLifeOSLocalNotification("LifeOS", `En ${lead} min toca: ${quest.title}`, `lifeos-${beforeKey}`);
+        }
+        if (prefs.notifyTaskStart && diff <= 0 && diff >= -1 && !notificationSentRef.current.has(startKey)) {
+          notificationSentRef.current.add(startKey);
+          showLifeOSLocalNotification("LifeOS", `Ahora toca: ${quest.title}`, `lifeos-${startKey}`);
+        }
+      }
+    };
+
+    checkScheduleNotifications();
+    const interval = setInterval(checkScheduleNotifications, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [hydrated, persistent.appSettings?.pwa, persistent.quests.customItems]);
 
   const normalizedView = normalizeView(ui.view);
   const ActiveView = VIEW_MAP[normalizedView] || DashboardView;
