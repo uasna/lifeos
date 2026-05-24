@@ -46,6 +46,11 @@ const AT = Object.freeze({
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
   QUESTS_DAILY_SYNC:          "QUESTS_DAILY_SYNC",
   APP_SETTINGS_UPDATE:        "APP_SETTINGS_UPDATE",
+  // ── Calculus trainer domain ─────────────────────────────────
+  CALC_DAILY_SYNC:            "CALC_DAILY_SYNC",
+  CALC_SESSION_GENERATED:     "CALC_SESSION_GENERATED",
+  CALC_ANSWER_SAVE:           "CALC_ANSWER_SAVE",
+  CALC_FIELD_UPDATE:          "CALC_FIELD_UPDATE",
   // ── Wardrobe / closet domain ─────────────────────────────────
   WARDROBE_PROFILE_UPDATE:    "WARDROBE_PROFILE_UPDATE",
   WARDROBE_ITEM_ADD:          "WARDROBE_ITEM_ADD",
@@ -93,6 +98,10 @@ const AC = Object.freeze({
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
   questsDailySync:         (dateKey) => ({ type: AT.QUESTS_DAILY_SYNC, dateKey }),
   appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
+  calcDailySync:          (dateKey, plan) => ({ type: AT.CALC_DAILY_SYNC, dateKey, plan }),
+  calcSessionGenerated:   (payload) => ({ type: AT.CALC_SESSION_GENERATED, payload }),
+  calcAnswerSave:         (exerciseId, answer, evaluation) => ({ type: AT.CALC_ANSWER_SAVE, exerciseId, answer, evaluation }),
+  calcFieldUpdate:        (key, value) => ({ type: AT.CALC_FIELD_UPDATE, key, value }),
   wardrobeProfileUpdate:   (patch) => ({ type: AT.WARDROBE_PROFILE_UPDATE, patch }),
   wardrobeItemAdd:         (item) => ({ type: AT.WARDROBE_ITEM_ADD, item }),
   wardrobeItemUpdate:      (id, patch) => ({ type: AT.WARDROBE_ITEM_UPDATE, id, patch }),
@@ -145,7 +154,7 @@ const QUESTS = Object.freeze([
   {
     id:1,
     title:"Estudiar cálculo",
-    sub:"60–90 min · tema del día, ejercicios o repaso",
+    sub:"8:10–9:45 · tema II-PAC 2026, ejercicios y corrección",
     xp:18,
     icon:BookOpen,
     diff:"DIFÍCIL",
@@ -1078,7 +1087,8 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
   const completedIds = Array.from(new Set((quests.completedIds || []).filter(id => activeIds.has(id))));
   const hasPreviousDay = Boolean(lastResetDate);
   const { missedQuests, missedXp } = calculateMissedQuestPenalty(state, completedIds);
-  const penaltyEnabled = hasPreviousDay && shouldApplyMissedQuestPenalty(state) && missedXp > 0;
+  const previousDayWasManualRest = Boolean(lastResetDate && isLifeOSManualRestDay(lastResetDate));
+  const penaltyEnabled = hasPreviousDay && !previousDayWasManualRest && shouldApplyMissedQuestPenalty(state) && missedXp > 0;
   const archiveEntry = hasPreviousDay
     ? {
         dateKey: lastResetDate,
@@ -1088,6 +1098,7 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
         missedCount: missedQuests.length,
         totalCount: activeIds.size,
         penaltyXp: penaltyEnabled ? missedXp : 0,
+        manualRest: previousDayWasManualRest,
         archivedAt: new Date().toISOString(),
       }
     : null;
@@ -1317,6 +1328,263 @@ const LOAD_WEIGHTS = Object.freeze({ FOCUS:3, CREATIVE:2, FLOW:1.5, PHYSICAL:1, 
 
 const B = (key, name, type, dur, desc, extras={}) => ({ key, name, type, duration:dur, desc, ...extras });
 
+const LIFEOS_MANUAL_REST_DAYS = Object.freeze({
+  "2026-05-24": {
+    label: "Descanso intencional",
+    note: "Domingo libre: hoy no se penalizan misiones pendientes. Las tareas vuelven mañana.",
+  },
+});
+
+const CALCULUS_FIXED_START_MIN = 8 * 60 + 10;
+const CALCULUS_FIXED_DURATION_MIN = 95;
+const CALCULUS_FIXED_END_MIN = CALCULUS_FIXED_START_MIN + CALCULUS_FIXED_DURATION_MIN;
+const CALCULUS_SOURCE_LABEL = "Jornalización MM201 · II-PAC 2026";
+
+const CALCULUS_JOURNALIZATION_II_PAC_2026 = Object.freeze([
+  { date:"2026-05-25", partial:1, topic:"Asíntotas: verticales, horizontales y oblicuas", focus:["Asíntotas verticales", "Asíntotas horizontales", "Asíntotas oblicuas"], mode:"Clase + práctica" },
+  { date:"2026-05-26", partial:1, topic:"Asíntotas: verticales, horizontales y oblicuas", focus:["Dominio", "Límites al infinito", "Rectas oblicuas"], mode:"Práctica guiada" },
+  { date:"2026-05-27", partial:1, topic:"Límites trigonométricos", focus:["Identidades", "Límites notables", "Simplificación"], mode:"Clase + práctica" },
+  { date:"2026-05-28", partial:1, topic:"Límites trigonométricos", focus:["Seno/coseno", "Tangente", "Transformaciones"], mode:"Práctica" },
+  { date:"2026-05-29", partial:1, topic:"Límites trigonométricos", focus:["Ejercicios mixtos", "Errores comunes", "Velocidad"], mode:"Cierre de tema" },
+  { date:"2026-06-01", partial:1, topic:"Continuidad y discontinuidad en un punto", focus:["Continuidad", "Discontinuidad removible", "Saltos"], mode:"Clase + práctica" },
+  { date:"2026-06-02", partial:1, topic:"Continuidad y discontinuidad en un punto", focus:["Condiciones", "Funciones por partes", "Justificación"], mode:"Práctica" },
+  { date:"2026-06-03", partial:1, topic:"Construcción de gráficas dadas condiciones de límites", focus:["Gráficas", "Límites laterales", "Asíntotas"], mode:"Tipo examen" },
+  { date:"2026-06-04", partial:1, topic:"Construcción de gráficas dadas condiciones de límites", focus:["Repaso parcial I", "Gráficas", "Continuidad"], mode:"Simulación corta" },
+  { date:"2026-06-05", partial:1, topic:"Examen 1 · 7:00–9:00 AM", focus:["Parcial I", "Llegar temprano", "Sin sobrecargar"], mode:"Examen" },
+
+  { date:"2026-06-08", partial:2, topic:"Pendiente de la recta tangente y definición de derivada", focus:["Pendiente", "Definición formal", "Límite incremental"], mode:"Clase + práctica" },
+  { date:"2026-06-09", partial:2, topic:"Derivadas laterales, diferenciabilidad y continuidad", focus:["Derivadas laterales", "Diferenciabilidad", "Continuidad"], mode:"Clase + práctica" },
+  { date:"2026-06-10", partial:2, topic:"Derivadas laterales, diferenciabilidad y continuidad", focus:["Funciones por partes", "Puntos críticos", "Justificación"], mode:"Práctica" },
+  { date:"2026-06-11", partial:2, topic:"Propiedades de la derivada y teoremas básicos", focus:["Reglas", "Linealidad", "Producto/cociente"], mode:"Clase + práctica" },
+  { date:"2026-06-12", partial:2, topic:"Propiedades de la derivada y teoremas básicos", focus:["Reglas mixtas", "Simplificación", "Velocidad"], mode:"Práctica" },
+  { date:"2026-06-15", partial:2, topic:"Derivada de funciones trigonométricas", focus:["sen/cos", "tan/sec", "Identidades"], mode:"Clase + práctica" },
+  { date:"2026-06-16", partial:2, topic:"Regla de la cadena y derivada de funciones compuestas", focus:["Cadena", "Composición", "Potencias"], mode:"Clase + práctica" },
+  { date:"2026-06-17", partial:2, topic:"Regla de la cadena y derivada de funciones compuestas", focus:["Ejercicios mixtos", "Errores de anidación", "Velocidad"], mode:"Práctica" },
+  { date:"2026-06-18", partial:2, topic:"Derivada de funciones trigonométricas inversas", focus:["arcsen", "arctan", "Composición"], mode:"Clase + práctica" },
+  { date:"2026-06-19", partial:2, topic:"Derivada logarítmica y exponencial", focus:["ln", "exp", "Base a"], mode:"Clase + práctica" },
+  { date:"2026-06-22", partial:2, topic:"Derivación implícita", focus:["y' implícita", "Orden", "Algebra"], mode:"Clase + práctica" },
+  { date:"2026-06-23", partial:2, topic:"Derivación implícita y derivadas de orden superior", focus:["Segunda derivada", "Implícita", "Simplificación"], mode:"Práctica" },
+  { date:"2026-06-24", partial:2, topic:"Derivación logarítmica", focus:["Logaritmos", "Productos", "Potencias variables"], mode:"Clase + práctica" },
+  { date:"2026-06-25", partial:2, topic:"Regla de L’Hopital", focus:["0/0", "∞/∞", "Condiciones"], mode:"Clase + práctica" },
+  { date:"2026-06-26", partial:2, topic:"Regla de L’Hopital", focus:["Casos mixtos", "Indeterminaciones", "Justificación"], mode:"Práctica" },
+  { date:"2026-06-29", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Crecimiento", "Concavidad", "Puntos críticos"], mode:"Clase + práctica" },
+  { date:"2026-06-30", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Extremos", "Inflexión", "Tabla de signos"], mode:"Práctica" },
+  { date:"2026-07-01", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Análisis completo", "Bosquejo", "Justificación"], mode:"Tipo examen" },
+  { date:"2026-07-02", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Repaso parcial II", "Derivadas", "L’Hopital"], mode:"Simulación corta" },
+  { date:"2026-07-03", partial:2, topic:"Examen 2 · 7:00–9:00 AM", focus:["Parcial II", "Llegar temprano", "No repasar pesado"], mode:"Examen" },
+
+  { date:"2026-07-06", partial:3, topic:"Valores extremos y Teorema de Valor Medio", focus:["Extremos", "TVM", "Condiciones"], mode:"Clase + práctica" },
+  { date:"2026-07-07", partial:3, topic:"Problemas aplicados de optimización", focus:["Modelar", "Restricciones", "Derivar"], mode:"Clase + práctica" },
+  { date:"2026-07-08", partial:3, topic:"Problemas aplicados de optimización", focus:["Máximos/mínimos", "Unidades", "Interpretación"], mode:"Práctica" },
+  { date:"2026-07-09", partial:3, topic:"Problemas aplicados de optimización", focus:["Tipo examen", "Modelos mixtos", "Verificación"], mode:"Práctica intensa" },
+  { date:"2026-07-10", partial:3, topic:"Interpretación geométrica de la derivada: tangentes y normales", focus:["Recta tangente", "Recta normal", "Pendiente"], mode:"Clase + práctica" },
+  { date:"2026-07-13", partial:3, topic:"Tangentes y normales a curvas", focus:["Punto de tangencia", "Normal", "Ecuaciones"], mode:"Práctica" },
+  { date:"2026-07-14", partial:3, topic:"Definición de antiderivada", focus:["Antiderivada", "Constante C", "Familias"], mode:"Clase + práctica" },
+  { date:"2026-07-15", partial:3, topic:"Teoremas sobre la antiderivada", focus:["Reglas", "Linealidad", "Patrones"], mode:"Clase + práctica" },
+  { date:"2026-07-16", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["u-sustitución", "Diferenciales", "Reescritura"], mode:"Clase + práctica" },
+  { date:"2026-07-17", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Patrones", "Trig/exponencial", "Verificar"], mode:"Práctica" },
+  { date:"2026-07-20", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Ejercicios mixtos", "Cambio de variable", "Orden"], mode:"Práctica" },
+  { date:"2026-07-21", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Tipo examen", "Errores comunes", "Velocidad"], mode:"Práctica intensa" },
+  { date:"2026-07-22", partial:3, topic:"Integral definida: idea intuitiva y definición", focus:["Área", "Sumas", "Definición"], mode:"Clase + práctica" },
+  { date:"2026-07-23", partial:3, topic:"Teoremas de la integral definida y Teorema Fundamental del Cálculo", focus:["TFC", "Evaluación", "Propiedades"], mode:"Clase + práctica" },
+  { date:"2026-07-24", partial:3, topic:"Área de regiones entre curvas", focus:["Intersecciones", "Arriba-abajo", "Integral"], mode:"Clase + práctica" },
+  { date:"2026-07-27", partial:3, topic:"Área de regiones entre curvas", focus:["Bosquejo", "Límites", "Integración"], mode:"Práctica" },
+  { date:"2026-07-28", partial:3, topic:"Área de regiones entre curvas", focus:["Regiones mixtas", "Partir intervalos", "Verificar"], mode:"Práctica" },
+  { date:"2026-07-29", partial:3, topic:"Área entre curvas usando inversa cuando sea necesario", focus:["Inversa", "dx/dy", "Región"], mode:"Tipo examen" },
+  { date:"2026-07-30", partial:3, topic:"Área entre curvas usando inversa cuando sea necesario", focus:["Repaso parcial III", "Área", "Integrales"], mode:"Simulación corta" },
+  { date:"2026-07-31", partial:3, topic:"Examen 3 · 7:00–9:00 AM", focus:["Parcial III", "Llegar temprano", "Cierre"], mode:"Examen" },
+  { date:"2026-08-05", partial:"reposicion", topic:"Reposición · 7:00–9:00 AM", focus:["Temas débiles", "Pautas", "Errores repetidos"], mode:"Reposición" },
+]);
+
+function parseDateKeyLocal(dateKey) {
+  const [y, m, d] = String(dateKey || "").split("-").map(Number);
+  return new Date(y || 2000, (m || 1) - 1, d || 1);
+}
+
+function addDaysToDateKey(dateKey, days = 0) {
+  const d = parseDateKeyLocal(dateKey);
+  d.setDate(d.getDate() + days);
+  return formatLocalDateKey(d);
+}
+
+function daysBetweenDateKeys(fromKey, toKey) {
+  const a = parseDateKeyLocal(fromKey);
+  const b = parseDateKeyLocal(toKey);
+  a.setHours(0, 0, 0, 0);
+  b.setHours(0, 0, 0, 0);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function getDateKeyForScheduleDay(weekKey, dayIdx) {
+  return addDaysToDateKey(weekKey || getScheduleWeekKey(), dayIdx || 0);
+}
+
+function isLifeOSManualRestDay(dateKey) {
+  return Boolean(LIFEOS_MANUAL_REST_DAYS[String(dateKey || "").slice(0, 10)]);
+}
+
+function getCalculusPlanForDate(dateKey = getLifeOSDateKey()) {
+  const key = String(dateKey || "").slice(0, 10);
+  const exact = CALCULUS_JOURNALIZATION_II_PAC_2026.find(item => item.date === key);
+  if (exact) return { ...exact, dateKey:key, source: CALCULUS_SOURCE_LABEL };
+
+  const day = parseDateKeyLocal(key).getDay();
+  const previous = CALCULUS_JOURNALIZATION_II_PAC_2026.filter(item => item.date < key && item.mode !== "Examen").slice(-5);
+  const nextExam = CALCULUS_JOURNALIZATION_II_PAC_2026.find(item => item.date >= key && String(item.mode).toLowerCase().includes("examen"));
+  const daysToExam = nextExam ? daysBetweenDateKeys(key, nextExam.date) : Infinity;
+
+  if (day === 0 || day === 6) {
+    const topics = previous.length ? previous.map(item => item.topic).slice(-3) : ["temas vistos en clase"];
+    return {
+      dateKey:key,
+      partial: nextExam?.partial || "repaso",
+      topic:`Repaso mixto de fin de semana: ${topics.join(" · ")}`,
+      focus:["Variados", "Errores de la semana", "Ejercicios tipo examen"],
+      mode: daysToExam <= 7 ? "Modo parcial" : "Repaso variado",
+      source: CALCULUS_SOURCE_LABEL,
+    };
+  }
+
+  if (daysToExam <= 7) {
+    return {
+      dateKey:key,
+      partial: nextExam?.partial || "repaso",
+      topic:`Modo parcial ${nextExam?.partial || ""}: repaso acumulado antes del examen`,
+      focus:["Pautas", "Tiempo real", "Errores repetidos"],
+      mode:"Modo parcial",
+      source: CALCULUS_SOURCE_LABEL,
+    };
+  }
+
+  const nearest = previous[previous.length - 1] || CALCULUS_JOURNALIZATION_II_PAC_2026[0];
+  return {
+    dateKey:key,
+    partial: nearest?.partial || 1,
+    topic: nearest ? `Repaso: ${nearest.topic}` : "Preparación de Cálculo I",
+    focus:["Repasar", "Practicar", "Corregir"],
+    mode:"Repaso",
+    source: CALCULUS_SOURCE_LABEL,
+  };
+}
+
+function isCalculusQuest(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  return q?.id === 1 || text.includes("cálculo") || text.includes("calculo");
+}
+
+function createCalculusScheduleBlock(q, dateKey) {
+  const plan = getCalculusPlanForDate(dateKey);
+  return B(`quest-${q.id}`, q.title, "FOCUS", CALCULUS_FIXED_DURATION_MIN, `${plan.mode} · ${plan.topic}`, {
+    questId: q.id,
+    quest: q,
+    focus: plan.focus,
+    fixedTime: true,
+    dateKey,
+    calculusPlan: plan,
+    source: plan.source,
+  });
+}
+
+function getCalculusPlanId(plan) {
+  const p = plan || getCalculusPlanForDate();
+  return `${p.dateKey || getLifeOSDateKey()}::${String(p.partial || "p")}`;
+}
+
+function createCalculusCurrent(dateKey = getLifeOSDateKey(), plan = getCalculusPlanForDate(dateKey)) {
+  return {
+    dateKey,
+    planId: getCalculusPlanId(plan),
+    topic: plan.topic || "Cálculo I",
+    mode: plan.mode || "Práctica",
+    focus: Array.isArray(plan.focus) ? plan.focus : [],
+    source: plan.source || CALCULUS_SOURCE_LABEL,
+    generatedAt: null,
+    exercises: [],
+    answersById: {},
+    evaluationsById: {},
+    sessionNotes: "",
+    selfRating: null,
+    lastErrorType: null,
+    saved: false,
+  };
+}
+
+function createCalculusInitialState() {
+  return {
+    current: createCalculusCurrent(),
+    history: [],
+    settings: {
+      dailyExerciseCount: 8,
+      weekendExerciseCount: 10,
+      examModeExerciseCount: 12,
+      strictMode: true,
+    },
+  };
+}
+
+function hasCalculusProgress(current) {
+  if (!current || typeof current !== "object") return false;
+  return Boolean(
+    (Array.isArray(current.exercises) && current.exercises.length > 0) ||
+    Object.keys(current.answersById || {}).length > 0 ||
+    Object.keys(current.evaluationsById || {}).length > 0 ||
+    String(current.sessionNotes || "").trim()
+  );
+}
+
+function normalizeCalculusExercise(raw, idx = 0) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || `calc-${idx + 1}`).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || `calc-${idx + 1}`;
+  const statement = String(raw.statement || raw.enunciado || "").trim();
+  if (!statement) return null;
+  return {
+    id,
+    title: String(raw.title || raw.titulo || `Ejercicio ${idx + 1}`).slice(0, 80),
+    statement,
+    topic: String(raw.topic || raw.tema || "Cálculo I").slice(0, 120),
+    type: String(raw.type || raw.tipo || "práctica").slice(0, 80),
+    difficulty: String(raw.difficulty || raw.dificultad || "medio").slice(0, 30),
+    targetSkill: String(raw.targetSkill || raw.habilidad || "resolver con orden").slice(0, 120),
+    hint: String(raw.hint || raw.pista || "").slice(0, 500),
+  };
+}
+
+function normalizeCalculusPayload(payload, fallbackPlan = getCalculusPlanForDate()) {
+  const rawExercises = Array.isArray(payload?.exercises) ? payload.exercises : [];
+  const exercises = rawExercises.map(normalizeCalculusExercise).filter(Boolean).slice(0, 16);
+  return {
+    title: String(payload?.title || `Práctica de ${fallbackPlan.topic}`).slice(0, 120),
+    instructions: String(payload?.instructions || "Resolvé con procedimiento claro. No solo pongás respuesta final.").slice(0, 800),
+    difficulty: String(payload?.difficulty || fallbackPlan.mode || "medio").slice(0, 50),
+    estimatedMinutes: Math.max(15, Math.min(120, Math.floor(Number(payload?.estimatedMinutes) || 75))),
+    exercises,
+  };
+}
+
+function getCalculusRecentHistory(calculus, limit = 5) {
+  const history = Array.isArray(calculus?.history) ? calculus.history : [];
+  return history.slice(-limit).map(day => ({
+    dateKey: day.dateKey,
+    topic: day.topic,
+    mode: day.mode,
+    selfRating: day.selfRating ?? null,
+    lastErrorType: day.lastErrorType || null,
+    evaluatedCount: Object.keys(day.evaluationsById || {}).length,
+    notes: String(day.sessionNotes || "").slice(0, 240),
+  }));
+}
+
+function getCalculusAdaptiveMode(plan, calculus) {
+  const history = Array.isArray(calculus?.history) ? calculus.history : [];
+  const last = history[history.length - 1];
+  const scoreValues = Object.values(last?.evaluationsById || {}).map(e => Number(e.score)).filter(n => Number.isFinite(n));
+  const avg = scoreValues.length ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : null;
+  if (String(plan?.mode || "").toLowerCase().includes("examen") || String(plan?.mode || "").toLowerCase().includes("parcial")) return "Modo parcial: ejercicios más difíciles, mezclados y con menos pistas.";
+  if (avg !== null && avg < 60) return "Refuerzo adaptativo: repetir errores de ayer con pasos más guiados.";
+  if (avg !== null && avg >= 80) return "Progresión: subir dificultad y mezclar con temas anteriores.";
+  return "Práctica normal: tema del día + repaso corto de errores recientes.";
+}
+
 const SCHEDULE_BLOCKS = Object.freeze({
   WD_SWIM: [
     B("buf0","Arrival Buffer","BUFFER",15,"Settle in · quick mental reset"),
@@ -1435,39 +1703,70 @@ function questScheduleFocus(q) {
 
 function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getScheduleWeekKey()) {
   const active = hydrateQuestItems(Array.isArray(quests) && quests.length ? quests : QUESTS);
+  const scheduleDateKey = getDateKeyForScheduleDay(weekKey, dayIdx);
+
+  if (isLifeOSManualRestDay(scheduleDateKey)) {
+    const rest = LIFEOS_MANUAL_REST_DAYS[scheduleDateKey];
+    return buildTimed(T(15, 40), [
+      B("rest-day", rest.label, "RECOVERY", 30, rest.note, {
+        focus:["Descanso", "Sin penalización", "Mañana se retoma"],
+        dateKey:scheduleDateKey,
+      }),
+    ]);
+  }
+
   const seedBase = `${weekKey}:day-${dayIdx}:missions`;
   const rand = seededRandom(hashStringSeed(seedBase));
-  const weekdayStarts = [T(13,45), T(14,0), T(14,15), T(14,30), T(14,45), T(15,0)];
-  const weekendStarts = [T(8,30), T(9,0), T(9,30), T(10,0), T(10,30)];
-  const startPool = dayIdx >= 5 ? weekendStarts : weekdayStarts;
-  const start = startPool[Math.floor(rand() * startPool.length)] || (dayIdx >= 5 ? T(9) : T(14));
   const blocks = [];
 
-  if (dayIdx < 5) blocks.push(B("buf0", "Preparación", "BUFFER", 15, "Abrí LifeOS · agua · cero distracciones"));
-  else blocks.push(B("ease", "Arranque suave", "RECOVERY", 10, "Sin prisa · prepará el día"));
+  const calculusQuest = active.find(isCalculusQuest);
+  const nightly = active.filter(q => !isCalculusQuest(q) && isNightlyQuest(q));
+  const movable = active.filter(q => !isCalculusQuest(q) && !isNightlyQuest(q));
 
-  const nightly = active.filter(isNightlyQuest);
-  const movable = active.filter(q => !isNightlyQuest(q));
+  if (calculusQuest) {
+    const calc = createCalculusScheduleBlock(calculusQuest, scheduleDateKey);
+    calc.startMin = CALCULUS_FIXED_START_MIN;
+    calc.endMin = CALCULUS_FIXED_END_MIN;
+    blocks.push(calc);
+  }
+
+  const afterCalcStartPool = dayIdx >= 5
+    ? [T(10, 15), T(10, 35), T(11, 0), T(11, 30)]
+    : [T(10, 10), T(10, 35), T(11, 0), T(13, 30), T(14, 10)];
+  const regularStartPool = dayIdx >= 5
+    ? [T(8, 30), T(9, 0), T(9, 30), T(10, 0), T(10, 30)]
+    : [T(13, 45), T(14, 0), T(14, 15), T(14, 30), T(14, 45), T(15, 0)];
+  const startPool = calculusQuest ? afterCalcStartPool : regularStartPool;
+  const start = startPool[Math.floor(rand() * startPool.length)] || (calculusQuest ? T(10, 10) : (dayIdx >= 5 ? T(9) : T(14)));
+
+  const rolling = [];
+  if (movable.length || nightly.length) {
+    if (dayIdx < 5) rolling.push(B("buf0", "Preparación", "BUFFER", 15, "Abrí LifeOS · agua · cero distracciones"));
+    else rolling.push(B("ease", "Arranque suave", "RECOVERY", 10, "Sin prisa · prepará el día"));
+  }
+
   const shuffled = seededShuffle(movable, seedBase);
   const ordered = [...shuffled, ...nightly];
 
   ordered.forEach((q, idx) => {
     const duration = parseQuestDurationMinutes(q, idx === 0 ? 60 : 30);
     const type = questScheduleType(q);
-    blocks.push(B(`quest-${q.id}`, q.title, type, duration, q.sub || "Misión diaria", {
+    rolling.push(B(`quest-${q.id}`, q.title, type, duration, q.sub || "Misión diaria", {
       questId: q.id,
       quest: q,
       focus: questScheduleFocus(q),
       randomized: true,
       scheduleWeekKey: weekKey,
+      dateKey:scheduleDateKey,
     }));
     if (idx < ordered.length - 1) {
       const bufferDur = q.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? 15 : 10;
-      blocks.push(B(`buf-${q.id}`, "Reset corto", idx >= ordered.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
+      rolling.push(B(`buf-${q.id}`, "Reset corto", idx >= ordered.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
     }
   });
 
-  return buildTimed(start, blocks);
+  const timedRolling = buildTimed(start, rolling);
+  return [...blocks, ...timedRolling].sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
 }
 
 function getScheduleBlocks(dayIdx, swimDays, quests = QUESTS, weekKey = getScheduleWeekKey()) {
@@ -1502,7 +1801,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 9; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 10; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1592,6 +1891,12 @@ const MIGRATIONS = Object.freeze({
       ? deepMerge(createAppSettingsInitial(), snap.appSettings)
       : createAppSettingsInitial(),
   }),
+  [9]: (snap) => ({
+    ...snap,
+    calculus: snap?.calculus && typeof snap.calculus === "object"
+      ? deepMerge(createCalculusInitialState(), snap.calculus)
+      : createCalculusInitialState(),
+  }),
 });
 
 // Chains migration functions from savedVersion → STORAGE_SCHEMA_VERSION.
@@ -1672,7 +1977,7 @@ function validateSnapshotIntegrity(snap) {
   if (!snap || typeof snap !== "object") return false;
 
   // Required top-level domains
-  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague", "appSettings", "wardrobe"];
+  const REQUIRED_DOMAINS = ["xp", "quests", "streak", "planner", "reflection", "achievements", "rocketLeague", "appSettings", "wardrobe", "calculus"];
   if (!REQUIRED_DOMAINS.every(k => snap[k] !== null && typeof snap[k] === "object")) return false;
 
   // XP domain
@@ -1728,6 +2033,15 @@ function validateSnapshotIntegrity(snap) {
   if (!Array.isArray(wardrobe.items)) return false;
   if (!Array.isArray(wardrobe.history)) return false;
 
+  // Calculus trainer domain
+  const { calculus } = snap;
+  if (!calculus || typeof calculus !== "object") return false;
+  if (!calculus.current || typeof calculus.current !== "object") return false;
+  if (!Array.isArray(calculus.history)) return false;
+  if (!Array.isArray(calculus.current.exercises)) return false;
+  if (!calculus.current.answersById || typeof calculus.current.answersById !== "object" || Array.isArray(calculus.current.answersById)) return false;
+  if (!calculus.current.evaluationsById || typeof calculus.current.evaluationsById !== "object" || Array.isArray(calculus.current.evaluationsById)) return false;
+
   return true;
 }
 
@@ -1770,7 +2084,7 @@ const StorageAdapter = Object.freeze({
 // UI state is intentionally never serialized.
 
 const PERSISTENT_DOMAINS = Object.freeze([
-  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague", "appSettings", "wardrobe"
+  "xp", "quests", "streak", "achievements", "planner", "reflection", "energy", "rocketLeague", "appSettings", "wardrobe", "calculus"
 ]);
 
 function serializeAppState(persistentState) {
@@ -1989,6 +2303,7 @@ const PERSISTENT_INITIAL = {
   rocketLeague: createRocketLeagueInitialState(),
   appSettings: createAppSettingsInitial(),
   wardrobe: createWardrobeInitial(),
+  calculus: createCalculusInitialState(),
 };
 
 const UI_INITIAL = {
@@ -2232,6 +2547,93 @@ function persistentReducer(state, action) {
     case AT.PLANNER_SET_BLENDER:
       return { ...state, planner: { ...state.planner, blenderMode: action.mode } };
 
+    case AT.CALC_DAILY_SYNC: {
+      const dateKey = action.dateKey || getLifeOSDateKey();
+      const plan = action.plan || getCalculusPlanForDate(dateKey);
+      const planId = getCalculusPlanId(plan);
+      const calculus = state.calculus || createCalculusInitialState();
+      const current = calculus.current || createCalculusCurrent(dateKey, plan);
+      if (current.dateKey === dateKey && current.planId === planId) return state;
+      const shouldArchive = hasCalculusProgress(current);
+      return {
+        ...state,
+        calculus: {
+          ...calculus,
+          current: createCalculusCurrent(dateKey, plan),
+          history: shouldArchive
+            ? [...(calculus.history || []), { ...current, archivedAt: new Date().toISOString() }].slice(-120)
+            : (calculus.history || []),
+        },
+      };
+    }
+
+    case AT.CALC_SESSION_GENERATED: {
+      const calculus = state.calculus || createCalculusInitialState();
+      const current = calculus.current || createCalculusCurrent();
+      const payload = normalizeCalculusPayload(action.payload || {}, getCalculusPlanForDate(current.dateKey));
+      return {
+        ...state,
+        calculus: {
+          ...calculus,
+          current: {
+            ...current,
+            generatedAt: new Date().toISOString(),
+            sessionTitle: payload.title,
+            sessionInstructions: payload.instructions,
+            sessionDifficulty: payload.difficulty,
+            estimatedMinutes: payload.estimatedMinutes,
+            exercises: payload.exercises,
+            answersById: {},
+            evaluationsById: {},
+            saved: false,
+          },
+        },
+      };
+    }
+
+    case AT.CALC_ANSWER_SAVE: {
+      const calculus = state.calculus || createCalculusInitialState();
+      const current = calculus.current || createCalculusCurrent();
+      const exerciseId = String(action.exerciseId || "");
+      if (!exerciseId) return state;
+      const evaluation = action.evaluation && typeof action.evaluation === "object" ? action.evaluation : null;
+      return {
+        ...state,
+        calculus: {
+          ...calculus,
+          current: {
+            ...current,
+            answersById: {
+              ...(current.answersById || {}),
+              [exerciseId]: { answer: String(action.answer || ""), savedAt: new Date().toISOString() },
+            },
+            evaluationsById: evaluation ? {
+              ...(current.evaluationsById || {}),
+              [exerciseId]: { ...evaluation, evaluatedAt: new Date().toISOString() },
+            } : (current.evaluationsById || {}),
+            lastErrorType: evaluation?.errorType || current.lastErrorType || null,
+            saved: false,
+          },
+        },
+      };
+    }
+
+    case AT.CALC_FIELD_UPDATE: {
+      const calculus = state.calculus || createCalculusInitialState();
+      const current = calculus.current || createCalculusCurrent();
+      return {
+        ...state,
+        calculus: {
+          ...calculus,
+          current: {
+            ...current,
+            [action.key]: action.value,
+            saved: false,
+          },
+        },
+      };
+    }
+
     case AT.WARDROBE_PROFILE_UPDATE: {
       const wardrobe = state.wardrobe || createWardrobeInitial();
       return {
@@ -2298,6 +2700,7 @@ function persistentReducer(state, action) {
     case AT.DOMAIN_RESET: {
       if (action.domain === "rocketLeague") return { ...state, rocketLeague: createRocketLeagueInitialState() };
       if (action.domain === "wardrobe") return { ...state, wardrobe: createWardrobeInitial() };
+      if (action.domain === "calculus") return { ...state, calculus: createCalculusInitialState() };
       return state;
     }
 
@@ -2429,6 +2832,7 @@ function useMobile() {
 const MOB_PRIMARY_ITEMS = [
   { id:"dashboard",    icon:Home,     label:"Hoy"      },
   { id:"quests",       icon:Target,   label:"Misiones" },
+  { id:"calculus",     icon:BookOpen, label:"Cálculo"  },
   { id:"rocketLeague", icon:Gamepad2, label:"Rocket"   },
 ];
 
@@ -3181,6 +3585,201 @@ function DashboardView() {
 }
 
 
+function CalculusTrainerView() {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+  const dateKey = getLifeOSDateKey();
+  const plan = useMemo(() => getCalculusPlanForDate(dateKey), [dateKey]);
+  const calculus = persistent.calculus || createCalculusInitialState();
+  const current = calculus.current || createCalculusCurrent(dateKey, plan);
+  const adaptiveMode = useMemo(() => getCalculusAdaptiveMode(plan, calculus), [plan, calculus]);
+  const [loading, setLoading] = useState(false);
+  const [evaluatingId, setEvaluatingId] = useState(null);
+  const [error, setError] = useState("");
+  const [answerDrafts, setAnswerDrafts] = useState({});
+
+  useEffect(() => {
+    pDispatch(AC.calcDailySync(dateKey, plan));
+  }, [dateKey, plan.topic, plan.mode, pDispatch]);
+
+  useEffect(() => {
+    setAnswerDrafts(Object.fromEntries(Object.entries(current.answersById || {}).map(([id, v]) => [id, v?.answer || ""])));
+  }, [current.dateKey, current.generatedAt]);
+
+  const generated = Array.isArray(current.exercises) && current.exercises.length > 0;
+  const evaluatedCount = Object.keys(current.evaluationsById || {}).length;
+  const scoreValues = Object.values(current.evaluationsById || {}).map(e => Number(e.score)).filter(n => Number.isFinite(n));
+  const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : null;
+
+  const generatePractice = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/generate-calculus-practice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dateKey,
+          plan,
+          adaptiveMode,
+          settings: calculus.settings || {},
+          recentHistory: getCalculusRecentHistory(calculus),
+          profile: {
+            course: "MM201 Cálculo I",
+            source: CALCULUS_SOURCE_LABEL,
+            studyWindow: "8:10 AM–9:45 AM",
+            instruction: "Generar ejercicios originales, no resolverlos en el enunciado.",
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "No se pudo generar la práctica.");
+      pDispatch(AC.calcSessionGenerated(data));
+      uiDispatch(AC.toastAdd(Date.now(), "Práctica de Cálculo lista", plan.topic));
+      playLifeOSSound("complete");
+    } catch (err) {
+      setError(err?.message || "Error generando ejercicios.");
+    } finally {
+      setLoading(false);
+    }
+  }, [dateKey, plan, adaptiveMode, calculus, pDispatch, uiDispatch]);
+
+  const evaluateExercise = useCallback(async (exercise) => {
+    const answer = String(answerDrafts[exercise.id] || "").trim();
+    if (!answer) {
+      setError("Escribí tu procedimiento antes de corregir.");
+      return;
+    }
+    setEvaluatingId(exercise.id);
+    setError("");
+    try {
+      const res = await fetch("/api/evaluate-calculus-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exercise, answer, plan, adaptiveMode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "No se pudo corregir la respuesta.");
+      pDispatch(AC.calcAnswerSave(exercise.id, answer, data));
+      uiDispatch(AC.toastAdd(Date.now(), data.correct ? "Respuesta correcta" : "Respuesta revisada", `${Math.round(Number(data.score) || 0)}/100 · ${data.errorType || "sin categoría"}`));
+      playLifeOSSound(data.correct ? "complete" : "timer");
+    } catch (err) {
+      setError(err?.message || "Error corrigiendo respuesta.");
+    } finally {
+      setEvaluatingId(null);
+    }
+  }, [answerDrafts, plan, adaptiveMode, pDispatch, uiDispatch]);
+
+  const pill = (label, color = "#60a5fa") => (
+    <span style={{ padding:"5px 9px", borderRadius:999, border:`1px solid ${color}33`, background:`${color}12`, color, fontSize:11, fontWeight:900 }}>{label}</span>
+  );
+
+  return (
+    <div className="view-enter" style={{ display:"grid", gap:14 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", flexWrap:"wrap" }}>
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:7 }}>
+            <div style={{ width:38, height:38, borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(96,165,250,.14)", color:"#60a5fa", border:"1px solid rgba(96,165,250,.22)" }}><BookOpen size={19}/></div>
+            <div>
+              <h1 style={{ margin:0, fontSize:24, color:"#f8fafc", letterSpacing:"-.4px" }}>Cálculo Trainer</h1>
+              <div style={{ fontSize:12, color:"#64748b", fontWeight:700 }}>8:10 AM – 9:45 AM · {CALCULUS_SOURCE_LABEL}</div>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+            {pill(plan.mode, String(plan.mode).toLowerCase().includes("parcial") ? "#fbbf24" : "#60a5fa")}
+            {pill(`Parcial ${plan.partial || "repaso"}`, "#a78bfa")}
+            {pill(`${evaluatedCount}/${current.exercises?.length || 0} corregidos`, "#34d399")}
+            {avgScore !== null && pill(`Promedio ${avgScore}/100`, avgScore >= 75 ? "#34d399" : "#fb923c")}
+          </div>
+        </div>
+        <button onClick={() => uiDispatch(AC.setView("schedule"))} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:"#cbd5e1", fontWeight:900, cursor:"pointer" }}>
+          Ver horario
+        </button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.15fr) minmax(260px,.85fr)", gap:14 }} className="calc-grid">
+        <section style={{ border:"1px solid rgba(96,165,250,.14)", background:"linear-gradient(135deg,rgba(96,165,250,.11),rgba(15,23,42,.72))", borderRadius:22, padding:16, boxShadow:"0 18px 50px rgba(0,0,0,.28)" }}>
+          <div style={{ fontSize:10, color:"#60a5fa", textTransform:"uppercase", letterSpacing:1, fontWeight:900, marginBottom:6 }}>Tema de hoy</div>
+          <div style={{ fontSize:20, color:"#f8fafc", fontWeight:900, lineHeight:1.12, marginBottom:9 }}>{plan.topic}</div>
+          <div style={{ color:"#94a3b8", fontSize:13, lineHeight:1.55, marginBottom:12 }}>{adaptiveMode}</div>
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:14 }}>
+            {(plan.focus || []).map(f => <span key={f} className="tl-ftag">{f}</span>)}
+          </div>
+          <button disabled={loading} onClick={generatePractice} style={{ width:"100%", padding:"13px 14px", borderRadius:16, border:"1px solid rgba(96,165,250,.28)", background:loading ? "rgba(96,165,250,.08)" : "linear-gradient(135deg,#2563eb,#7c3aed)", color:"white", fontWeight:900, cursor:loading ? "wait" : "pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:9 }}>
+            {loading ? <RefreshCw size={17} className="spin"/> : <Sparkles size={17}/>} {generated ? "Regenerar práctica adaptativa" : "Generar práctica de hoy"}
+          </button>
+          {error && <div style={{ marginTop:10, padding:10, borderRadius:12, border:"1px solid rgba(248,113,113,.25)", background:"rgba(248,113,113,.08)", color:"#fca5a5", fontSize:12, fontWeight:800 }}>{error}</div>}
+        </section>
+
+        <aside style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", borderRadius:22, padding:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, color:"#e2e8f0", fontWeight:900, marginBottom:10 }}><Shield size={17} color="#34d399"/> API segura</div>
+          <div style={{ color:"#94a3b8", fontSize:12, lineHeight:1.55 }}>
+            LifeOS llama a <b style={{ color:"#cbd5e1" }}>/api/generate-calculus-practice</b> y <b style={{ color:"#cbd5e1" }}>/api/evaluate-calculus-answer</b>. Tu API key de Claude queda en Vercel como variable de entorno y nunca se guarda en el navegador.
+          </div>
+          <div style={{ marginTop:12, display:"grid", gap:8 }}>
+            <div style={{ padding:10, borderRadius:12, background:"rgba(52,211,153,.08)", color:"#86efac", fontSize:12, fontWeight:800 }}>Variable necesaria: ANTHROPIC_API_KEY</div>
+            <div style={{ padding:10, borderRadius:12, background:"rgba(167,139,250,.08)", color:"#c4b5fd", fontSize:12, fontWeight:800 }}>Modelo opcional: ANTHROPIC_MODEL</div>
+          </div>
+        </aside>
+      </div>
+
+      {generated && (
+        <section style={{ display:"grid", gap:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:10, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:18, color:"#f8fafc", fontWeight:900 }}>{current.sessionTitle || "Práctica generada"}</div>
+              <div style={{ fontSize:12, color:"#64748b", marginTop:3 }}>{current.sessionInstructions || "Resolvé con procedimiento claro."}</div>
+            </div>
+            <div style={{ color:"#94a3b8", fontSize:12, fontWeight:800 }}>{current.estimatedMinutes || 75} min estimados</div>
+          </div>
+
+          {current.exercises.map((ex, idx) => {
+            const evaluation = current.evaluationsById?.[ex.id];
+            const answer = answerDrafts[ex.id] ?? current.answersById?.[ex.id]?.answer ?? "";
+            return (
+              <div key={ex.id} style={{ border:"1px solid rgba(255,255,255,.075)", background:"rgba(255,255,255,.035)", borderRadius:18, padding:14 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, marginBottom:8 }}>
+                  <div>
+                    <div style={{ color:"#f8fafc", fontWeight:900, fontSize:15 }}>{idx + 1}. {ex.title}</div>
+                    <div style={{ color:"#64748b", fontSize:11, fontWeight:800, marginTop:2 }}>{ex.topic} · {ex.type} · {ex.difficulty}</div>
+                  </div>
+                  {evaluation && <div style={{ padding:"5px 8px", borderRadius:999, background:(Number(evaluation.score) >= 75 ? "rgba(52,211,153,.12)" : "rgba(251,146,60,.12)"), color:(Number(evaluation.score) >= 75 ? "#86efac" : "#fdba74"), fontSize:11, fontWeight:900 }}>{Math.round(Number(evaluation.score) || 0)}/100</div>}
+                </div>
+                <div style={{ color:"#cbd5e1", fontSize:14, lineHeight:1.55, whiteSpace:"pre-wrap", marginBottom:10 }}>{ex.statement}</div>
+                {ex.hint && <div style={{ color:"#94a3b8", fontSize:12, marginBottom:10 }}><b style={{ color:"#cbd5e1" }}>Pista:</b> {ex.hint}</div>}
+                <textarea value={answer} onChange={e => setAnswerDrafts(prev => ({ ...prev, [ex.id]: e.target.value }))} placeholder="Escribí tu procedimiento aquí..." style={{ width:"100%", minHeight:86, borderRadius:14, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.35)", color:"#e2e8f0", padding:11, resize:"vertical", fontFamily:"inherit", fontSize:13, outline:"none" }}/>
+                <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"center", marginTop:10, flexWrap:"wrap" }}>
+                  <button disabled={evaluatingId === ex.id} onClick={() => evaluateExercise(ex)} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(52,211,153,.24)", background:"rgba(52,211,153,.12)", color:"#86efac", fontWeight:900, cursor:evaluatingId === ex.id ? "wait" : "pointer", display:"flex", alignItems:"center", gap:7 }}>
+                    {evaluatingId === ex.id ? <RefreshCw size={15} className="spin"/> : <CheckCircle2 size={15}/>} Corregir
+                  </button>
+                  {evaluation && <div style={{ flex:1, minWidth:220, color:"#94a3b8", fontSize:12, lineHeight:1.45 }}><b style={{ color:"#e2e8f0" }}>{evaluation.errorType || "Feedback"}:</b> {evaluation.feedback}</div>}
+                </div>
+                {evaluation?.correctSolution && <details style={{ marginTop:10, color:"#94a3b8", fontSize:12 }}><summary style={{ cursor:"pointer", color:"#c4b5fd", fontWeight:900 }}>Ver solución correcta</summary><div style={{ marginTop:8, whiteSpace:"pre-wrap", lineHeight:1.55 }}>{evaluation.correctSolution}</div></details>}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {!generated && (
+        <div style={{ border:"1px dashed rgba(255,255,255,.12)", borderRadius:18, padding:18, color:"#64748b", textAlign:"center", fontWeight:800 }}>
+          Mañana solo abrís Cálculo, tocás “Generar práctica de hoy” y LifeOS usa la jornalización correcta para decidir qué toca.
+        </div>
+      )}
+
+      <section style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.03)", borderRadius:18, padding:14 }}>
+        <div style={{ color:"#e2e8f0", fontWeight:900, marginBottom:8 }}>Cierre rápido</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, alignItems:"center" }}>
+          <textarea value={current.sessionNotes || ""} onChange={e => pDispatch(AC.calcFieldUpdate("sessionNotes", e.target.value))} placeholder="¿Qué se me hizo difícil? ¿Qué error repetí?" style={{ minHeight:58, borderRadius:14, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.32)", color:"#e2e8f0", padding:11, resize:"vertical", fontFamily:"inherit", fontSize:13, outline:"none" }}/>
+          <select value={current.selfRating || ""} onChange={e => pDispatch(AC.calcFieldUpdate("selfRating", e.target.value ? Number(e.target.value) : null))} style={{ height:44, borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"#111827", color:"#e2e8f0", padding:"0 10px", fontWeight:800 }}>
+            <option value="">Nivel</option><option value="1">1/5</option><option value="2">2/5</option><option value="3">3/5</option><option value="4">4/5</option><option value="5">5/5</option>
+          </select>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function RocketLeagueView() {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
@@ -3808,6 +4407,27 @@ function ScheduleView() {
           <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#a78bfa", fontVariantNumeric:"tabular-nums" }}>{weeklyRemixCountdown}</div>
           <div style={{ fontSize:11, color:T_COLOR.muted, marginTop:3 }}>Semana activa: {scheduleWeekKey} · las horas cambian cada 7 días.</div>
         </div>
+      </div>
+
+      <div className="g" style={{ padding:16, marginBottom:16, borderColor:"rgba(96,165,250,.16)", background:"rgba(96,165,250,.035)" }}>
+        {(() => {
+          const selectedDateKey = getDateKeyForScheduleDay(scheduleWeekKey, sel);
+          const rest = LIFEOS_MANUAL_REST_DAYS[selectedDateKey];
+          const calcPlan = getCalculusPlanForDate(selectedDateKey);
+          return rest ? (
+            <>
+              <div style={{ fontSize:10, color:"#86efac", textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:5 }}>Día libre manual</div>
+              <div style={{ fontSize:14, color:"#e5e7eb", fontWeight:900 }}>{rest.label}</div>
+              <div style={{ fontSize:12, color:T_COLOR.muted, marginTop:4 }}>{rest.note}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize:10, color:"#60a5fa", textTransform:"uppercase", letterSpacing:.8, fontWeight:900, marginBottom:5 }}>Cálculo · 8:10 AM – 9:45 AM</div>
+              <div style={{ fontSize:14, color:"#e5e7eb", fontWeight:900 }}>{calcPlan.topic}</div>
+              <div style={{ fontSize:12, color:T_COLOR.muted, marginTop:4 }}>{calcPlan.mode} · {calcPlan.source}</div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="sch-day-tabs">
@@ -5660,6 +6280,7 @@ const NAV_GROUPS = [
     items: [
       { id:"dashboard",    icon:Home,     label:"Hoy"      },
       { id:"quests",       icon:Target,   label:"Misiones" },
+      { id:"calculus",     icon:BookOpen, label:"Cálculo"  },
       { id:"schedule",     icon:Calendar, label:"Horario"  },
       { id:"focus",        icon:Timer,    label:"Sesión"   },
     ],
@@ -5692,6 +6313,11 @@ const VIEW_ALIASES = Object.freeze({
   terminal:     "dashboard",
   misiones:     "quests",
   quests:       "quests",
+  calculo:      "calculus",
+  cálculo:      "calculus",
+  calculus:     "calculus",
+  mm201:        "calculus",
+  trainercalc:  "calculus",
   rocket:       "rocketLeague",
   rocketleague: "rocketLeague",
   rl:           "rocketLeague",
@@ -5733,6 +6359,7 @@ const normalizeView = (view) => VIEW_ALIASES[String(view || "dashboard").toLower
 const VIEW_MAP = {
   dashboard:    DashboardView,
   quests:       QuestsView,
+  calculus:     CalculusTrainerView,
   rocketLeague: RocketLeagueView,
   schedule:     ScheduleView,
   focus:        FocusSessionView,
