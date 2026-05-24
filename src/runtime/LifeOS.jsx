@@ -289,6 +289,23 @@ const ROCKET_LEAGUE_PROFILE = Object.freeze({
   target: "Plat III → Diamond",
 });
 
+const ROCKET_LEAGUE_CONTROLLER_PRESET = Object.freeze([
+  { label: "Sensibilidad suelo", value: "1.45", note: "Precisa para Plat alto; subí a 1.55 cuando los recoveries se sientan lentos." },
+  { label: "Sensibilidad aérea", value: "1.45", note: "Igual que suelo para no cambiar sensación al saltar o salir de pared." },
+  { label: "Zona muerta", value: "0.06", note: "DualSense nuevo: bajo y preciso. Si aparece drift, probá 0.07–0.08." },
+  { label: "Zona esquive", value: "0.70", note: "Reduce backflips/sideflips accidentales en fast aerial y speedflip." },
+  { label: "Ver a los lados", value: "5.00", note: "Camera swivel speed rápido sin sentirse nervioso." },
+  { label: "Vibración", value: "Off", note: "Menos distracción y lectura más limpia del control." },
+]);
+
+const ROCKET_LEAGUE_RECOVERY_TIPS = Object.freeze([
+  "Aterrizá con las ruedas hacia la dirección donde querés salir, no donde venís mirando.",
+  "Mantené powerslide al caer si el carro no está perfectamente alineado.",
+  "Después de cada tiro, buscá pad pequeño antes de mirar si fue gol.",
+  "Si caés en pared, convertí la caída en wavedash o salida lateral, no frenes.",
+  "En defensa, salvar al centro cuenta como error: priorizá esquina o lateral.",
+]);
+
 const ROCKET_LEAGUE_PACKS = Object.freeze({
   powershots: {
     name: "Powershots",
@@ -349,6 +366,31 @@ const ROCKET_LEAGUE_PACKS = Object.freeze({
     name: "Musty Speedflip Kickoff Test",
     code: "A503-264C-A7EB-D282",
     focus: "speedflip exigente para kickoff real",
+  },
+  airRollShots: {
+    name: "Power shot + Air Roll Shot",
+    code: "1C4E-D311-1506-B6C1",
+    focus: "tiros con ajuste de air roll antes del impacto",
+  },
+  airRollShotsAlt: {
+    name: "Air Roll Shots",
+    code: "84D2-072D-80CF-7D0D",
+    focus: "ángulos cerrados, botes largos y potencia con air roll",
+  },
+  directionalAirRoll: {
+    name: "Directional Air Roll Practice",
+    code: "F28D-A55C-C924-B26E",
+    focus: "control de air roll en tiros de suelo y aéreos",
+  },
+  recoveryTraining: {
+    name: "Recovery Training",
+    code: "DA42-75B1-0469-8A0F",
+    focus: "caídas incómodas, half flips y recoveries rápidas",
+  },
+  driftWavedashRecovery: {
+    name: "Drift & Wave Dash Recovery",
+    code: "C809-86F7-C4BB-F1C1",
+    focus: "derrape + wavedash para recuperar velocidad",
   },
 });
 
@@ -504,6 +546,41 @@ const RL_MECHANIC_DRILLS = Object.freeze({
     "Usá pared o setup suave. Meta: 1–2 toques controlados y recovery. Si no hay setup limpio, no fuerces el aire.",
     "#22d3ee"
   ),
+  airRollShotControl: makeRlMechanicSubtask(
+    "mechanic-air-roll-shot-control",
+    "Tiros con air roll",
+    "alinear el carro antes del impacto",
+    "Pack + freeplay: saltá, usá air roll solo para corregir ángulo y pegá con potencia. No gires por girar; air roll termina antes del contacto.",
+    "#e879f9"
+  ),
+  halfFlipRecovery: makeRlMechanicSubtask(
+    "mechanic-half-flip-recovery",
+    "Half flip recovery",
+    "volver a la jugada sin gastar boost de más",
+    "Desde reversa o mala orientación: half flip, cancel limpio, enderezar con air roll/powerslide y salir hacia pad pequeño.",
+    "#34d399"
+  ),
+  wallWavedash: makeRlMechanicSubtask(
+    "mechanic-wall-wavedash",
+    "Wall wavedash + salida",
+    "bajar de pared sin perder velocidad",
+    "Subí a pared, soltate, wavedash al piso y salí por lateral. Si aterrizás plano y frenás, repetí el intento.",
+    "#38bdf8"
+  ),
+  awkwardLanding: makeRlMechanicSubtask(
+    "mechanic-awkward-landing",
+    "Aterrizajes incómodos",
+    "corregir carro en el aire y caer útil",
+    "En freeplay tirate incómodo, girá el carro para caer con ruedas y mantené powerslide. Meta: no quedar muerto después del toque.",
+    "#fbbf24"
+  ),
+  goalpostRecovery: makeRlMechanicSubtask(
+    "mechanic-goalpost-recovery",
+    "Poste → recovery defensiva",
+    "usar postes y pared de arco para volver rápido",
+    "Saltá desde defensa, tocá/salvá y usá poste o pared del arco para caer mirando hacia la jugada. Evitá quedar dentro de la red.",
+    "#60a5fa"
+  ),
 });
 
 const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") => Object.freeze({
@@ -606,6 +683,54 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     RL_MECHANIC_DRILLS.airDribbleIntro,
     ROCKET_LEAGUE_PACKS.platDiamond,
     "Uno o dos toques limpios valen más que perder control en el aire. Recovery obligatorio."
+  ),
+  makeRlPlan(
+    "air-roll-shot-day",
+    "Air Roll Shot Control",
+    "Usar air roll para ajustar tiros, no para girar sin propósito",
+    RL_MECHANIC_DRILLS.airRollShotControl,
+    ROCKET_LEAGUE_PACKS.airRollShots,
+    "Buscá contacto limpio: air roll corrige el ángulo, el flip genera potencia. Si whiffeás, reducí velocidad."
+  ),
+  makeRlPlan(
+    "directional-air-roll-day",
+    "Directional Air Roll + Shot Setup",
+    "Control aéreo corto con final de tiro",
+    RL_MECHANIC_DRILLS.airRollShotControl,
+    ROCKET_LEAGUE_PACKS.directionalAirRoll,
+    "No mantengás air roll todo el tiempo. Ajustá, estabilizá el carro y pegá con intención."
+  ),
+  makeRlPlan(
+    "half-flip-recovery-day",
+    "Half Flip + Recovery Day",
+    "Volver a la jugada rápido después de mala orientación",
+    RL_MECHANIC_DRILLS.halfFlipRecovery,
+    ROCKET_LEAGUE_PACKS.recoveryTraining,
+    "Cada intento termina con salida hacia pad pequeño. El objetivo es quedar jugable, no solo hacer el half flip."
+  ),
+  makeRlPlan(
+    "wavedash-recovery-day",
+    "Wavedash Recovery Day",
+    "Convertir paredes y caídas en velocidad gratis",
+    RL_MECHANIC_DRILLS.wallWavedash,
+    ROCKET_LEAGUE_PACKS.driftWavedashRecovery,
+    "Si tocás pared, pensá salida: wavedash, powerslide y pad. No te quedés mirando la pelota."
+  ),
+  makeRlPlan(
+    "awkward-recovery-day",
+    "Awkward Landing Control",
+    "Caer bien después de tiros, saves y aerials fallidos",
+    RL_MECHANIC_DRILLS.awkwardLanding,
+    ROCKET_LEAGUE_PACKS.recoveryTraining,
+    "Tirá el carro incómodo y recuperá orientación. Si frenás completamente, repetí hasta salir con momentum."
+  ),
+  makeRlPlan(
+    "goalpost-recovery-day",
+    "Goalpost Recovery + Saves",
+    "Salvar y salir de la red sin quedarte muerto",
+    RL_MECHANIC_DRILLS.goalpostRecovery,
+    ROCKET_LEAGUE_PACKS.overheadSaves,
+    "Después de salvar, pensá segunda jugada: poste, pared, pad pequeño y posición defensiva."
   ),
   makeRlPlan(
     "one-v-one-day",
@@ -3412,6 +3537,61 @@ function RocketLeagueView() {
             </div>
             <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
               Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(232,121,249,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+              <Target size={18} color="#e879f9"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Air roll shots</div>
+            </div>
+            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
+              Cuando toque este bloque: usá air roll solo para alinear el carro antes del golpe. La meta es tiro fuerte + caída limpia, no girar bonito.
+            </div>
+            <div style={{ display:"grid", gap:7, marginTop:12 }}>
+              {[ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.airRollShotsAlt, ROCKET_LEAGUE_PACKS.directionalAirRoll].map(pack => (
+                <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
+                  <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
+                  <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>
+                  <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{pack.focus}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(52,211,153,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+              <RefreshCw size={18} color="#34d399"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Recoveries clave</div>
+            </div>
+            <div style={{ display:"grid", gap:8 }}>
+              {ROCKET_LEAGUE_RECOVERY_TIPS.map((tip, i) => (
+                <div key={tip} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>
+                  <span style={{ color:"#34d399", fontWeight:900 }}>{i + 1}.</span>
+                  <span>{tip}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(96,165,250,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+              <Gamepad2 size={18} color="#60a5fa"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>DualSense PS5 preset</div>
+            </div>
+            <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.5, marginBottom:12 }}>
+              Comprado el 5 de mayo: todavía debería aceptar zona muerta baja. Si sentís drift, subila poco a poco.
+            </div>
+            <div style={{ display:"grid", gap:8 }}>
+              {ROCKET_LEAGUE_CONTROLLER_PRESET.map(setting => (
+                <div key={setting.label} style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8, padding:9, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
+                  <div>
+                    <div style={{ fontSize:11.5, color:T_COLOR.text, fontWeight:900 }}>{setting.label}</div>
+                    <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, lineHeight:1.35 }}>{setting.note}</div>
+                  </div>
+                  <div style={{ fontFamily:T_FONT.display, color:"#60a5fa", fontWeight:900, fontSize:16 }}>{setting.value}</div>
+                </div>
+              ))}
             </div>
           </div>
 
