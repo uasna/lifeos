@@ -253,6 +253,31 @@ const QUEST_ICON_KEYS = ["Brain", "Dumbbell", "BookOpen", "Sun", "Target", "Moon
 const QUEST_ICON_MAP = Object.freeze({ Brain, Dumbbell, BookOpen, Sun, Target, Moon, Zap, Flame });
 const QUEST_ACCENTS = ["#a78bfa", "#34d399", "#60a5fa", "#fbbf24", "#22d3ee", "#c084fc"];
 
+const QUEST_ROLE_META = Object.freeze({
+  mandatory: { label:"Obligatoria", color:"#f87171", penalty:1 },
+  training:  { label:"Entrenamiento", color:"#22d3ee", penalty:.65 },
+  optional:  { label:"Opcional", color:"#94a3b8", penalty:0 },
+  rest:      { label:"Descanso", color:"#34d399", penalty:0 },
+});
+
+function inferQuestRole(q = {}) {
+  const text = `${q.title || ""} ${q.sub || ""}`.toLowerCase();
+  if (text.includes("cálculo") || text.includes("calculo") || text.includes("examen")) return "mandatory";
+  if (text.includes("reflex") || text.includes("nocturn")) return "mandatory";
+  if (q.id === 2 || text.includes("rocket") || text.includes("inglés") || text.includes("ingles") || text.includes("blender") || text.includes("3d")) return "training";
+  if (text.includes("descanso") || text.includes("pausa")) return "rest";
+  return "optional";
+}
+
+function getQuestRole(q = {}) {
+  return QUEST_ROLE_META[q.role] ? q.role : inferQuestRole(q);
+}
+
+function getQuestRoleMeta(q = {}) {
+  const role = getQuestRole(q);
+  return QUEST_ROLE_META[role] || QUEST_ROLE_META.optional;
+}
+
 function sanitizeQuestItems(items = []) {
   const source = Array.isArray(items) && items.length > 0 ? items : QUESTS;
   return source.slice(0, 24).map((q, i) => ({
@@ -263,6 +288,7 @@ function sanitizeQuestItems(items = []) {
     iconKey: q.iconKey || QUEST_ICON_KEYS[i % QUEST_ICON_KEYS.length],
     diff: ["FÁCIL", "MEDIO", "DIFÍCIL"].includes(q.diff) ? q.diff : "MEDIO",
     cat: ["mind", "body", "work"].includes(q.cat) ? q.cat : "mind",
+    role: QUEST_ROLE_META[q.role] ? q.role : inferQuestRole(q),
     accent: q.accent || QUEST_ACCENTS[i % QUEST_ACCENTS.length],
     link: String(q.link || "").slice(0, 240),
     linkLabel: String(q.linkLabel || "").slice(0, 60),
@@ -1002,17 +1028,33 @@ function getLifeOSDateKey(date = new Date()) {
   return getRocketLeagueDateKey(date);
 }
 
-function calculateMissedQuestPenalty(state, completedIds = []) {
+function getLifeOSDayMode(state, dateKey = getLifeOSDateKey()) {
+  if (isLifeOSManualRestDay(dateKey)) return "rest";
+  const entry = state?.appSettings?.restDays?.[dateKey];
+  if (!entry?.enabled) return "normal";
+  return entry.mode || "rest";
+}
+
+function isLifeOSLowEnergyDay(state, dateKey = getLifeOSDateKey()) {
+  return getLifeOSDayMode(state, dateKey) === "lowEnergy";
+}
+
+function calculateMissedQuestPenalty(state, completedIds = [], dateKey = getLifeOSDateKey()) {
   const activeQuests = getActiveQuests(state);
   const completedSet = new Set(Array.isArray(completedIds) ? completedIds : []);
   const startedSet = new Set(Array.isArray(state?.quests?.startedIds) ? state.quests.startedIds : []);
   const partialEnabled = state?.appSettings?.penalties?.partialCreditStarted !== false;
+  const lowEnergy = isLifeOSLowEnergyDay(state, dateKey);
   const missedQuests = activeQuests.filter(q => !completedSet.has(q.id));
   const missedBreakdown = missedQuests.map(q => {
     const baseXp = Math.max(0, Number(q.xp) || 0);
+    const roleMeta = getQuestRoleMeta(q);
+    const roleMultiplier = Number(roleMeta.penalty ?? 0);
     const started = startedSet.has(q.id);
-    const penaltyXp = started && partialEnabled ? Math.ceil(baseXp * 0.5) : baseXp;
-    return { ...q, started, penaltyXp };
+    const startedMultiplier = started && partialEnabled ? 0.5 : 1;
+    const energyMultiplier = lowEnergy ? 0.35 : 1;
+    const penaltyXp = Math.ceil(baseXp * roleMultiplier * startedMultiplier * energyMultiplier);
+    return { ...q, role:getQuestRole(q), roleLabel:roleMeta.label, started, lowEnergy, penaltyXp };
   });
   const missedXp = missedBreakdown.reduce((sum, q) => sum + q.penaltyXp, 0);
   return { missedQuests: missedBreakdown, missedXp };
@@ -1023,8 +1065,7 @@ function shouldApplyMissedQuestPenalty(state) {
 }
 
 function isLifeOSRestDay(state, dateKey = getLifeOSDateKey()) {
-  if (isLifeOSManualRestDay(dateKey)) return true;
-  return Boolean(state?.appSettings?.restDays?.[dateKey]?.enabled);
+  return getLifeOSDayMode(state, dateKey) === "rest";
 }
 
 function getCalculusWeakTopics(calculus, limit = 5) {
@@ -1114,6 +1155,7 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
         penaltyXp: penaltyEnabled ? missedXp : 0,
         penaltyBreakdown: missedQuests.map(q => ({ id:q.id, title:q.title, xp:q.xp, penaltyXp:q.penaltyXp, started:Boolean(q.started) })),
         manualRest: previousDayWasManualRest,
+        lowEnergy: isLifeOSLowEnergyDay(state, lastResetDate),
         archivedAt: new Date().toISOString(),
       }
     : null;
@@ -1824,7 +1866,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 11; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 12; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -3321,6 +3363,7 @@ const DIFF_COLOR = { "FÁCIL":"#34d399", "MEDIO":"#fbbf24", "DIFÍCIL":"#f87171"
 const QuestItem = memo(function QuestItem({ q, completed, onComplete, isBurst }) {
   const Icon = q.icon;
   const dc   = DIFF_COLOR[q.diff];
+  const roleMeta = getQuestRoleMeta(q);
   return (
     <div
       className={`qi ${completed ? "done" : ""} ${isBurst ? "pop" : ""}`}
@@ -3371,6 +3414,7 @@ const QuestItem = memo(function QuestItem({ q, completed, onComplete, isBurst })
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
         <div className="q-xp" style={{ background:`${q.accent}14`, color:q.accent, border:`1px solid ${q.accent}28` }}>+{q.xp} XP</div>
+        <div className="diff" style={{ background:`${roleMeta.color}12`, color:roleMeta.color, border:`1px solid ${roleMeta.color}25` }}>{roleMeta.label}</div>
         <div className="diff" style={{ background:`${dc}12`, color:dc, border:`1px solid ${dc}25` }}>{q.diff}</div>
       </div>
     </div>
@@ -3502,32 +3546,52 @@ function buildRecentQuestEvents(dailyLog = [], quests = QUESTS, limit = 10) {
 // ─────────────────────────────────────────────────────────────────
 
 function DashboardView() {
-  const { persistent } = useAppData();
+  const { persistent, pDispatch } = useAppData();
   const { ui, uiDispatch } = useAppUI();
 
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const completedSet = useMemo(() => SELECTORS.completedSet(persistent.quests.completedIds), [persistent.quests.completedIds]);
   const level        = useMemo(() => SELECTORS.level(persistent.xp.total),     [persistent.xp.total]);
-  const xpPct        = useMemo(() => SELECTORS.levelPct(persistent.xp.total),  [persistent.xp.total]);
   const todayXp      = useMemo(() => SELECTORS.todayXp(persistent.quests.completedIds, activeQuests), [persistent.quests.completedIds, activeQuests]);
-  const triggers     = useMemo(() => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests), [persistent.quests.completedIds, persistent.streak.current, activeQuests]);
   const missedRisk   = useMemo(() => calculateMissedQuestPenalty(persistent, persistent.quests.completedIds), [persistent, persistent.quests.completedIds]);
-  const lastPenalty  = persistent.quests?.lastPenalty;
   const todayKey     = getLifeOSDateKey();
-  const isRestToday  = Boolean(persistent.appSettings?.restDays?.[todayKey]?.enabled);
-
+  const dayMode      = getLifeOSDayMode(persistent, todayKey);
+  const isRestToday  = dayMode === "rest";
+  const isLowEnergy  = dayMode === "lowEnergy";
   const pct = completedSet.size / Math.max(activeQuests.length, 1) * 100;
-  const nextQuest = useMemo(() => activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0], [activeQuests, completedSet]);
-  const nextQuestMinutes = nextQuest ? parseQuestDurationMinutes(nextQuest, 30) : 0;
+  const lastPenalty  = persistent.quests?.lastPenalty;
 
-  const { pDispatch } = useAppData();
+  const scheduleBlocks = useMemo(() => {
+    const weekKey = getScheduleWeekKey();
+    const idx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+    const sched = getScheduleBlocks(idx, [], activeQuests, weekKey);
+    return [...(sched.main || []), ...(sched.morning || []), ...(sched.afternoon || [])]
+      .filter(b => b.type !== "BUFFER")
+      .sort((a,b) => (a.startMin || 0) - (b.startMin || 0));
+  }, [activeQuests]);
+
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const nextBlock = scheduleBlocks.find(b => (b.endMin || 0) >= nowMin && !completedSet.has(b.questId)) || scheduleBlocks.find(b => b.questId && !completedSet.has(b.questId)) || scheduleBlocks[0];
+  const nextQuest = nextBlock?.quest || activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0];
+  const calcPlan = useMemo(() => getCalculusPlanForDate(todayKey), [todayKey]);
+  const rocketPlan = useMemo(() => getRocketLeaguePlanForDate(todayKey), [todayKey]);
+  const wardrobeWeek = useMemo(() => buildWardrobeWeek(persistent.wardrobe || createWardrobeInitial(), getScheduleWeekKey()), [persistent.wardrobe]);
+  const todayOutfit = wardrobeWeek[(new Date().getDay() + 6) % 7];
+
+  const setDayMode = useCallback((mode) => {
+    const entry = mode === "normal"
+      ? { enabled:false, mode:"normal", reason:"Día normal", createdAt:new Date().toISOString() }
+      : { enabled:true, mode, reason: mode === "rest" ? "Descanso planificado" : "Modo bajo energía", createdAt:new Date().toISOString() };
+    pDispatch(AC.appSettingsUpdate({ restDays:{ [todayKey]: entry } }));
+  }, [pDispatch, todayKey]);
+
   const handleQuestComplete = useCallback((q) => {
     if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
       const id = Date.now();
       unlockLifeOSAudio();
       playLifeOSSound("menu");
       uiDispatch(AC.setView("rocketLeague"));
-      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá todas las submisiones para ganar XP"));
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá las submisiones y las 3 partidas 1v1"));
       setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
       return;
     }
@@ -3542,137 +3606,99 @@ function DashboardView() {
     uiDispatch(AC.toastAdd(id, `${deltaXp > 0 ? "+" : ""}${deltaXp} XP`, wasCompleted ? `Desmarcado · ${q.title}` : q.title));
     setTimeout(() => uiDispatch(AC.clearBurst()), 900);
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2900);
-    const newNivel = SELECTORS.level(Math.max(0, persistent.xp.total + deltaXp));
-    if (!wasCompleted && newNivel > oldNivel) {
-      setTimeout(() => { uiDispatch(AC.showNivelUp()); setTimeout(() => uiDispatch(AC.hideNivelUp()), 3200); }, 300);
-    }
   }, [completedSet, persistent.xp.total, pDispatch, uiDispatch]);
+
+  const missionGroups = useMemo(() => {
+    const byRole = { mandatory:[], training:[], optional:[], rest:[] };
+    activeQuests.forEach(q => (byRole[getQuestRole(q)] || byRole.optional).push(q));
+    return byRole;
+  }, [activeQuests]);
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
       <div style={S.ptitle} className="mob-ptitle">Hoy</div>
-      <div style={S.psub} className="mob-psub">{completedSet.size}/{activeQuests.length} misiones completadas · {todayXp} XP ganados hoy · riesgo si termina el día: -{missedRisk.missedXp} XP</div>
+      <div style={S.psub} className="mob-psub">Centro diario · {completedSet.size}/{activeQuests.length} misiones · {todayXp} XP ganados · -{missedRisk.missedXp} XP en riesgo</div>
 
       <div className="s-grid">
-        <StatCard val={`Lv.${level}`} label="Nivel actual"  icon={Crown}  accent="#fbbf24" sub={SELECTORS.rank(level)}/>
-        <StatCard val={todayXp}       label="XP hoy"       icon={Zap}    accent="#a78bfa"/>
-        <StatCard val={`${persistent.streak.current}d`} label="Racha" icon={Flame} accent="#f87171" sub="¡Mantenela viva!"/>
-        <StatCard val={`${completedSet.size}/${activeQuests.length}`} label="Misiones hechas" icon={Target} accent="#34d399"/>
-        <StatCard val={`-${missedRisk.missedXp}`} label="XP en riesgo" icon={AlertTriangle} accent={missedRisk.missedXp > 0 ? "#f87171" : "#34d399"} sub={missedRisk.missedXp > 0 ? `${missedRisk.missedQuests.length} pendientes` : "Sin castigo"}/>
+        <StatCard val={`Lv.${level}`} label="Nivel" icon={Crown} accent="#fbbf24" sub={SELECTORS.rank(level)}/>
+        <StatCard val={todayXp} label="XP hoy" icon={Zap} accent="#a78bfa"/>
+        <StatCard val={`${Math.round(pct)}%`} label="Día" icon={Target} accent={pct >= 70 ? "#34d399" : "#22d3ee"} sub={`${completedSet.size}/${activeQuests.length}`}/>
+        <StatCard val={`-${missedRisk.missedXp}`} label="XP en riesgo" icon={AlertTriangle} accent={missedRisk.missedXp > 0 ? "#f87171" : "#34d399"} sub={isLowEnergy ? "modo bajo energía" : missedRisk.missedXp ? `${missedRisk.missedQuests.length} pendientes` : "seguro"}/>
       </div>
 
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"13px 16px", marginBottom:18, borderRadius:13, background:isRestToday ? "rgba(52,211,153,.075)" : "rgba(255,255,255,.035)", border:`1px solid ${isRestToday ? "rgba(52,211,153,.2)" : "rgba(255,255,255,.08)"}` }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:900, color:isRestToday ? "#34d399" : T_COLOR.text }}>{isRestToday ? "Hoy marcado como descanso" : "Día libre planificado"}</div>
-          <div style={{ fontSize:11.5, color:T_COLOR.muted }}>Si de verdad no podés trabajar hoy, no se aplica castigo de XP en el reset.</div>
+      <section className="g" style={{ padding:18, marginBottom:16, background:"linear-gradient(135deg,rgba(34,211,238,.10),rgba(124,58,237,.055))", borderColor:"rgba(34,211,238,.18)" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.2fr) minmax(240px,.8fr)", gap:16 }} className="mob-layout-grid">
+          <div>
+            <div style={{ fontSize:11, color:"#22d3ee", textTransform:"uppercase", letterSpacing:1, fontWeight:900, marginBottom:6 }}>Siguiente acción</div>
+            <div style={{ fontSize:21, fontWeight:900, color:T_COLOR.text, lineHeight:1.15 }}>{nextBlock?.title || nextQuest?.title || "Día libre"}</div>
+            <div style={{ marginTop:7, color:T_COLOR.muted, fontSize:12, lineHeight:1.55 }}>
+              {nextBlock?.startMin !== undefined ? `${fmt(nextBlock.startMin)}–${fmt(nextBlock.endMin)} · ` : ""}{nextBlock?.desc || nextQuest?.sub || "No hay tareas pendientes."}
+            </div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:13 }}>
+              <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); uiDispatch(AC.setView(nextQuest?.id === 1 ? "calculus" : nextQuest?.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? "rocketLeague" : "focus")); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.10)", color:"#22d3ee", borderRadius:11, padding:"10px 13px", fontWeight:900, cursor:"pointer" }}>Empezar ahora</button>
+              {nextQuest && <button onClick={() => handleQuestComplete(nextQuest)} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.09)", color:"#34d399", borderRadius:11, padding:"10px 13px", fontWeight:900, cursor:"pointer" }}>Completar</button>}
+            </div>
+          </div>
+          <div style={{ display:"grid", gap:8 }}>
+            <div style={{ padding:11, borderRadius:13, background:"rgba(96,165,250,.08)", border:"1px solid rgba(96,165,250,.16)" }}><b style={{ color:"#93c5fd" }}>Cálculo:</b> <span style={{ color:T_COLOR.muted }}>8:10–9:45 · {calcPlan.topic}</span></div>
+            <div style={{ padding:11, borderRadius:13, background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.16)" }}><b style={{ color:"#67e8f9" }}>Rocket:</b> <span style={{ color:T_COLOR.muted }}>{rocketPlan.focus || rocketPlan.title}</span></div>
+            {todayOutfit && <div style={{ padding:11, borderRadius:13, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.15)" }}><b style={{ color:"#fbbf24" }}>Outfit:</b> <span style={{ color:T_COLOR.muted }}>{todayOutfit.title}</span></div>}
+          </div>
         </div>
-        <button onClick={() => pDispatch(AC.appSettingsUpdate({ restDays:{ [todayKey]: isRestToday ? { enabled:false, reason:"Descanso removido", createdAt:new Date().toISOString() } : { enabled:true, reason:"Descanso manual", createdAt:new Date().toISOString() } } }))} style={{ border:"1px solid rgba(52,211,153,.25)", background:isRestToday ? "rgba(52,211,153,.14)" : "rgba(52,211,153,.06)", color:"#34d399", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>{isRestToday ? "Quitar descanso" : "Marcar descanso"}</button>
+      </section>
+
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"13px 16px", marginBottom:18, borderRadius:13, background:isRestToday ? "rgba(52,211,153,.075)" : isLowEnergy ? "rgba(251,191,36,.075)" : "rgba(255,255,255,.035)", border:`1px solid ${isRestToday ? "rgba(52,211,153,.2)" : isLowEnergy ? "rgba(251,191,36,.2)" : "rgba(255,255,255,.08)"}` }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:900, color:isRestToday ? "#34d399" : isLowEnergy ? "#fbbf24" : T_COLOR.text }}>{isRestToday ? "Hoy es descanso" : isLowEnergy ? "Modo bajo energía" : "Día normal"}</div>
+          <div style={{ fontSize:11.5, color:T_COLOR.muted }}>{isLowEnergy ? "Las misiones pendientes pierden mucho menos XP. Hacé la versión mínima y salvá el día." : "Usá descanso solo cuando de verdad no podás trabajar."}</div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          <button onClick={() => setDayMode(isLowEnergy ? "normal" : "lowEnergy")} style={{ border:"1px solid rgba(251,191,36,.25)", background:isLowEnergy ? "rgba(251,191,36,.14)" : "rgba(251,191,36,.06)", color:"#fbbf24", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>{isLowEnergy ? "Quitar bajo energía" : "Modo bajo energía"}</button>
+          <button onClick={() => setDayMode(isRestToday ? "normal" : "rest")} style={{ border:"1px solid rgba(52,211,153,.25)", background:isRestToday ? "rgba(52,211,153,.14)" : "rgba(52,211,153,.06)", color:"#34d399", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>{isRestToday ? "Quitar descanso" : "Marcar descanso"}</button>
+        </div>
       </div>
 
       {lastPenalty?.penaltyXp > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:13, padding:"13px 16px", marginBottom:18, borderRadius:13, background:"rgba(248,113,113,.075)", border:"1px solid rgba(248,113,113,.2)" }}>
-          <AlertTriangle size={18} color="#f87171"/>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:900, color:"#f87171" }}>Castigo aplicado al reset diario</div>
-            <div style={{ fontSize:11.5, color:T_COLOR.muted }}>Ayer quedaron {lastPenalty.missedCount} misiones sin completar · -{lastPenalty.penaltyXp} XP</div>
-          </div>
-        </div>
-      )}
-
-      {triggers.length > 0 && (
-        <div
-          onClick={() => uiDispatch(AC.setView("reflection"))}
-          style={{ display:"flex", alignItems:"center", gap:13, padding:"14px 18px", marginBottom:18, borderRadius:13, background:"rgba(167,139,250,.07)", border:"1px solid rgba(167,139,250,.22)", cursor:"pointer", transition:"all .22s ease", animation:"rfIn .4s ease" }}
-          onMouseEnter={e => { e.currentTarget.style.background="rgba(167,139,250,.12)"; e.currentTarget.style.transform="translateX(4px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.background="rgba(167,139,250,.07)"; e.currentTarget.style.transform="none"; }}
-        >
-          <div style={{ width:36, height:36, borderRadius:9, background:"rgba(167,139,250,.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <MessageSquare size={16} color="#a78bfa"/>
-          </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:700, color:"#a78bfa", marginBottom:2 }}>¿Qué falló hoy?</div>
-            <div style={{ fontSize:11.5, color:"#64748b" }}>{triggers[0].label} · Tomá 2 minutos para reflexionar</div>
-          </div>
-          <ChevronRight size={15} color="#4b5563"/>
+          <AlertTriangle size={18} color="#f87171"/><div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:900, color:"#f87171" }}>Castigo aplicado al reset diario</div><div style={{ fontSize:11.5, color:T_COLOR.muted }}>Ayer quedaron {lastPenalty.missedCount} misiones sin completar · -{lastPenalty.penaltyXp} XP</div></div>
         </div>
       )}
 
       <div className="dash-main-grid">
         <div className="g" style={{ padding:20 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-            <div style={{ ...S.stitle, marginBottom:0 }}>Misiones diarias</div>
-            <div style={{ fontSize:11.5, color:"#64748b", fontWeight:600 }}>{completedSet.size}/{activeQuests.length}</div>
-          </div>
-          <div style={{ marginBottom:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748b", marginBottom:6 }}>
-              <span>Progreso</span><span style={{ color:"#a78bfa", fontWeight:600 }}>{Math.round(pct)}%</span>
-            </div>
-            <ProgresoBar pct={pct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)"/>
-          </div>
-          <div className="ql">
-            {activeQuests.map(q => (
-              <QuestItem key={q.id} q={q} completed={completedSet.has(q.id)} onComplete={handleQuestComplete} isBurst={ui.burstQuestId === q.id}/>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}><div style={{ ...S.stitle, marginBottom:0 }}>Misiones por prioridad</div><div style={{ fontSize:11.5, color:"#64748b", fontWeight:600 }}>{completedSet.size}/{activeQuests.length}</div></div>
+          <ProgresoBar pct={pct} gradient="linear-gradient(90deg,#7c3aed,#06b6d4)"/>
+          <div style={{ display:"grid", gap:13, marginTop:16 }}>
+            {[
+              ["mandatory", "Obligatorias"],
+              ["training", "Entrenamiento"],
+              ["optional", "Opcionales"],
+            ].map(([role,label]) => missionGroups[role]?.length > 0 && (
+              <div key={role}>
+                <div style={{ fontSize:10.5, color:getQuestRoleMeta({ role }).color, fontWeight:900, textTransform:"uppercase", letterSpacing:1, margin:"0 0 7px 4px" }}>{label}</div>
+                <div className="ql">{missionGroups[role].map(q => <QuestItem key={q.id} q={q} completed={completedSet.has(q.id)} onComplete={handleQuestComplete} isBurst={ui.burstQuestId === q.id}/>)}</div>
+              </div>
             ))}
           </div>
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:15 }}>
           <div className="g" style={{ padding:18 }}>
-            <div style={S.stitle}>XP semanal</div>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={WEEK_DATA} barSize={16} margin={{ top:0, right:0, left:-20, bottom:0 }}>
-                <defs>
-                  <linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity={.9}/>
-                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={.5}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="d" tick={{ fill:"#64748b", fontSize:11 }} axisLine={false} tickLine={false}/>
-                <YAxis hide/>
-                <Tooltip contentStyle={{ background:"rgba(7,7,15,.96)", border:"1px solid rgba(255,255,255,.09)", borderRadius:9, fontSize:12 }} cursor={{ fill:"rgba(255,255,255,.03)" }} labelStyle={{ color:"#eef2f8", fontWeight:600 }} itemStyle={{ color:"#a78bfa" }}/>
-                <Bar dataKey="xp" fill="url(#bg1)" radius={[5,5,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={S.stitle}>Ruta mínima si estás cansado</div>
+            <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6, marginBottom:12 }}>No abandones todo: Cálculo 20 min, Rocket solo freeplay + 1v1, reflexión 2 min. El modo bajo energía reduce el castigo.</div>
+            <button onClick={() => setDayMode("lowEnergy")} style={{ border:"1px solid rgba(251,191,36,.25)", background:"rgba(251,191,36,.08)", color:"#fbbf24", borderRadius:10, padding:"10px 12px", fontWeight:900, cursor:"pointer" }}>Activar bajo energía</button>
           </div>
-
           <div className="g" style={{ padding:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ ...S.stitle, marginBottom:0, fontSize:15 }}>XP Progreso</div>
-              <span style={{ fontSize:11, color:"#a78bfa", fontWeight:700, background:"rgba(124,58,237,.13)", padding:"2px 8px", borderRadius:100 }}>Lv.{level} → {level+1}</span>
+            <div style={S.stitle}>Atajos</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[ ["calculus", "Cálculo"], ["rocketLeague", "Rocket"], ["wardrobe", "Clóset"], ["stats", "Análisis"] ].map(([view,label]) => <button key={view} onClick={() => uiDispatch(AC.setView(view))} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:T_COLOR.text, borderRadius:10, padding:"10px 9px", fontWeight:900, cursor:"pointer" }}>{label}</button>)}
             </div>
-            <ProgresoBar pct={xpPct} gradient="linear-gradient(90deg,#fbbf24,#f97316)" height={8}/>
-            <div style={{ display:"flex", justifyContent:"space-between", marginTop:7, fontSize:11, color:"#475569" }}>
-              <span>{SELECTORS.levelXp(persistent.xp.total)} XP</span>
-              <span>500 XP to level up</span>
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ ...S.stitle, marginBottom:0, fontSize:15 }}>Siguiente acción</div>
-              <span style={{ fontSize:11, color:"#22d3ee", fontWeight:800, background:"rgba(34,211,238,.10)", padding:"2px 8px", borderRadius:999 }}>{nextQuestMinutes} min</span>
-            </div>
-            {nextQuest ? (
-              <div>
-                <div style={{ fontSize:14, fontWeight:900, color:T_COLOR.text, marginBottom:5 }}>{nextQuest.title}</div>
-                <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55, marginBottom:14 }}>{nextQuest.sub}</div>
-                <button
-                  onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); uiDispatch(AC.setView("focus")); }}
-                  style={{ border:"1px solid rgba(34,211,238,.25)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}
-                >
-                  Iniciar sesión
-                </button>
-              </div>
-            ) : (
-              <div style={{ fontSize:12, color:T_COLOR.muted }}>Todas las misiones están completas.</div>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
-
 
 function CalculusTrainerView() {
   const { persistent, pDispatch } = useAppData();
@@ -4361,6 +4387,18 @@ ${line}` : line));
             <button onClick={markTilted} style={{ width:"100%", minHeight:42, borderRadius:12, border:"1px solid rgba(248,113,113,.32)", background:"rgba(248,113,113,.12)", color:"#fca5a5", fontWeight:900, cursor:"pointer", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
               <AlertTriangle size={16}/> Estoy tilteado
             </button>
+
+            <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>Ranked después del entreno</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:14 }}>
+              {[
+                ["win", "Gané", "#34d399"],
+                ["loss", "Perdí", "#f87171"],
+                ["tilt", "Tilt", "#fb923c"],
+                ["skip", "No ranked", "#94a3b8"],
+              ].map(([key,label,color]) => (
+                <button key={key} onClick={() => updateMental("rankedResult", key)} style={{ minHeight:34, borderRadius:10, border:mental.rankedResult === key ? `1px solid ${color}80` : "1px solid rgba(255,255,255,.08)", background:mental.rankedResult === key ? `${color}20` : "rgba(255,255,255,.035)", color:mental.rankedResult === key ? color : T_COLOR.muted, fontWeight:900, cursor:"pointer", fontSize:11 }}>{label}</button>
+              ))}
+            </div>
 
             {[{ key:"moodBefore", label:"Mood antes" }, { key:"moodAfter", label:"Mood después" }, { key:"tiltLevel", label:"Tilt level" }].map(group => (
               <div key={group.key} style={{ marginBottom:13 }}>
@@ -5142,6 +5180,16 @@ function StatsView() {
     questHistory.slice(-30).forEach(day => (day.missedIds || []).forEach(id => map.set(id, (map.get(id) || 0) + 1)));
     return [...map.entries()].sort((a,b) => b[1] - a[1]).slice(0, 5).map(([id, count]) => ({ quest: activeQuests.find(q => q.id === id) || { title:`Misión ${id}` }, count }));
   }, [questHistory, activeQuests]);
+  const insights = useMemo(() => {
+    const rows = [];
+    if (histRate >= 80) rows.push({ color:"#34d399", title:"Semana sólida", text:`Cumplimiento de ${histRate}% en los últimos 7 días. Mantené Cálculo antes de Rocket para proteger el ritmo.` });
+    else if (histRate > 0) rows.push({ color:"#fbbf24", title:"Hay patrón que corregir", text:`Cumplimiento de ${histRate}%. Mirá qué misión se repite abajo y movela a la mañana o al modo sesión.` });
+    if (penaltyLast7 > 0) rows.push({ color:"#f87171", title:"XP perdido", text:`Perdiste ${penaltyLast7} XP esta semana. Las obligatorias duelen más; las opcionales ya no castigan.` });
+    if (missedFrequency[0]) rows.push({ color:"#fb923c", title:"Misión frágil", text:`La que más se escapa es “${missedFrequency[0].quest.title}”. Bajale duración o ponela justo después de Cálculo.` });
+    if (rlTodaySeconds > 0) rows.push({ color:"#22d3ee", title:"Rocket activo", text:`Hoy ya registraste ${formatSeconds(rlTodaySeconds)} de entrenamiento. Ranked solo si tilt está 1–2/5.` });
+    if (!rows.length) rows.push({ color:"#94a3b8", title:"Aún faltan datos", text:"Completá unos días más para que LifeOS detecte tus patrones reales." });
+    return rows.slice(0, 4);
+  }, [histRate, penaltyLast7, missedFrequency, rlTodaySeconds]);
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
@@ -5155,6 +5203,18 @@ function StatsView() {
         <StatCard val={formatSeconds(rlTodaySeconds)} label="RL hoy" icon={Gamepad2} accent="#22d3ee"/>
         <StatCard val={`${histRate}%`} label="Cumplimiento 7d" icon={CheckCircle2} accent={histRate >= 70 ? "#34d399" : "#fbbf24"}/>
         <StatCard val={`-${penaltyLast7}`} label="XP perdido 7d" icon={AlertTriangle} accent={penaltyLast7 > 0 ? "#f87171" : "#34d399"}/>
+      </div>
+
+      <div className="g" style={{ padding:18, marginBottom:16 }}>
+        <div style={S.stitle}>Lectura rápida</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:10 }}>
+          {insights.map((it, idx) => (
+            <div key={idx} style={{ padding:12, borderRadius:13, background:`${it.color}0f`, border:`1px solid ${it.color}24` }}>
+              <div style={{ color:it.color, fontWeight:900, fontSize:12, marginBottom:5 }}>{it.title}</div>
+              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.5 }}>{it.text}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="g" style={{ padding:20, marginBottom:16 }}>
@@ -6379,9 +6439,15 @@ function SettingsView() {
 
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {questDraft.map((q, idx) => (
-            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.05fr 1.25fr 1fr 70px 112px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
+            <div key={q.id} style={{ display:"grid", gridTemplateColumns:"1.05fr 1.25fr .8fr 1fr 70px 112px", gap:10, alignItems:"center", padding:12, borderRadius:12, background:"rgba(255,255,255,.02)", border:"1px solid rgba(255,255,255,.05)" }} className="mob-layout-grid">
               <input value={q.title} onChange={(e) => updateQuestDraft(idx, { title:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.text, borderRadius:9, padding:"10px 12px", fontWeight:700 }} />
               <input value={q.sub} onChange={(e) => updateQuestDraft(idx, { sub:e.target.value })} placeholder="Duración + descripción" style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.subtext, borderRadius:9, padding:"10px 12px" }} />
+              <select value={getQuestRole(q)} onChange={(e) => updateQuestDraft(idx, { role:e.target.value })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:getQuestRoleMeta({ role:getQuestRole(q) }).color, borderRadius:9, padding:"10px 10px", fontWeight:900 }}>
+                <option value="mandatory">Obligatoria</option>
+                <option value="training">Entrenamiento</option>
+                <option value="optional">Opcional</option>
+                <option value="rest">Descanso</option>
+              </select>
               <input value={q.link || ""} onChange={(e) => updateQuestDraft(idx, { link:e.target.value, linkLabel:q.linkLabel || "Abrir página" })} placeholder="Link opcional" style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:"#22d3ee", borderRadius:9, padding:"10px 12px" }} />
               <input type="number" min="0" max="999" value={q.xp} onChange={(e) => updateQuestDraft(idx, { xp:Number(e.target.value) || 0 })} style={{ background:"rgba(0,0,0,.2)", border:"1px solid rgba(255,255,255,.07)", color:q.accent, borderRadius:9, padding:"10px 12px", fontWeight:900 }} />
               <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
