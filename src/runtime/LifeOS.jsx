@@ -45,12 +45,14 @@ const AT = Object.freeze({
   QUEST_COMPLETE:             "QUEST_COMPLETE",
   QUESTS_CUSTOM_UPDATE:       "QUESTS_CUSTOM_UPDATE",
   QUESTS_DAILY_SYNC:          "QUESTS_DAILY_SYNC",
+  QUEST_START:                "QUEST_START",
   APP_SETTINGS_UPDATE:        "APP_SETTINGS_UPDATE",
   // ── Calculus trainer domain ─────────────────────────────────
   CALC_DAILY_SYNC:            "CALC_DAILY_SYNC",
   CALC_SESSION_GENERATED:     "CALC_SESSION_GENERATED",
   CALC_ANSWER_SAVE:           "CALC_ANSWER_SAVE",
   CALC_FIELD_UPDATE:          "CALC_FIELD_UPDATE",
+  CALC_SETTINGS_UPDATE:       "CALC_SETTINGS_UPDATE",
   // ── Wardrobe / closet domain ─────────────────────────────────
   WARDROBE_PROFILE_UPDATE:    "WARDROBE_PROFILE_UPDATE",
   WARDROBE_ITEM_ADD:          "WARDROBE_ITEM_ADD",
@@ -97,11 +99,13 @@ const AC = Object.freeze({
   questComplete:           (questId, xpGained, newNivel) => ({ type: AT.QUEST_COMPLETE, questId, xpGained, newNivel }),
   questsCustomUpdate:      (items) => ({ type: AT.QUESTS_CUSTOM_UPDATE, items }),
   questsDailySync:         (dateKey) => ({ type: AT.QUESTS_DAILY_SYNC, dateKey }),
+  questStart:              (questId) => ({ type: AT.QUEST_START, questId }),
   appSettingsUpdate:       (patch) => ({ type: AT.APP_SETTINGS_UPDATE, patch }),
   calcDailySync:          (dateKey, plan) => ({ type: AT.CALC_DAILY_SYNC, dateKey, plan }),
   calcSessionGenerated:   (payload) => ({ type: AT.CALC_SESSION_GENERATED, payload }),
   calcAnswerSave:         (exerciseId, answer, evaluation) => ({ type: AT.CALC_ANSWER_SAVE, exerciseId, answer, evaluation }),
   calcFieldUpdate:        (key, value) => ({ type: AT.CALC_FIELD_UPDATE, key, value }),
+  calcSettingsUpdate:     (patch) => ({ type: AT.CALC_SETTINGS_UPDATE, patch }),
   wardrobeProfileUpdate:   (patch) => ({ type: AT.WARDROBE_PROFILE_UPDATE, patch }),
   wardrobeItemAdd:         (item) => ({ type: AT.WARDROBE_ITEM_ADD, item }),
   wardrobeItemUpdate:      (id, patch) => ({ type: AT.WARDROBE_ITEM_UPDATE, id, patch }),
@@ -1038,13 +1042,60 @@ function getLifeOSDateKey(date = new Date()) {
 function calculateMissedQuestPenalty(state, completedIds = []) {
   const activeQuests = getActiveQuests(state);
   const completedSet = new Set(Array.isArray(completedIds) ? completedIds : []);
+  const startedSet = new Set(Array.isArray(state?.quests?.startedIds) ? state.quests.startedIds : []);
+  const partialEnabled = state?.appSettings?.penalties?.partialCreditStarted !== false;
   const missedQuests = activeQuests.filter(q => !completedSet.has(q.id));
-  const missedXp = missedQuests.reduce((sum, q) => sum + Math.max(0, Number(q.xp) || 0), 0);
-  return { missedQuests, missedXp };
+  const missedBreakdown = missedQuests.map(q => {
+    const baseXp = Math.max(0, Number(q.xp) || 0);
+    const started = startedSet.has(q.id);
+    const penaltyXp = started && partialEnabled ? Math.ceil(baseXp * 0.5) : baseXp;
+    return { ...q, started, penaltyXp };
+  });
+  const missedXp = missedBreakdown.reduce((sum, q) => sum + q.penaltyXp, 0);
+  return { missedQuests: missedBreakdown, missedXp };
 }
 
 function shouldApplyMissedQuestPenalty(state) {
   return state?.appSettings?.penalties?.missedQuestXp !== false;
+}
+
+function isLifeOSRestDay(state, dateKey = getLifeOSDateKey()) {
+  if (isLifeOSManualRestDay(dateKey)) return true;
+  return Boolean(state?.appSettings?.restDays?.[dateKey]?.enabled);
+}
+
+function getCalculusWeakTopics(calculus, limit = 5) {
+  const rows = [];
+  const current = calculus?.current;
+  const days = [current, ...(Array.isArray(calculus?.history) ? calculus.history : [])].filter(Boolean);
+  for (const day of days) {
+    const exercises = Array.isArray(day.exercises) ? day.exercises : [];
+    const evals = day.evaluationsById || {};
+    for (const ex of exercises) {
+      const ev = evals[ex.id];
+      if (!ev) continue;
+      const score = Number(ev.score);
+      if (!Number.isFinite(score) || score >= 75) continue;
+      rows.push({
+        topic: ex.topic || day.topic || "Tema sin clasificar",
+        errorType: ev.errorType || "Error de procedimiento",
+        score,
+        dateKey: day.dateKey,
+      });
+    }
+  }
+  const grouped = new Map();
+  for (const r of rows) {
+    const key = `${r.topic} · ${r.errorType}`;
+    const prev = grouped.get(key) || { ...r, count:0, avg:0 };
+    prev.count += 1;
+    prev.avg += r.score;
+    grouped.set(key, prev);
+  }
+  return Array.from(grouped.values())
+    .map(r => ({ ...r, avg: Math.round(r.avg / Math.max(r.count, 1)) }))
+    .sort((a,b) => b.count - a.count || a.avg - b.avg)
+    .slice(0, limit);
 }
 
 function normalizeQuestCompletedIdsForDate(completedIds = [], dailyLog = [], dateKey = getLifeOSDateKey()) {
@@ -1087,7 +1138,7 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
   const completedIds = Array.from(new Set((quests.completedIds || []).filter(id => activeIds.has(id))));
   const hasPreviousDay = Boolean(lastResetDate);
   const { missedQuests, missedXp } = calculateMissedQuestPenalty(state, completedIds);
-  const previousDayWasManualRest = Boolean(lastResetDate && isLifeOSManualRestDay(lastResetDate));
+  const previousDayWasManualRest = Boolean(lastResetDate && isLifeOSRestDay(state, lastResetDate));
   const penaltyEnabled = hasPreviousDay && !previousDayWasManualRest && shouldApplyMissedQuestPenalty(state) && missedXp > 0;
   const archiveEntry = hasPreviousDay
     ? {
@@ -1098,6 +1149,7 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
         missedCount: missedQuests.length,
         totalCount: activeIds.size,
         penaltyXp: penaltyEnabled ? missedXp : 0,
+        penaltyBreakdown: missedQuests.map(q => ({ id:q.id, title:q.title, xp:q.xp, penaltyXp:q.penaltyXp, started:Boolean(q.started) })),
         manualRest: previousDayWasManualRest,
         archivedAt: new Date().toISOString(),
       }
@@ -1106,9 +1158,9 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
   const penaltyLog = penaltyEnabled
     ? missedQuests.map(q => ({
         date: new Date().toISOString(),
-        amount: -Math.max(0, Number(q.xp) || 0),
+        amount: -Math.max(0, Number(q.penaltyXp) || 0),
         questId: q.id,
-        action: "missed",
+        action: q.started ? "missed-partial" : "missed",
         missedDateKey: lastResetDate,
       }))
     : [];
@@ -1123,6 +1175,7 @@ function applyDailyQuestReset(state, dateKey = getLifeOSDateKey()) {
     quests: {
       ...quests,
       completedIds: [],
+      startedIds: [],
       dailyHistory: archiveEntry
         ? [...(Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []), archiveEntry].slice(-120)
         : (Array.isArray(quests.dailyHistory) ? quests.dailyHistory : []),
@@ -1153,10 +1206,14 @@ function createAppSettingsInitial() {
       installDismissed: false,
       taskReminders: true,
       notifyTaskStart: true,
+      pendingDigest: true,
+      quietAfterHour: 22,
     },
     penalties: {
       missedQuestXp: true,
+      partialCreditStarted: true,
     },
+    restDays: {},
     backup: {
       lastExportAt: null,
       lastImportAt: null,
@@ -1513,11 +1570,14 @@ function createCalculusInitialState() {
   return {
     current: createCalculusCurrent(),
     history: [],
+    errorBank: [],
+    examSimulations: [],
     settings: {
       dailyExerciseCount: 8,
       weekendExerciseCount: 10,
       examModeExerciseCount: 12,
       strictMode: true,
+      examMode: false,
     },
   };
 }
@@ -1801,7 +1861,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 10; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 11; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1893,6 +1953,18 @@ const MIGRATIONS = Object.freeze({
   }),
   [9]: (snap) => ({
     ...snap,
+    calculus: snap?.calculus && typeof snap.calculus === "object"
+      ? deepMerge(createCalculusInitialState(), snap.calculus)
+      : createCalculusInitialState(),
+  }),
+  [10]: (snap) => ({
+    ...snap,
+    quests: snap?.quests && typeof snap.quests === "object"
+      ? { ...snap.quests, startedIds: Array.isArray(snap.quests.startedIds) ? snap.quests.startedIds : [] }
+      : PERSISTENT_INITIAL.quests,
+    appSettings: snap?.appSettings && typeof snap.appSettings === "object"
+      ? deepMerge(createAppSettingsInitial(), snap.appSettings)
+      : createAppSettingsInitial(),
     calculus: snap?.calculus && typeof snap.calculus === "object"
       ? deepMerge(createCalculusInitialState(), snap.calculus)
       : createCalculusInitialState(),
@@ -2270,6 +2342,7 @@ const PERSISTENT_INITIAL = {
   },
   quests: {
     completedIds: [],
+    startedIds: [],
     dailyHistory: [],
     customItems: null,
     lastResetDate: getLifeOSDateKey(),
@@ -2340,6 +2413,22 @@ function persistentReducer(state, action) {
         quests: {
           ...state.quests,
           completedIds: newCompletadasIds,
+          startedIds: alreadyDone ? (state.quests.startedIds || []) : Array.from(new Set([...(state.quests.startedIds || []), action.questId])),
+        },
+      };
+    }
+
+
+
+    case AT.QUEST_START: {
+      const id = Number(action.questId);
+      if (!Number.isFinite(id)) return state;
+      const startedIds = Array.from(new Set([...(state.quests.startedIds || []), id]));
+      return {
+        ...state,
+        quests: {
+          ...state.quests,
+          startedIds,
         },
       };
     }
@@ -2353,6 +2442,7 @@ function persistentReducer(state, action) {
           ...state.quests,
           customItems: items,
           completedIds: (state.quests.completedIds || []).filter(id => validIds.has(id)),
+          startedIds: (state.quests.startedIds || []).filter(id => validIds.has(id)),
         },
       };
     }
@@ -2614,6 +2704,18 @@ function persistentReducer(state, action) {
             lastErrorType: evaluation?.errorType || current.lastErrorType || null,
             saved: false,
           },
+          errorBank: evaluation ? [
+            ...(Array.isArray(calculus.errorBank) ? calculus.errorBank : []),
+            {
+              dateKey: current.dateKey,
+              exerciseId,
+              topic: current.exercises?.find?.(ex => ex.id === exerciseId)?.topic || current.topic || null,
+              errorType: evaluation.errorType || "Sin categoría",
+              score: Number(evaluation.score) || 0,
+              correct: Boolean(evaluation.correct),
+              savedAt: new Date().toISOString(),
+            },
+          ].slice(-200) : (calculus.errorBank || []),
         },
       };
     }
@@ -2629,6 +2731,20 @@ function persistentReducer(state, action) {
             ...current,
             [action.key]: action.value,
             saved: false,
+          },
+        },
+      };
+    }
+
+    case AT.CALC_SETTINGS_UPDATE: {
+      const calculus = state.calculus || createCalculusInitialState();
+      return {
+        ...state,
+        calculus: {
+          ...calculus,
+          settings: {
+            ...(calculus.settings || createCalculusInitialState().settings),
+            ...(action.patch || {}),
           },
         },
       };
@@ -3434,6 +3550,8 @@ function DashboardView() {
   const triggers     = useMemo(() => SELECTORS.reflectionTriggers(persistent.quests.completedIds, persistent.streak.current, activeQuests), [persistent.quests.completedIds, persistent.streak.current, activeQuests]);
   const missedRisk   = useMemo(() => calculateMissedQuestPenalty(persistent, persistent.quests.completedIds), [persistent, persistent.quests.completedIds]);
   const lastPenalty  = persistent.quests?.lastPenalty;
+  const todayKey     = getLifeOSDateKey();
+  const isRestToday  = Boolean(persistent.appSettings?.restDays?.[todayKey]?.enabled);
 
   const pct = completedSet.size / Math.max(activeQuests.length, 1) * 100;
   const nextQuest = useMemo(() => activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0], [activeQuests, completedSet]);
@@ -3478,6 +3596,14 @@ function DashboardView() {
         <StatCard val={`${persistent.streak.current}d`} label="Racha" icon={Flame} accent="#f87171" sub="¡Mantenela viva!"/>
         <StatCard val={`${completedSet.size}/${activeQuests.length}`} label="Misiones hechas" icon={Target} accent="#34d399"/>
         <StatCard val={`-${missedRisk.missedXp}`} label="XP en riesgo" icon={AlertTriangle} accent={missedRisk.missedXp > 0 ? "#f87171" : "#34d399"} sub={missedRisk.missedXp > 0 ? `${missedRisk.missedQuests.length} pendientes` : "Sin castigo"}/>
+      </div>
+
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"13px 16px", marginBottom:18, borderRadius:13, background:isRestToday ? "rgba(52,211,153,.075)" : "rgba(255,255,255,.035)", border:`1px solid ${isRestToday ? "rgba(52,211,153,.2)" : "rgba(255,255,255,.08)"}` }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:900, color:isRestToday ? "#34d399" : T_COLOR.text }}>{isRestToday ? "Hoy marcado como descanso" : "Día libre planificado"}</div>
+          <div style={{ fontSize:11.5, color:T_COLOR.muted }}>Si de verdad no podés trabajar hoy, no se aplica castigo de XP en el reset.</div>
+        </div>
+        <button onClick={() => pDispatch(AC.appSettingsUpdate({ restDays:{ [todayKey]: isRestToday ? { enabled:false, reason:"Descanso removido", createdAt:new Date().toISOString() } : { enabled:true, reason:"Descanso manual", createdAt:new Date().toISOString() } } }))} style={{ border:"1px solid rgba(52,211,153,.25)", background:isRestToday ? "rgba(52,211,153,.14)" : "rgba(52,211,153,.06)", color:"#34d399", borderRadius:10, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>{isRestToday ? "Quitar descanso" : "Marcar descanso"}</button>
       </div>
 
       {lastPenalty?.penaltyXp > 0 && (
@@ -3610,6 +3736,8 @@ function CalculusTrainerView() {
   const evaluatedCount = Object.keys(current.evaluationsById || {}).length;
   const scoreValues = Object.values(current.evaluationsById || {}).map(e => Number(e.score)).filter(n => Number.isFinite(n));
   const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : null;
+  const weakTopics = useMemo(() => getCalculusWeakTopics(calculus), [calculus]);
+  const examModeOn = Boolean(calculus.settings?.examMode || String(plan.mode || "").toLowerCase().includes("examen") || String(plan.mode || "").toLowerCase().includes("simulación"));
 
   const generatePractice = useCallback(async () => {
     setLoading(true);
@@ -3624,6 +3752,8 @@ function CalculusTrainerView() {
           adaptiveMode,
           settings: calculus.settings || {},
           recentHistory: getCalculusRecentHistory(calculus),
+          weakTopics: getCalculusWeakTopics(calculus),
+          examMode: Boolean(calculus.settings?.examMode || String(plan.mode || "").toLowerCase().includes("examen") || String(plan.mode || "").toLowerCase().includes("simulación")),
           profile: {
             course: "MM201 Cálculo I",
             source: CALCULUS_SOURCE_LABEL,
@@ -3692,9 +3822,14 @@ function CalculusTrainerView() {
             {avgScore !== null && pill(`Promedio ${avgScore}/100`, avgScore >= 75 ? "#34d399" : "#fb923c")}
           </div>
         </div>
-        <button onClick={() => uiDispatch(AC.setView("schedule"))} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:"#cbd5e1", fontWeight:900, cursor:"pointer" }}>
-          Ver horario
-        </button>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button onClick={() => pDispatch(AC.calcSettingsUpdate({ examMode: !examModeOn }))} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(251,191,36,.25)", background:examModeOn ? "rgba(251,191,36,.13)" : "rgba(255,255,255,.04)", color:examModeOn ? "#fbbf24" : "#cbd5e1", fontWeight:900, cursor:"pointer" }}>
+            {examModeOn ? "Modo examen ON" : "Modo examen"}
+          </button>
+          <button onClick={() => uiDispatch(AC.setView("schedule"))} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:"#cbd5e1", fontWeight:900, cursor:"pointer" }}>
+            Ver horario
+          </button>
+        </div>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.15fr) minmax(260px,.85fr)", gap:14 }} className="calc-grid">
@@ -3722,6 +3857,24 @@ function CalculusTrainerView() {
           </div>
         </aside>
       </div>
+
+      {weakTopics.length > 0 && (
+        <section style={{ border:"1px solid rgba(251,146,60,.18)", background:"rgba(251,146,60,.065)", borderRadius:18, padding:14 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, color:"#fdba74", fontWeight:900, marginBottom:8 }}><AlertTriangle size={16}/> Errores frecuentes detectados</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:8 }}>
+            {weakTopics.map(w => <div key={`${w.topic}-${w.errorType}`} style={{ padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ color:"#e2e8f0", fontWeight:900, fontSize:12 }}>{w.topic}</div>
+              <div style={{ color:"#94a3b8", fontSize:11, marginTop:3 }}>{w.errorType} · {w.count} vez/veces · promedio {w.avg}/100</div>
+            </div>)}
+          </div>
+        </section>
+      )}
+
+      {examModeOn && (
+        <section style={{ border:"1px solid rgba(251,191,36,.2)", background:"rgba(251,191,36,.075)", borderRadius:18, padding:14, color:"#fef3c7", fontSize:12, lineHeight:1.6 }}>
+          <b>Modo examen activo:</b> resolvé sin ver pistas, medí el tiempo y corregí al final. LifeOS pedirá más mezcla, dificultad y procedimientos completos.
+        </section>
+      )}
 
       {generated && (
         <section style={{ display:"grid", gap:12 }}>
@@ -5167,7 +5320,7 @@ function FocusSessionView() {
         <ProgresoBar pct={pct} gradient={elapsed >= targetSeconds ? "linear-gradient(90deg,#fbbf24,#f97316)" : "linear-gradient(90deg,#7c3aed,#06b6d4)"} height={8}/>
 
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:18 }}>
-          <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); setRunning(v => !v); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+          <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); if (!running && selectedQuest) pDispatch(AC.questStart(selectedQuest.id)); setRunning(v => !v); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
             {running ? <Pause size={16}/> : <Play size={16}/>} {running ? "Pausar" : "Iniciar"}
           </button>
           <button onClick={() => { setRunning(false); setElapsed(0); soundedRef.current = false; }} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:T_COLOR.muted, borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer" }}>
@@ -6106,6 +6259,9 @@ function SettingsView() {
         <button onClick={() => pDispatch(AC.appSettingsUpdate({ penalties:{ missedQuestXp: !(persistent.appSettings?.penalties?.missedQuestXp !== false) } }))} style={{ border:"1px solid rgba(248,113,113,.25)", background:(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "rgba(248,113,113,.08)" : "rgba(255,255,255,.03)", color:(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "#f87171" : T_COLOR.muted, borderRadius:10, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
           Castigo por misiones fallidas: {(persistent.appSettings?.penalties?.missedQuestXp !== false) ? "ON" : "OFF"}
         </button>
+        <button onClick={() => pDispatch(AC.appSettingsUpdate({ penalties:{ partialCreditStarted: !(persistent.appSettings?.penalties?.partialCreditStarted !== false) } }))} style={{ border:"1px solid rgba(251,191,36,.25)", background:(persistent.appSettings?.penalties?.partialCreditStarted !== false) ? "rgba(251,191,36,.08)" : "rgba(255,255,255,.03)", color:(persistent.appSettings?.penalties?.partialCreditStarted !== false) ? "#fbbf24" : T_COLOR.muted, borderRadius:10, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
+          Si inicié pero no terminé: {(persistent.appSettings?.penalties?.partialCreditStarted !== false) ? "pierde 50%" : "pierde 100%"}
+        </button>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }} className="mob-layout-grid">
@@ -6700,6 +6856,16 @@ export default function LifeOS() {
         if (prefs.notifyTaskStart && diff <= 0 && diff >= -1 && !notificationSentRef.current.has(startKey)) {
           notificationSentRef.current.add(startKey);
           showLifeOSLocalNotification("LifeOS", `Ahora toca: ${quest.title}`, `lifeos-${startKey}`);
+        }
+      }
+      const quietHour = Math.max(18, Math.min(23, Math.floor(Number(prefs.quietAfterHour) || 22)));
+      const digestKey = `${dateKey}:pending-digest`;
+      if (prefs.pendingDigest && now.getHours() === Math.max(19, quietHour - 1) && now.getMinutes() <= 1 && !notificationSentRef.current.has(digestKey)) {
+        const done = new Set(persistentRef.current?.quests?.completedIds || []);
+        const pending = quests.filter(q => !done.has(q.id));
+        if (pending.length > 0) {
+          notificationSentRef.current.add(digestKey);
+          showLifeOSLocalNotification("LifeOS", `Te quedan ${pending.length} misiones pendientes`, `lifeos-${digestKey}`);
         }
       }
     };
