@@ -289,7 +289,7 @@ function getActiveQuests(persistentState) {
 
 
 // ── Rocket League static training system ────────────────────────
-// Custom Training only: Epic-safe, no Steam Workshop dependency.
+// Epic-safe custom training + optional Workshop maps (BakkesMod / Workshop Map Loader).
 
 const ROCKET_LEAGUE_SESSION_MINUTES = 60;
 const ROCKET_LEAGUE_PARENT_QUEST_ID = 2;
@@ -298,7 +298,7 @@ const ROCKET_LEAGUE_PROFILE = Object.freeze({
   duel: "1v1 Plat I",
   doubles: "2v2 Plat III",
   standard: "3v3 Plat III",
-  platform: "Epic · no workshop",
+  platform: "Epic + Workshop maps",
   target: "Plat III → Diamond",
 });
 
@@ -317,6 +317,8 @@ const ROCKET_LEAGUE_RECOVERY_TIPS = Object.freeze([
   "Después de cada tiro, buscá pad pequeño antes de mirar si fue gol.",
   "Si caés en pared, convertí la caída en wavedash o salida lateral, no frenes.",
   "En defensa, salvar al centro cuenta como error: priorizá esquina o lateral.",
+  "Cuando fallés un tiro, tu primera mecánica es recovery; no perseguir la pelota sin boost.",
+  "Si quedás mirando hacia tu arco después de un challenge, half flip + pad pequeño antes de volver a saltar.",
 ]);
 
 const ROCKET_LEAGUE_PACKS = Object.freeze({
@@ -407,11 +409,50 @@ const ROCKET_LEAGUE_PACKS = Object.freeze({
   },
 });
 
+const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
+  dribbleChallenge2: {
+    name: "Dribble Challenge #2",
+    source: "Workshop / BakkesMod",
+    focus: "dribbling en suelo, balance y control fino",
+  },
+  lethamyrRings: {
+    name: "Lethamyr's Giant Rings Map",
+    source: "Workshop / Lethamyr",
+    focus: "aerial control y air roll sin depender de la pelota",
+  },
+  speedJumpRings2: {
+    name: "Speed Jump: Rings 2 - By dmc",
+    source: "Workshop",
+    focus: "control aéreo, boost management y recoveries al caer",
+  },
+  hornetsNest: {
+    name: "Hornets Nest",
+    source: "Workshop",
+    focus: "recoveries, lectura del carro y control bajo presión",
+  },
+  airDribbleGauntlet: {
+    name: "Air Dribble Gauntlet 1/2",
+    source: "Lethamyr / Workshop",
+    focus: "ground-to-air y air dribble básico por niveles",
+  },
+  whackAMole: {
+    name: "Speed Training: Whack a Mole",
+    source: "Lethamyr",
+    focus: "car control, boost efficiency, aerials y recoveries",
+  },
+  noobDribble: {
+    name: "Noob Dribble",
+    source: "Workshop",
+    focus: "dribbling más suave para calentar sin frustrarte",
+  },
+});
+
 const RL_SUBTASK_TYPES = Object.freeze({
   FREEPLAY: "Freeplay",
   SPEEDFLIP: "Speedflip",
   MECHANIC: "Mecánica",
   PACK: "Training Pack",
+  WORKSHOP: "Workshop Map",
   MATCHES: "Partidas",
   MENTAL: "Mental",
 });
@@ -421,41 +462,9 @@ const RL_FREEPLAY_SUBTASK = Object.freeze({
   title: "Freeplay agresivo",
   type: RL_SUBTASK_TYPES.FREEPLAY,
   minutes: 10,
-  instruction: "Sin ranked frío: powershots, recoveries, pads pequeños y cero pausa entre toques.",
+  instruction: "Bloque fijo diario: powershots, recoveries, pads pequeños y cero pausa entre toques. No ranked frío.",
   focus: "ritmo + confianza",
   accent: "#22d3ee",
-});
-
-const RL_SPEEDFLIP_LEFT_SUBTASK = Object.freeze({
-  id: "speedflips-left",
-  title: "Speedflips · lado izquierdo",
-  type: RL_SUBTASK_TYPES.SPEEDFLIP,
-  minutes: 5,
-  pack: ROCKET_LEAGUE_PACKS.speedflipMusty,
-  instruction: "5 min desde el kickoff izquierdo: flip cancel limpio, aterrizaje recto y contacto consistente.",
-  focus: "lado izquierdo",
-  accent: "#fbbf24",
-});
-
-const RL_SPEEDFLIP_RIGHT_SUBTASK = Object.freeze({
-  id: "speedflips-right",
-  title: "Speedflips · lado derecho",
-  type: RL_SUBTASK_TYPES.SPEEDFLIP,
-  minutes: 5,
-  pack: ROCKET_LEAGUE_PACKS.speedflipMusty,
-  instruction: "5 min desde el kickoff derecho: misma técnica, sin apurarte antes de controlar el cancel.",
-  focus: "lado derecho",
-  accent: "#f59e0b",
-});
-
-const RL_DRIBBLE_FLICK_SUBTASK = Object.freeze({
-  id: "dribble-flicks-fixed",
-  title: "Dribbling + flicks básicos",
-  type: RL_SUBTASK_TYPES.MECHANIC,
-  minutes: 10,
-  instruction: "Pelota encima del carro de esquina a esquina; terminá cada intento con front flick o diagonal flick simple. Si se cae, reset mental y repetí.",
-  focus: "control de suelo → amenaza real",
-  accent: "#fb7185",
 });
 
 const RL_ONE_V_ONE_SUBTASK = Object.freeze({
@@ -465,135 +474,19 @@ const RL_ONE_V_ONE_SUBTASK = Object.freeze({
   minutes: 0,
   targetCount: 3,
   noTimer: true,
-  instruction: "Jugá 3 partidas de 1v1 como práctica real: kickoff, paciencia, no regalar posesión y reset mental antes de jugar con amigos.",
+  instruction: "Bloque fijo diario: jugá 3 partidas de 1v1 como práctica real de kickoff, paciencia, shadow, 50s y reset mental antes de jugar con amigos.",
   focus: "3 partidas · warmup competitivo",
   accent: "#60a5fa",
 });
 
-const RL_MENTAL_SUBTASK = Object.freeze({
-  id: "mental",
-  title: "Mental reset + revisión corta",
-  type: RL_SUBTASK_TYPES.MENTAL,
-  minutes: 10,
-  instruction: "Anotá un error repetido, una cosa buena y el momento donde empezó el tilt.",
-  focus: "menos tilt + mejores decisiones",
-  accent: "#a78bfa",
-});
-
-const makeRlMechanicSubtask = (id, title, focus, instruction, accent = "#fb7185") => Object.freeze({
+const makeRlMechanicSubtask = (id, title, focus, instruction, minutes = 10, accent = "#fb7185") => Object.freeze({
   id,
   title,
   type: RL_SUBTASK_TYPES.MECHANIC,
-  minutes: 10,
+  minutes,
   instruction,
   focus,
   accent,
-});
-
-const RL_MECHANIC_DRILLS = Object.freeze({
-  driftCuts: makeRlMechanicSubtask(
-    "mechanic-drift-cuts",
-    "Drift cuts",
-    "derrapar para agarrar balón y cambiar dirección",
-    "Freeplay: llevá la pelota hacia un lado, powerslide cut para recuperarla y salí con toque controlado. No busqués velocidad; buscá control."
-  ),
-  basicFlicks: makeRlMechanicSubtask(
-    "mechanic-basic-flicks",
-    "Flicks básicos",
-    "dribbling estable → flick simple",
-    "Arrancá con pelota encima del carro. Practicá front flick y diagonal flick suave; si se cae, reiniciá sin tiltearte."
-  ),
-  groundToAirIntro: makeRlMechanicSubtask(
-    "mechanic-ground-to-air",
-    "Ground to air dribble intro",
-    "subir la pelota sin regalar posesión",
-    "Desde dribble en suelo: primer toque levantando, salto controlado y un solo toque aéreo. La meta es setup limpio, no clip.",
-    "#38bdf8"
-  ),
-  wallControl: makeRlMechanicSubtask(
-    "mechanic-wall-control",
-    "Wall control básico",
-    "primer toque desde pared + recovery",
-    "Subí la pelota a pared, tocá hacia adentro y aterrizá con powerslide. Si el toque sale mal, priorizá recovery inmediato.",
-    "#60a5fa"
-  ),
-  recoveryChain: makeRlMechanicSubtask(
-    "mechanic-recoveries",
-    "Recoveries aplicadas",
-    "wavedash, powerslide landing y momentum",
-    "Freeplay rápido: cada tiro debe terminar con aterrizaje útil. Wavedash al caer, powerslide al girar y buscar pad pequeño.",
-    "#34d399"
-  ),
-  savePathing: makeRlMechanicSubtask(
-    "mechanic-save-pathing",
-    "Salvadas + salida limpia",
-    "save sin regalar rebote al centro",
-    "Simulá defensa: salvá hacia esquina, agarrá pad pequeño y salí por lateral. Si despejás al centro, repetí.",
-    "#f472b6"
-  ),
-  shadowPatience: makeRlMechanicSubtask(
-    "mechanic-shadow-patience",
-    "Shadow patience",
-    "aguantar sin tirarte de más",
-    "Freeplay/privada: practicá retroceder con cámara al balón, cubrir net y desafiar solo cuando el rival perdería control.",
-    "#818cf8"
-  ),
-  lowBoostDefense: makeRlMechanicSubtask(
-    "mechanic-low-boost-defense",
-    "Defensa con poco boost",
-    "pads pequeños + paciencia defensiva",
-    "Empezá con poco boost: cubrí net, tomá pads chicos y despejá a esquina. No saltes si el primer toque rival todavía no te amenaza.",
-    "#38bdf8"
-  ),
-  firstTouchControl: makeRlMechanicSubtask(
-    "mechanic-first-touch",
-    "Primer toque útil",
-    "control antes que pegar por pegar",
-    "En freeplay, cada balón debe tener intención: controlar, tirar, fakear o salir a pared. Si el toque te aleja de la jugada, repetí.",
-    "#22c55e"
-  ),
-  airDribbleIntro: makeRlMechanicSubtask(
-    "mechanic-air-dribble-intro",
-    "Air dribble intro",
-    "toques aéreos simples, sin freestyle",
-    "Usá pared o setup suave. Meta: 1–2 toques controlados y recovery. Si no hay setup limpio, no fuerces el aire.",
-    "#22d3ee"
-  ),
-  airRollShotControl: makeRlMechanicSubtask(
-    "mechanic-air-roll-shot-control",
-    "Tiros con air roll",
-    "alinear el carro antes del impacto",
-    "Pack + freeplay: saltá, usá air roll solo para corregir ángulo y pegá con potencia. No gires por girar; air roll termina antes del contacto.",
-    "#e879f9"
-  ),
-  halfFlipRecovery: makeRlMechanicSubtask(
-    "mechanic-half-flip-recovery",
-    "Half flip recovery",
-    "volver a la jugada sin gastar boost de más",
-    "Desde reversa o mala orientación: half flip, cancel limpio, enderezar con air roll/powerslide y salir hacia pad pequeño.",
-    "#34d399"
-  ),
-  wallWavedash: makeRlMechanicSubtask(
-    "mechanic-wall-wavedash",
-    "Wall wavedash + salida",
-    "bajar de pared sin perder velocidad",
-    "Subí a pared, soltate, wavedash al piso y salí por lateral. Si aterrizás plano y frenás, repetí el intento.",
-    "#38bdf8"
-  ),
-  awkwardLanding: makeRlMechanicSubtask(
-    "mechanic-awkward-landing",
-    "Aterrizajes incómodos",
-    "corregir carro en el aire y caer útil",
-    "En freeplay tirate incómodo, girá el carro para caer con ruedas y mantené powerslide. Meta: no quedar muerto después del toque.",
-    "#fbbf24"
-  ),
-  goalpostRecovery: makeRlMechanicSubtask(
-    "mechanic-goalpost-recovery",
-    "Poste → recovery defensiva",
-    "usar postes y pared de arco para volver rápido",
-    "Saltá desde defensa, tocá/salvá y usá poste o pared del arco para caer mirando hacia la jugada. Evitá quedar dentro de la red.",
-    "#60a5fa"
-  ),
 });
 
 const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") => Object.freeze({
@@ -607,152 +500,222 @@ const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") =
   accent,
 });
 
-const makeRlPlan = (id, title, focus, mechanic, pack, instruction) => Object.freeze({
-  id: `${id}-60m-v3`,
-  title,
-  focus,
-  minutes: ROCKET_LEAGUE_SESSION_MINUTES,
-  subtasks: Object.freeze([
-    RL_FREEPLAY_SUBTASK,
-    RL_SPEEDFLIP_LEFT_SUBTASK,
-    RL_SPEEDFLIP_RIGHT_SUBTASK,
-    RL_DRIBBLE_FLICK_SUBTASK,
-    mechanic,
-    makeRlPackSubtask("pack-random", pack, 10, instruction, "#34d399"),
-    RL_ONE_V_ONE_SUBTASK,
-    RL_MENTAL_SUBTASK,
-  ]),
+const makeRlWorkshopSubtask = (id, workshop, minutes, instruction, accent = "#38bdf8") => Object.freeze({
+  id,
+  title: workshop.name,
+  type: RL_SUBTASK_TYPES.WORKSHOP,
+  minutes,
+  workshop,
+  instruction,
+  focus: workshop.focus,
+  accent,
 });
 
+const makeRlMentalSubtask = (id, title, instruction, minutes = 5) => Object.freeze({
+  id,
+  title,
+  type: RL_SUBTASK_TYPES.MENTAL,
+  minutes,
+  instruction,
+  focus: "menos tilt + mejores decisiones",
+  accent: "#a78bfa",
+});
+
+const RL_MECHANIC_DRILLS = Object.freeze({
+  speedflipBothSides: makeRlMechanicSubtask(
+    "mechanic-speedflip-both-sides",
+    "Speedflips · ambos lados",
+    "kickoff izquierdo + derecho sin hacerlo diario",
+    "5 min lado izquierdo + 5 min lado derecho. Priorizá aterrizaje recto y contacto; si falla el cancel, bajá velocidad.",
+    10,
+    "#fbbf24"
+  ),
+  driftCuts: makeRlMechanicSubtask(
+    "mechanic-drift-cuts",
+    "Drift cuts",
+    "derrapar para agarrar balón y cambiar dirección",
+    "Llevá la pelota hacia un lado, powerslide cut para recuperarla y salí con toque controlado. No busqués velocidad; buscá control.",
+    10
+  ),
+  basicFlicks: makeRlMechanicSubtask(
+    "mechanic-basic-flicks",
+    "Flicks básicos",
+    "dribbling estable → flick simple",
+    "Arrancá con pelota encima del carro. Practicá front flick y diagonal flick suave; si se cae, reiniciá sin tiltearte.",
+    10
+  ),
+  groundToAirIntro: makeRlMechanicSubtask(
+    "mechanic-ground-to-air",
+    "Ground to air dribble intro",
+    "subir la pelota sin regalar posesión",
+    "Desde dribble en suelo: primer toque levantando, salto controlado y un solo toque aéreo. La meta es setup limpio, no clip.",
+    10,
+    "#38bdf8"
+  ),
+  wallControl: makeRlMechanicSubtask(
+    "mechanic-wall-control",
+    "Wall control básico",
+    "primer toque desde pared + recovery",
+    "Subí la pelota a pared, tocá hacia adentro y aterrizá con powerslide. Si el toque sale mal, priorizá recovery inmediato.",
+    10,
+    "#60a5fa"
+  ),
+  recoveryChain: makeRlMechanicSubtask(
+    "mechanic-recoveries",
+    "Recoveries aplicadas",
+    "wavedash, powerslide landing y momentum",
+    "Cada tiro debe terminar con aterrizaje útil. Wavedash al caer, powerslide al girar y buscar pad pequeño.",
+    10,
+    "#34d399"
+  ),
+  savePathing: makeRlMechanicSubtask(
+    "mechanic-save-pathing",
+    "Salvadas + salida limpia",
+    "save sin regalar rebote al centro",
+    "Salvá hacia esquina, agarrá pad pequeño y salí por lateral. Si despejás al centro, repetí.",
+    10,
+    "#f472b6"
+  ),
+  shadowPatience: makeRlMechanicSubtask(
+    "mechanic-shadow-patience",
+    "Shadow patience",
+    "aguantar sin tirarte de más",
+    "Practicá retroceder con cámara al balón, cubrir net y desafiar solo cuando el rival perdería control.",
+    10,
+    "#818cf8"
+  ),
+  lowBoostDefense: makeRlMechanicSubtask(
+    "mechanic-low-boost-defense",
+    "Defensa con poco boost",
+    "pads pequeños + paciencia defensiva",
+    "Empezá con poco boost: cubrí net, tomá pads chicos y despejá a esquina. No saltes si el primer toque rival todavía no amenaza.",
+    10,
+    "#38bdf8"
+  ),
+  firstTouchControl: makeRlMechanicSubtask(
+    "mechanic-first-touch",
+    "Primer toque útil",
+    "control antes que pegar por pegar",
+    "Cada balón debe tener intención: controlar, tirar, fakear o salir a pared. Si el toque te aleja de la jugada, repetí.",
+    10,
+    "#22c55e"
+  ),
+  airDribbleIntro: makeRlMechanicSubtask(
+    "mechanic-air-dribble-intro",
+    "Air dribble intro",
+    "toques aéreos simples, sin freestyle",
+    "Usá pared o setup suave. Meta: 1–2 toques controlados y recovery. Si no hay setup limpio, no fuerces el aire.",
+    10,
+    "#22d3ee"
+  ),
+  airRollShotControl: makeRlMechanicSubtask(
+    "mechanic-air-roll-shot-control",
+    "Tiros con air roll",
+    "alinear el carro antes del impacto",
+    "Saltá, usá air roll solo para corregir ángulo y pegá con potencia. No gires por girar; air roll termina antes del contacto.",
+    10,
+    "#e879f9"
+  ),
+  halfFlipRecovery: makeRlMechanicSubtask(
+    "mechanic-half-flip-recovery",
+    "Half flip recovery",
+    "volver a la jugada sin gastar boost de más",
+    "Desde reversa o mala orientación: half flip, cancel limpio, enderezar con air roll/powerslide y salir hacia pad pequeño.",
+    10,
+    "#34d399"
+  ),
+  wallWavedash: makeRlMechanicSubtask(
+    "mechanic-wall-wavedash",
+    "Wall wavedash + salida",
+    "bajar de pared sin perder velocidad",
+    "Subí a pared, soltate, wavedash al piso y salí por lateral. Si aterrizás plano y frenás, repetí.",
+    10,
+    "#38bdf8"
+  ),
+  awkwardLanding: makeRlMechanicSubtask(
+    "mechanic-awkward-landing",
+    "Aterrizajes incómodos",
+    "corregir carro en el aire y caer útil",
+    "Tirate incómodo, girá el carro para caer con ruedas y mantené powerslide. Meta: no quedar muerto después del toque.",
+    10,
+    "#fbbf24"
+  ),
+  goalpostRecovery: makeRlMechanicSubtask(
+    "mechanic-goalpost-recovery",
+    "Poste → recovery defensiva",
+    "usar postes y pared de arco para volver rápido",
+    "Saltá desde defensa, tocá/salvá y usá poste o pared del arco para caer mirando hacia la jugada. Evitá quedar dentro de la red.",
+    10,
+    "#60a5fa"
+  ),
+});
+
+const makeRlPlan = (id, title, focus, variableBlocks) => {
+  const blocks = [RL_FREEPLAY_SUBTASK, ...variableBlocks, RL_ONE_V_ONE_SUBTASK];
+  const timedMinutes = blocks.reduce((sum, task) => sum + Math.max(0, Number(task.minutes) || 0), 0);
+  return Object.freeze({
+    id: `${id}-60m-flex-v4`,
+    title,
+    focus,
+    minutes: timedMinutes,
+    subtasks: Object.freeze(blocks),
+  });
+};
+
 const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan(
-    "drift-cut-day",
-    "Drift Cut + Shot Control",
-    "Derrapar para recuperar balón y terminar con tiro simple",
-    RL_MECHANIC_DRILLS.driftCuts,
-    ROCKET_LEAGUE_PACKS.powershots,
-    "Después del drift cut, tirá fuerte solo si el balón queda delante. Si queda atrás, control primero."
-  ),
-  makeRlPlan(
-    "flick-day",
-    "Flick Threat Day",
-    "Convertir tu dribbling de suelo en amenaza real",
-    RL_MECHANIC_DRILLS.firstTouchControl,
-    ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss,
-    "No fallar tiros ganables después del primer toque o flick. Apuntá grande, luego precisión."
-  ),
-  makeRlPlan(
-    "saves-day",
-    "Saves Under Pressure",
-    "Salvar sin pánico y despejar con intención",
-    RL_MECHANIC_DRILLS.savePathing,
-    ROCKET_LEAGUE_PACKS.hardSaves,
-    "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento."
-  ),
-  makeRlPlan(
-    "shadow-day",
-    "Shadow Defense + Patience",
-    "Defender sin overcommit ni regalar espacio",
+  makeRlPlan("speedflip-recovery", "Speedflip + Recovery Day", "Kickoff útil, caída limpia y velocidad gratis", [
+    RL_MECHANIC_DRILLS.speedflipBothSides,
+    makeRlWorkshopSubtask("workshop-hornets-nest", ROCKET_LEAGUE_WORKSHOP_MAPS.hornetsNest, 15, "Hacé rutas cortas. El objetivo no es terminar el mapa; es caer con ruedas, powerslide y volver al control.", "#34d399"),
+    makeRlPackSubtask("pack-drift-wavedash", ROCKET_LEAGUE_PACKS.driftWavedashRecovery, 10, "Derrape + wavedash después de cada mala caída. Repetí hasta que la salida sea natural.", "#22c55e"),
+    makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 15),
+  ]),
+  makeRlPlan("dribble-flick", "Dribble + Flick Day", "Control de suelo que amenaza gol", [
+    makeRlWorkshopSubtask("workshop-dribble-challenge-2", ROCKET_LEAGUE_WORKSHOP_MAPS.dribbleChallenge2, 15, "No corras. Balanceá la pelota y reiniciá cuando se caiga. Meta: control estable, no speedrun.", "#fb7185"),
+    RL_MECHANIC_DRILLS.basicFlicks,
+    makeRlPackSubtask("pack-ground-shots", ROCKET_LEAGUE_PACKS.groundShots, 10, "Terminá los dribbles con tiro simple. Si el tiro queda débil, revisá el primer toque.", "#34d399"),
+    makeRlMentalSubtask("mental-flick-review", "Revisión de posesión", "Escribí cuándo regalaste la pelota por apurarte. La respuesta suele ser: primer toque sin intención.", 15),
+  ]),
+  makeRlPlan("air-roll-shots", "Air Roll Shot Day", "Ajustar el carro para tirar fuerte sin girar por girar", [
+    makeRlWorkshopSubtask("workshop-rings-air-roll", ROCKET_LEAGUE_WORKSHOP_MAPS.lethamyrRings, 15, "Rings suave: air roll solo para alinear. Si perdés control, soltá air roll y estabilizá.", "#e879f9"),
+    RL_MECHANIC_DRILLS.airRollShotControl,
+    makeRlPackSubtask("pack-air-roll-shots", ROCKET_LEAGUE_PACKS.airRollShots, 10, "Buscá contacto limpio: air roll corrige ángulo, el flip genera potencia.", "#e879f9"),
+    makeRlMentalSubtask("mental-airroll-review", "Air roll review", "Marcá si giraste por costumbre o por corrección real. Menos giro, más impacto limpio.", 15),
+  ]),
+  makeRlPlan("saves-shadow", "Saves + Shadow Day", "Defender sin pánico ni clears al centro", [
     RL_MECHANIC_DRILLS.shadowPatience,
-    ROCKET_LEAGUE_PACKS.shadowDefense,
-    "Mantené distancia útil: ni muy encima ni regalando cancha. Desafiá cuando el rival pierda control."
-  ),
-  makeRlPlan(
-    "low-boost-day",
-    "Low Boost Defense",
-    "Sobrevivir con pads pequeños y clear seguro",
-    RL_MECHANIC_DRILLS.lowBoostDefense,
-    ROCKET_LEAGUE_PACKS.saveConsistency,
-    "No dependás de boost grande: salvada, pad pequeño, salida por lateral."
-  ),
-  makeRlPlan(
-    "ground-to-air-day",
-    "Ground to Air Intro",
-    "Aprender setups limpios antes de intentar air dribble real",
-    RL_MECHANIC_DRILLS.groundToAirIntro,
-    ROCKET_LEAGUE_PACKS.aerialsOffWall,
-    "Salí al aire solo cuando el primer toque levanta bien la pelota. Setup limpio antes que clip."
-  ),
-  makeRlPlan(
-    "wall-control-day",
-    "Wall Control Day",
-    "Pared útil, no freestyle",
+    makeRlPackSubtask("pack-hard-saves", ROCKET_LEAGUE_PACKS.hardSaves, 10, "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento.", "#f472b6"),
+    makeRlPackSubtask("pack-shadow-defense", ROCKET_LEAGUE_PACKS.shadowDefense, 10, "Aguantá la distancia. No te tires si el rival todavía no perdió control.", "#818cf8"),
+    makeRlWorkshopSubtask("workshop-whack-a-mole", ROCKET_LEAGUE_WORKSHOP_MAPS.whackAMole, 15, "Usalo como defensa activa: llegar, tocar, caer bien y moverte al siguiente objetivo.", "#38bdf8"),
+    makeRlMentalSubtask("mental-defense-review", "Defensa sin tilt", "Anotá si defendiste por miedo o por lectura. La meta es paciencia, no adivinar.", 5),
+  ]),
+  makeRlPlan("wall-backboard", "Wall + Backboard Day", "Pared útil, lectura y recovery", [
     RL_MECHANIC_DRILLS.wallControl,
-    ROCKET_LEAGUE_PACKS.backboardReads,
-    "Leé pared antes de saltar; si llegás tarde, defendé. Aterrizá listo para la siguiente jugada."
-  ),
-  makeRlPlan(
-    "recovery-speed-day",
-    "Recovery Speed",
-    "Ser más rápido sin jugar desesperado",
-    RL_MECHANIC_DRILLS.recoveryChain,
-    ROCKET_LEAGUE_PACKS.basicRebounds,
-    "Cada rebote termina en recovery, no en mirar la pelota. Wavedash o powerslide al caer."
-  ),
-  makeRlPlan(
-    "air-dribble-intro-day",
-    "Air Dribble Intro",
-    "Toques aéreos básicos sin quemar fundamentos",
-    RL_MECHANIC_DRILLS.airDribbleIntro,
-    ROCKET_LEAGUE_PACKS.platDiamond,
-    "Uno o dos toques limpios valen más que perder control en el aire. Recovery obligatorio."
-  ),
-  makeRlPlan(
-    "air-roll-shot-day",
-    "Air Roll Shot Control",
-    "Usar air roll para ajustar tiros, no para girar sin propósito",
-    RL_MECHANIC_DRILLS.airRollShotControl,
-    ROCKET_LEAGUE_PACKS.airRollShots,
-    "Buscá contacto limpio: air roll corrige el ángulo, el flip genera potencia. Si whiffeás, reducí velocidad."
-  ),
-  makeRlPlan(
-    "directional-air-roll-day",
-    "Directional Air Roll + Shot Setup",
-    "Control aéreo corto con final de tiro",
-    RL_MECHANIC_DRILLS.airRollShotControl,
-    ROCKET_LEAGUE_PACKS.directionalAirRoll,
-    "No mantengás air roll todo el tiempo. Ajustá, estabilizá el carro y pegá con intención."
-  ),
-  makeRlPlan(
-    "half-flip-recovery-day",
-    "Half Flip + Recovery Day",
-    "Volver a la jugada rápido después de mala orientación",
-    RL_MECHANIC_DRILLS.halfFlipRecovery,
-    ROCKET_LEAGUE_PACKS.recoveryTraining,
-    "Cada intento termina con salida hacia pad pequeño. El objetivo es quedar jugable, no solo hacer el half flip."
-  ),
-  makeRlPlan(
-    "wavedash-recovery-day",
-    "Wavedash Recovery Day",
-    "Convertir paredes y caídas en velocidad gratis",
-    RL_MECHANIC_DRILLS.wallWavedash,
-    ROCKET_LEAGUE_PACKS.driftWavedashRecovery,
-    "Si tocás pared, pensá salida: wavedash, powerslide y pad. No te quedés mirando la pelota."
-  ),
-  makeRlPlan(
-    "awkward-recovery-day",
-    "Awkward Landing Control",
-    "Caer bien después de tiros, saves y aerials fallidos",
+    makeRlPackSubtask("pack-backboard", ROCKET_LEAGUE_PACKS.backboardReads, 10, "Leé pared antes de saltar; si llegás tarde, defendé. Aterrizá listo para la siguiente jugada.", "#60a5fa"),
+    makeRlWorkshopSubtask("workshop-speed-jump-rings-2", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings2, 15, "Rings para control y boost. Si chocás mucho, bajá velocidad y priorizá ruta limpia.", "#22d3ee"),
+    makeRlPackSubtask("pack-aerials-off-wall", ROCKET_LEAGUE_PACKS.aerialsOffWall, 10, "Salidas de pared con intención. Si el setup es malo, no fuerces el aerial.", "#38bdf8"),
+    makeRlMentalSubtask("mental-wall-review", "Wall review", "Escribí si saltaste tarde o temprano. Ajustar timing vale más que pegar fuerte.", 5),
+  ]),
+  makeRlPlan("ground-to-air", "Ground to Air Day", "Levantar pelota sin regalar posesión", [
+    makeRlWorkshopSubtask("workshop-air-dribble-gauntlet", ROCKET_LEAGUE_WORKSHOP_MAPS.airDribbleGauntlet, 15, "Usá niveles fáciles. Meta: setup limpio + 1 toque útil. Nada de forzar clips.", "#22d3ee"),
+    RL_MECHANIC_DRILLS.groundToAirIntro,
+    makeRlPackSubtask("pack-plat-diamond", ROCKET_LEAGUE_PACKS.platDiamond, 10, "Aplicá lo básico: primer toque, setup, decisión. Si no hay control, no salgas al aire.", "#34d399"),
     RL_MECHANIC_DRILLS.awkwardLanding,
-    ROCKET_LEAGUE_PACKS.recoveryTraining,
-    "Tirá el carro incómodo y recuperá orientación. Si frenás completamente, repetí hasta salir con momentum."
-  ),
-  makeRlPlan(
-    "goalpost-recovery-day",
-    "Goalpost Recovery + Saves",
-    "Salvar y salir de la red sin quedarte muerto",
-    RL_MECHANIC_DRILLS.goalpostRecovery,
-    ROCKET_LEAGUE_PACKS.overheadSaves,
-    "Después de salvar, pensá segunda jugada: poste, pared, pad pequeño y posición defensiva."
-  ),
-  makeRlPlan(
-    "one-v-one-day",
-    "1v1 Decision Day",
-    "No regalar posesión y castigar errores",
+    makeRlMentalSubtask("mental-airdribble-review", "Setup review", "Anotá si el primer toque levantó bien la pelota o si empezaste el air dribble perdido.", 10),
+  ]),
+  makeRlPlan("low-boost-rebounds", "Low Boost + Rebounds", "Jugar rápido sin depender de boost grande", [
+    RL_MECHANIC_DRILLS.lowBoostDefense,
+    makeRlPackSubtask("pack-basic-rebounds", ROCKET_LEAGUE_PACKS.basicRebounds, 10, "Leé el rebote antes de saltar. Si llegás tarde, fake challenge y recuperá.", "#fbbf24"),
+    makeRlWorkshopSubtask("workshop-noob-dribble", ROCKET_LEAGUE_WORKSHOP_MAPS.noobDribble, 15, "Dribbling suave para control fino. No necesitás terminarlo: necesitás tocar mejor.", "#fb7185"),
+    RL_MECHANIC_DRILLS.halfFlipRecovery,
+    makeRlMentalSubtask("mental-boost-review", "Boost review", "Anotá cuándo buscaste boost grande y dejaste la jugada. Cambiá por pads pequeños.", 5),
+  ]),
+  makeRlPlan("one-v-one-decision", "1v1 Decision Day", "No regalar posesión y castigar errores", [
     RL_MECHANIC_DRILLS.firstTouchControl,
-    ROCKET_LEAGUE_PACKS.groundShots,
-    "Tiro simple, fake si el rival se tira, recovery inmediato. No regales la pelota por apurarte."
-  ),
+    makeRlPackSubtask("pack-shots-miss", ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, 10, "No fallar tiros ganables. Primero arco grande, luego precisión.", "#34d399"),
+    RL_MECHANIC_DRILLS.driftCuts,
+    makeRlPackSubtask("pack-powershots", ROCKET_LEAGUE_PACKS.powershots, 10, "Tirá fuerte solo si el balón queda delante. Si queda atrás, control primero.", "#fbbf24"),
+    makeRlMentalSubtask("mental-1v1-review", "1v1 review", "Regla: si perdés 2 seguidas por tilt, parás ranked. El 1v1 es práctica, no castigo.", 10),
+  ]),
 ]);
 
 function getRocketLeagueDateKey(date = new Date()) {
@@ -4116,6 +4079,21 @@ function RocketLeagueView() {
   const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
   const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
 
+  const markTilted = useCallback(() => {
+    unlockLifeOSAudio();
+    playLifeOSSound("timer");
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([180, 80, 180]);
+    const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const previousNote = String(mental.note || "").trim();
+    const line = `[${stamp}] Estoy tilteado: parar ranked, 5 min freeplay suave y volver solo si bajo a 2/5.`;
+    pDispatch(AC.rlMentalUpdate("tiltLevel", 5));
+    pDispatch(AC.rlMentalUpdate("note", previousNote ? `${previousNote}
+${line}` : line));
+    const id = Date.now();
+    uiDispatch(AC.toastAdd(id, "Modo anti-tilt activado", "Pará ranked: freeplay suave o cerrá sesión."));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3600);
+  }, [mental.note, pDispatch, uiDispatch]);
+
   const startNextBlock = useCallback(() => {
     const task = plan.subtasks.find(t => !completedSet.has(t.id) && !t.noTimer);
     if (!task) return;
@@ -4134,7 +4112,7 @@ function RocketLeagueView() {
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min diarios + 3 partidas 1v1 · Plat III → Diamond · mecánicas útiles + mental</div>
+          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · custom training + workshop · Plat III → Diamond</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -4184,7 +4162,7 @@ function RocketLeagueView() {
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: primero completá el bloque de {plan.minutes} min y 3 partidas de 1v1. Si perdés 2 seguidas por tilt, no sigas ranked.
+              No ranked frío: freeplay y 3 partidas de 1v1 son fijos; el resto rota entre packs, workshop y mecánicas. Si perdés 2 seguidas por tilt, no sigas ranked.
             </div>
           </div>
 
@@ -4216,7 +4194,7 @@ function RocketLeagueView() {
                 ? Math.min(100, Math.round((matchCount / targetCount) * 100))
                 : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
               const over = !isMatchTask && elapsed > target;
-              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : Target;
+              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
               return (
                 <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -4234,6 +4212,12 @@ function RocketLeagueView() {
                         <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
                           <span style={{ fontSize:11, color:"#22d3ee", fontWeight:900, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", borderRadius:9, padding:"4px 8px" }}>Código: {task.pack.code}</span>
                           <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.pack.focus}</span>
+                        </div>
+                      )}
+                      {task.workshop && (
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
+                          <span style={{ fontSize:11, color:"#38bdf8", fontWeight:900, background:"rgba(56,189,248,.09)", border:"1px solid rgba(56,189,248,.18)", borderRadius:9, padding:"4px 8px" }}>Workshop: {task.workshop.name}</span>
+                          <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.workshop.focus}</span>
                         </div>
                       )}
                       <div style={{ marginTop:10 }}>
@@ -4289,6 +4273,25 @@ function RocketLeagueView() {
             </div>
             <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
               Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.
+            </div>
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+              <Layers size={18} color="#38bdf8"/>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop maps</div>
+            </div>
+            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
+              Cuando toque Workshop, abrilo con tu método de custom maps. No necesitás terminar el mapa: trabajá el objetivo del día y cerrá el bloque al tiempo marcado.
+            </div>
+            <div style={{ display:"grid", gap:7, marginTop:12 }}>
+              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).slice(0, 6).map(map => (
+                <div key={map.name} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
+                  <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{map.name}</div>
+                  <div style={{ fontSize:10.5, color:"#38bdf8", fontWeight:900, marginTop:2 }}>{map.source}</div>
+                  <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{map.focus}</div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -4355,6 +4358,9 @@ function RocketLeagueView() {
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55, marginBottom:14 }}>
               Si perdiste 2 seguidas por tilt, no sigas ranked. Volvé a freeplay o cerrá sesión.
             </div>
+            <button onClick={markTilted} style={{ width:"100%", minHeight:42, borderRadius:12, border:"1px solid rgba(248,113,113,.32)", background:"rgba(248,113,113,.12)", color:"#fca5a5", fontWeight:900, cursor:"pointer", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <AlertTriangle size={16}/> Estoy tilteado
+            </button>
 
             {[{ key:"moodBefore", label:"Mood antes" }, { key:"moodAfter", label:"Mood después" }, { key:"tiltLevel", label:"Tilt level" }].map(group => (
               <div key={group.key} style={{ marginBottom:13 }}>
