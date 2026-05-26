@@ -1825,52 +1825,79 @@ function normalizeCalculusPayload(payload, fallbackPlan = getCalculusPlanForDate
 }
 
 
+
+const CALCULUS_I_VIDEO_SCOPE = "Cálculo I · MM201 II-PAC 2026";
+const CALCULUS_I_VIDEO_BLOCKED_TERMS = Object.freeze([
+  "cálculo ii", "calculo ii", "cálculo 2", "calculo 2",
+  "cálculo iii", "calculo iii", "cálculo 3", "calculo 3",
+  "multivariable", "variable vectorial", "cálculo vectorial", "calculo vectorial",
+  "integrales múltiples", "integrales multiples", "dobles integrales", "triple integral",
+  "series", "sucesiones", "ecuaciones diferenciales", "laplace", "fourier",
+  "gradiente", "divergencia", "rotacional", "paramétricas", "parametricas"
+]);
+
+function makeCalculusIVideoSearch(query) {
+  const base = `${query} Cálculo I español límites derivadas funciones`.trim();
+  const exclusions = CALCULUS_I_VIDEO_BLOCKED_TERMS.map(term => `-${term}`).join(" ");
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${base} ${exclusions}`)}`;
+}
+
+function makeCalculusIVideo(title, query) {
+  return {
+    title: title.includes("Cálculo I") ? title : `${title} · Cálculo I`,
+    url: makeCalculusIVideoSearch(query),
+  };
+}
+
 const CALCULUS_TOPIC_VIDEO_RECOMMENDATIONS = Object.freeze([
   {
     match: [/as[ií]ntota/, /vertical/, /horizontal/, /oblicua/],
-    title: "Videos para asíntotas",
-    note: "Empezá por una explicación visual antes de resolver. Te conviene ver primero dominio, grados y división polinomial.",
+    title: "Videos Cálculo I · Asíntotas",
+    note: "Solo Cálculo I/MM201: dominio, límites al infinito, asíntotas verticales, horizontales y oblicuas. Evitá resultados de Cálculo II/III.",
     videos: [
-      { title: "JulioProfe · Asíntotas verticales, horizontales y oblicuas", url: "https://www.youtube.com/results?search_query=JulioProfe+as%C3%ADntotas+verticales+horizontales+oblicuas" },
-      { title: "Khan Academy Español · Asíntotas de funciones racionales", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+as%C3%ADntotas+funciones+racionales" },
-      { title: "math2me · Asíntotas con división polinomial", url: "https://www.youtube.com/results?search_query=math2me+as%C3%ADntotas+divisi%C3%B3n+polinomial" },
+      makeCalculusIVideo("JulioProfe · Asíntotas verticales, horizontales y oblicuas", "JulioProfe asíntotas verticales horizontales oblicuas Cálculo I funciones racionales"),
+      makeCalculusIVideo("Khan Academy Español · Asíntotas de funciones racionales", "Khan Academy Español asíntotas funciones racionales Cálculo I"),
+      makeCalculusIVideo("math2me · Asíntotas con división polinomial", "math2me asíntotas división polinomial Cálculo I funciones racionales"),
     ],
   },
   {
     match: [/l[ií]mite/, /laterales/, /impropios/, /infinito/],
-    title: "Videos para límites",
-    note: "Usalos para repasar antes de ejercicios acumulativos: laterales, infinitos y comportamiento en infinito.",
+    title: "Videos Cálculo I · Límites",
+    note: "Solo temas iniciales de Cálculo I: límites, límites laterales, límites infinitos y límites al infinito.",
     videos: [
-      { title: "JulioProfe · Límites laterales e infinitos", url: "https://www.youtube.com/results?search_query=JulioProfe+l%C3%ADmites+laterales+infinitos" },
-      { title: "Khan Academy Español · Límites al infinito", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+l%C3%ADmites+al+infinito" },
-      { title: "math2me · Límites indeterminados", url: "https://www.youtube.com/results?search_query=math2me+l%C3%ADmites+indeterminados" },
+      makeCalculusIVideo("JulioProfe · Límites laterales e infinitos", "JulioProfe límites laterales límites infinitos Cálculo I"),
+      makeCalculusIVideo("Khan Academy Español · Límites al infinito", "Khan Academy Español límites al infinito Cálculo I"),
+      makeCalculusIVideo("math2me · Límites indeterminados", "math2me límites indeterminados Cálculo I ejercicios"),
     ],
   },
   {
     match: [/continuidad/, /discontinuidad/],
-    title: "Videos para continuidad",
-    note: "Enfocate en continuidad por definición, discontinuidades removibles y laterales.",
+    title: "Videos Cálculo I · Continuidad",
+    note: "Solo Cálculo I: continuidad en un punto, límites laterales y tipos de discontinuidad.",
     videos: [
-      { title: "JulioProfe · Continuidad de funciones", url: "https://www.youtube.com/results?search_query=JulioProfe+continuidad+de+funciones" },
-      { title: "Khan Academy Español · Continuidad y discontinuidades", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+continuidad+discontinuidades" },
+      makeCalculusIVideo("JulioProfe · Continuidad de funciones", "JulioProfe continuidad de funciones Cálculo I"),
+      makeCalculusIVideo("Khan Academy Español · Continuidad y discontinuidades", "Khan Academy Español continuidad discontinuidades Cálculo I"),
+      makeCalculusIVideo("math2me · Continuidad en un punto", "math2me continuidad en un punto Cálculo I"),
     ],
   },
   {
-    match: [/derivada/, /tangente/, /cadena/, /l'hopital/, /lhopital/],
-    title: "Videos para derivadas",
-    note: "Cuando llegués a derivadas, priorizá definición, regla de cadena y aplicaciones antes del cálculo rápido.",
+    match: [/derivada/, /tangente/, /cadena/, /l'hopital/, /lhopital/, /optimizaci[oó]n/, /gr[aá]fica/],
+    title: "Videos Cálculo I · Derivadas",
+    note: "Solo Cálculo I: definición de derivada, recta tangente, reglas, cadena, implícita, L’Hopital, gráficas y optimización básica.",
     videos: [
-      { title: "JulioProfe · Derivadas desde cero", url: "https://www.youtube.com/results?search_query=JulioProfe+derivadas+desde+cero" },
-      { title: "Khan Academy Español · Regla de la cadena", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+regla+de+la+cadena" },
+      makeCalculusIVideo("JulioProfe · Derivadas desde cero", "JulioProfe derivadas desde cero Cálculo I"),
+      makeCalculusIVideo("Khan Academy Español · Regla de la cadena", "Khan Academy Español regla de la cadena Cálculo I"),
+      makeCalculusIVideo("math2me · Optimización con derivadas", "math2me optimización derivadas Cálculo I"),
     ],
   },
   {
     match: [/integral/, /antiderivada/, /sustituci[oó]n/, /[aá]rea/],
-    title: "Videos para integrales",
-    note: "Para integrales conviene ver patrón, sustitución y luego ejercicios de área entre curvas.",
+    title: "Videos Cálculo I · Antiderivadas e integral definida",
+    note: "Solo el tramo básico de Cálculo I: antiderivadas, sustitución, integral definida y áreas entre curvas. Nada de integrales múltiples ni Cálculo II.",
     videos: [
-      { title: "JulioProfe · Integrales por sustitución", url: "https://www.youtube.com/results?search_query=JulioProfe+integrales+por+sustituci%C3%B3n" },
-      { title: "Khan Academy Español · Integral definida", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+integral+definida" },
+      makeCalculusIVideo("JulioProfe · Antiderivadas e integrales por sustitución", "JulioProfe antiderivadas integrales por sustitución Cálculo I"),
+      makeCalculusIVideo("Khan Academy Español · Integral definida", "Khan Academy Español integral definida Cálculo I"),
+      makeCalculusIVideo("math2me · Área entre curvas", "math2me área entre curvas integral definida Cálculo I"),
     ],
   },
 ]);
@@ -1879,11 +1906,11 @@ function getCalculusVideoRecommendations(plan = getCalculusPlanForDate()) {
   const haystack = `${plan.topic || ""} ${(plan.focus || []).join(" ")} ${(plan.reviewTopics || []).slice(-6).join(" ")}`.toLowerCase();
   const found = CALCULUS_TOPIC_VIDEO_RECOMMENDATIONS.find(group => group.match.some(rx => rx.test(haystack)));
   return found || {
-    title: "Videos de apoyo para el tema",
-    note: "Buscá primero una explicación corta y luego volvé a resolver sin mirar el procedimiento.",
+    title: "Videos Cálculo I · Apoyo del tema",
+    note: `Filtro estricto: ${CALCULUS_I_VIDEO_SCOPE}. Si YouTube muestra Cálculo II/III, ignoralo y buscá una explicación de límites, continuidad, derivadas o integrales básicas.`,
     videos: [
-      { title: `Buscar explicación de ${plan.topic || "Cálculo I"}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${plan.topic || "Cálculo I"} explicación ejercicios español`)}` },
-      { title: "Khan Academy Español · Cálculo I", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+C%C3%A1lculo+I" },
+      makeCalculusIVideo(`Buscar explicación de ${plan.topic || "Cálculo I"}`, `${plan.topic || "Cálculo I"} explicación ejercicios`),
+      makeCalculusIVideo("Khan Academy Español · Cálculo I", "Khan Academy Español Cálculo I límites derivadas integrales básicas"),
     ],
   };
 }

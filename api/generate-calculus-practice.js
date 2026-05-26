@@ -36,6 +36,8 @@ export default async function handler(req, res) {
       constraints: [
         "Curso: MM201 Cálculo I.",
         "Fuente autorizada: Jornalización MM201 II-PAC 2026. No uses calendarios viejos.",
+        "Al recomendar o mencionar recursos/videos, deben ser estrictamente de Cálculo I: límites, continuidad, derivadas, aplicaciones de derivadas, antiderivadas e integral definida básica.",
+        "Prohibido adelantar temas de Cálculo II/III: series, integrales múltiples, cálculo vectorial, multivariable, ecuaciones diferenciales, Laplace, Fourier, gradiente, divergencia o rotacional.",
         "El estudiante estudia de 8:10 AM a 9:45 AM.",
         "Viernes, sábado y domingo deben funcionar como Repaso acumulativo: mezclar temas vistos hasta la fecha según la jornalización.",
         "No incluyas temas futuros que no estén en seenTopics/reviewTopics.",
