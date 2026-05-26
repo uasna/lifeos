@@ -67,6 +67,7 @@ const AT = Object.freeze({
   RL_MENTAL_UPDATE:          "RL_MENTAL_UPDATE",
   RL_MENTAL_SAVE:            "RL_MENTAL_SAVE",
   RL_MATCH_PROGRESS:        "RL_MATCH_PROGRESS",
+  RL_SPEEDFLIP_DAR_SAVE:    "RL_SPEEDFLIP_DAR_SAVE",
   // ── Reflection domain ─────────────────────────────────────────
   REFLECTION_FIELD_UPDATE:    "REFLECTION_FIELD_UPDATE",
   REFLECTION_TOGGLE_CATEGORY: "REFLECTION_TOGGLE_CATEGORY",
@@ -118,6 +119,7 @@ const AC = Object.freeze({
   rlMentalUpdate:         (key, value) => ({ type: AT.RL_MENTAL_UPDATE, key, value }),
   rlMentalSave:           () => ({ type: AT.RL_MENTAL_SAVE }),
   rlMatchProgress:        (subtaskId, delta) => ({ type: AT.RL_MATCH_PROGRESS, subtaskId, delta }),
+  rlSpeedflipDarSave:      (session) => ({ type: AT.RL_SPEEDFLIP_DAR_SAVE, session }),
   reflectionFieldUpdate:   (key, value)   => ({ type: AT.REFLECTION_FIELD_UPDATE, key, value }),
   reflectionToggleCategory:(id)           => ({ type: AT.REFLECTION_TOGGLE_CATEGORY, id }),
   reflectionSave:          ()             => ({ type: AT.REFLECTION_SAVE }),
@@ -476,6 +478,7 @@ const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
 const RL_SUBTASK_TYPES = Object.freeze({
   FREEPLAY: "Freeplay",
   SPEEDFLIP: "Speedflip",
+  SPEEDFLIP_DAR: "Speedflip DAR",
   MECHANIC: "Mecánica",
   PACK: "Training Pack",
   WORKSHOP: "Workshop Map",
@@ -676,6 +679,111 @@ const RL_MECHANIC_DRILLS = Object.freeze({
   ),
 });
 
+
+const RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK = Object.freeze({
+  id: "mechanic-speedflip-dar-clean-cancel",
+  title: "Speedflip DAR Clean Cancel",
+  type: RL_SUBTASK_TYPES.SPEEDFLIP_DAR,
+  minutes: 10,
+  instruction: "Bloque previo al mapa de Musty/speedflip: primero limpieza, después velocidad. Llegar al balón no basta: debe caer plano.",
+  focus: "DAR sostenido + cancel limpio + aterrizaje plano",
+  accent: "#fbbf24",
+  speedflipDar: true,
+});
+
+const SPEEDFLIP_DAR_ERROR_LABELS = Object.freeze({
+  frontal: "Diagonal demasiado frontal",
+  cancel_short: "Cancel no sostenido",
+  lateral: "Cancel demasiado lateral",
+  early_release: "Salida del cancel temprana",
+  dar_late: "DAR endereza tarde",
+  other: "Otro",
+});
+
+const SPEEDFLIP_DAR_TOUCH_MOMENTS = Object.freeze({
+  none: "No tocó",
+  start: "Inicio de la vuelta",
+  middle: "Mitad de la vuelta",
+  end: "Final de la vuelta",
+});
+
+function clampNumber(value, min = 0, max = 999) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function getSpeedflipDarNoseTouchValue(value) {
+  if (String(value) === "3+") return 3;
+  return Math.max(0, Math.min(3, Math.floor(Number(value) || 0)));
+}
+
+function normalizeSpeedflipDarSession(session = {}) {
+  const attempts = Math.max(1, Math.floor(clampNumber(session.attempts, 1, 200)));
+  const clean = Math.max(0, Math.min(attempts, Math.floor(clampNumber(session.clean, 0, attempts))));
+  const noseTouches = ["0", "1", "2", "3+"].includes(String(session.noseTouches)) ? String(session.noseTouches) : "0";
+  const side = String(session.side || "DAR Derecho").includes("Izquierdo") ? "DAR Izquierdo" : "DAR Derecho";
+  const speed = ["75%", "85%", "100%"].includes(String(session.speed)) ? String(session.speed) : "75%";
+  const touchMoment = SPEEDFLIP_DAR_TOUCH_MOMENTS[session.touchMoment] ? session.touchMoment : "none";
+  const errorType = SPEEDFLIP_DAR_ERROR_LABELS[session.errorType] ? session.errorType : "other";
+  const cleanRate = Math.round((clean / Math.max(attempts, 1)) * 100);
+  const noseTouchAvg = Math.round(((attempts - clean) / Math.max(attempts, 1)) * getSpeedflipDarNoseTouchValue(noseTouches) * 100) / 100;
+  return {
+    id: `sfd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    date: new Date().toISOString(),
+    side,
+    speed,
+    attempts,
+    clean,
+    noseTouches,
+    touchMoment,
+    errorType,
+    notes: String(session.notes || "").slice(0, 500),
+    cleanRate,
+    noseTouchAvg,
+  };
+}
+
+function getSpeedflipDarSessionFeedback(session) {
+  if (!session) return "Registrá una sesión para que LifeOS te dé feedback específico.";
+  const cleanRate = Number(session.cleanRate) || 0;
+  const moment = session.touchMoment;
+  const error = session.errorType;
+  if (moment === "start" || error === "frontal") return "El primer diagonal probablemente está demasiado hacia adelante. En DAR Derecho probá 11 sin irte a 12. En DAR Izquierdo probá 1 sin irte a 12.";
+  if (moment === "end" || error === "early_release" || error === "cancel_short") return "Probablemente estás soltando el cancel antes de tiempo. Mantené el stick abajo un instante más antes de volver a neutral.";
+  if (String(session.noseTouches) === "2" || String(session.noseTouches) === "3+" || error === "lateral") return "El cancel está entrando, pero la salida no está limpia. Priorizá 11→6 en DAR Derecho o 1→6/6:30 en DAR Izquierdo.";
+  if (cleanRate < 50) return "Mantené velocidad 75%. No subás todavía al mapa como métrica principal.";
+  if (cleanRate < 80) return "Vas cerca. Mantené 75% hasta estabilizar 8/10 intentos limpios.";
+  if (cleanRate < 90) return "Podés probar 85%, pero volvé a 75% si reaparece el doble toque.";
+  return "El patrón está entrando. Empezá a transferirlo al mapa de Musty con control.";
+}
+
+function getSpeedflipDarStats(history = []) {
+  const sessions = Array.isArray(history) ? history.slice(-8) : [];
+  const lastFive = sessions.slice(-5);
+  const avgClean = lastFive.length ? Math.round(lastFive.reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / lastFive.length) : 0;
+  const avgTouches = lastFive.length ? Math.round((lastFive.reduce((sum, s) => sum + (Number(s.noseTouchAvg) || 0), 0) / lastFive.length) * 100) / 100 : 0;
+  const bySide = ["DAR Derecho", "DAR Izquierdo"].map(side => {
+    const sideSessions = sessions.filter(s => s.side === side);
+    const avg = sideSessions.length ? Math.round(sideSessions.reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / sideSessions.length) : 0;
+    return { side, avg, count: sideSessions.length };
+  });
+  const cleanestSide = bySide.sort((a, b) => b.avg - a.avg)[0] || { side: "DAR Derecho", avg: 0, count: 0 };
+  const trend = sessions.length >= 3
+    ? Math.round((sessions.slice(-2).reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / 2) - (sessions.slice(0, 2).reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / 2))
+    : 0;
+  let status = "Necesito al menos 3 sesiones registradas para estimar.";
+  let sessionsLeft = "—";
+  if (sessions.length >= 3) {
+    if (avgClean >= 95 && avgTouches <= .25) { status = "Masterizado en práctica controlada"; sessionsLeft = "0–2"; }
+    else if (avgClean >= 85) { status = "Casi masterizado"; sessionsLeft = "3–6"; }
+    else if (avgClean >= 70) { status = "Cerca"; sessionsLeft = "6–10"; }
+    else if (avgClean >= 50) { status = "En progreso"; sessionsLeft = "10–14"; }
+    else { status = "Lejos todavía"; sessionsLeft = "14–21"; }
+  }
+  return { sessions, lastFive, avgClean, avgTouches, cleanestSide, trend, status, sessionsLeft };
+}
+
 const makeRlPlan = (id, title, focus, variableBlocks) => {
   const blocks = [RL_FREEPLAY_SUBTASK, ...variableBlocks, RL_ONE_V_ONE_SUBTASK];
   const timedMinutes = blocks.reduce((sum, task) => sum + Math.max(0, Number(task.minutes) || 0), 0);
@@ -689,11 +797,12 @@ const makeRlPlan = (id, title, focus, variableBlocks) => {
 };
 
 const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan("speedflip-recovery", "Speedflip + Recovery Day", "Kickoff útil, caída limpia y velocidad gratis", [
-    RL_MECHANIC_DRILLS.speedflipBothSides,
+  makeRlPlan("speedflip-recovery", "Speedflip DAR + Musty Day", "Kickoff útil: primero limpieza, después velocidad", [
+    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
+    makeRlPackSubtask("pack-speedflip-musty", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Mapa de Musty/speedflip después del clean cancel. Si llegás al balón pero raspás dos veces, cuenta como intento no limpio.", "#fbbf24"),
+    RL_MECHANIC_DRILLS.recoveryChain,
     makeRlWorkshopSubtask("workshop-hornets-nest", ROCKET_LEAGUE_WORKSHOP_MAPS.hornetsNest, 15, "Hacé rutas cortas. El objetivo no es terminar el mapa; es caer con ruedas, powerslide y volver al control.", "#34d399"),
-    makeRlPackSubtask("pack-drift-wavedash", ROCKET_LEAGUE_PACKS.driftWavedashRecovery, 10, "Derrape + wavedash después de cada mala caída. Repetí hasta que la salida sea natural.", "#22c55e"),
-    makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 15),
+    makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 5),
   ]),
   makeRlPlan("dribble-flick", "Dribble + Flick Day", "Control de suelo que amenaza gol", [
     makeRlWorkshopSubtask("workshop-dribble-challenge-2", ROCKET_LEAGUE_WORKSHOP_MAPS.dribbleChallenge2, 15, "No corras. Balanceá la pelota y reiniciá cuando se caiga. Meta: control estable, no speedrun.", "#fb7185"),
@@ -728,19 +837,19 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     RL_MECHANIC_DRILLS.awkwardLanding,
     makeRlMentalSubtask("mental-airdribble-review", "Setup review", "Anotá si el primer toque levantó bien la pelota o si empezaste el air dribble perdido.", 10),
   ]),
-  makeRlPlan("low-boost-rebounds", "Low Boost + Rebounds", "Jugar rápido sin depender de boost grande", [
+  makeRlPlan("low-boost-rebounds", "Low Boost + Clean Cancel", "Control con poco boost + speedflip limpio en baja presión", [
+    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
     RL_MECHANIC_DRILLS.lowBoostDefense,
     makeRlPackSubtask("pack-basic-rebounds", ROCKET_LEAGUE_PACKS.basicRebounds, 10, "Leé el rebote antes de saltar. Si llegás tarde, fake challenge y recuperá.", "#fbbf24"),
     makeRlWorkshopSubtask("workshop-noob-dribble", ROCKET_LEAGUE_WORKSHOP_MAPS.noobDribble, 15, "Dribbling suave para control fino. No necesitás terminarlo: necesitás tocar mejor.", "#fb7185"),
-    RL_MECHANIC_DRILLS.halfFlipRecovery,
     makeRlMentalSubtask("mental-boost-review", "Boost review", "Anotá cuándo buscaste boost grande y dejaste la jugada. Cambiá por pads pequeños.", 5),
   ]),
-  makeRlPlan("one-v-one-decision", "1v1 Decision Day", "No regalar posesión y castigar errores", [
+  makeRlPlan("one-v-one-decision", "1v1 Decision + Kickoff Clean", "No regalar posesión y entrar a cada kickoff con calma", [
+    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
     RL_MECHANIC_DRILLS.firstTouchControl,
     makeRlPackSubtask("pack-shots-miss", ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, 10, "No fallar tiros ganables. Primero arco grande, luego precisión.", "#34d399"),
     RL_MECHANIC_DRILLS.driftCuts,
     makeRlPackSubtask("pack-powershots", ROCKET_LEAGUE_PACKS.powershots, 10, "Tirá fuerte solo si el balón queda delante. Si queda atrás, control primero.", "#fbbf24"),
-    makeRlMentalSubtask("mental-1v1-review", "1v1 review", "Regla: si perdés 2 seguidas por tilt, parás ranked. El 1v1 es práctica, no castigo.", 10),
   ]),
 ]);
 
@@ -788,6 +897,11 @@ function createRocketLeagueInitialState() {
   return {
     current: createRocketLeagueCurrent(),
     history: [],
+    speedflipDar: {
+      dominantSide: "DAR Derecho",
+      targetWeeklySessions: 3,
+      history: [],
+    },
   };
 }
 
@@ -806,6 +920,10 @@ function hasRocketLeagueProgress(current) {
     Boolean(String(mental.note || "").trim()) ||
     mental.saved === true
   );
+}
+
+function hasRocketLeagueSpeedflipDarProgress(rocketLeague) {
+  return Array.isArray(rocketLeague?.speedflipDar?.history) && rocketLeague.speedflipDar.history.length > 0;
 }
 
 function formatSeconds(totalSeconds = 0) {
@@ -1485,36 +1603,73 @@ function isLifeOSManualRestDay(dateKey) {
   return Boolean(LIFEOS_MANUAL_REST_DAYS[String(dateKey || "").slice(0, 10)]);
 }
 
+function getCalculusSeenTopicsUntil(dateKey = getLifeOSDateKey(), includeToday = true) {
+  const key = String(dateKey || "").slice(0, 10);
+  const seen = CALCULUS_JOURNALIZATION_II_PAC_2026
+    .filter(item => (includeToday ? item.date <= key : item.date < key) && item.mode !== "Examen")
+    .map(item => ({ date: item.date, topic: item.topic, focus: item.focus || [], partial: item.partial }))
+    .filter(item => item.topic);
+  const unique = [];
+  const used = new Set();
+  for (const item of seen) {
+    const normalized = String(item.topic || "").toLowerCase();
+    if (used.has(normalized)) continue;
+    used.add(normalized);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function buildCalculusCumulativeReviewPlan(key, nextExam, daysToExam, exact = null) {
+  const seenTopics = getCalculusSeenTopicsUntil(key, true);
+  const latestTopics = seenTopics.slice(-6);
+  const topicList = latestTopics.map(item => item.topic);
+  const examSoon = daysToExam <= 7;
+  return {
+    ...(exact || {}),
+    dateKey:key,
+    partial: nextExam?.partial || exact?.partial || latestTopics[latestTopics.length - 1]?.partial || "repaso",
+    topic: topicList.length
+      ? `Repaso acumulativo: ${topicList.slice(-4).join(" · ")}`
+      : "Repaso acumulativo de temas vistos",
+    focus: examSoon
+      ? ["Repaso acumulativo", "Tipo examen", "Errores frecuentes", "Temas vistos"]
+      : ["Repaso acumulativo", "Variados", "Refuerzo", "Temas vistos"],
+    mode: examSoon ? "Repaso acumulativo · Modo parcial" : "Repaso acumulativo",
+    source: CALCULUS_SOURCE_LABEL,
+    cumulativeReview: true,
+    reviewTopics: topicList,
+    latestClassTopic: exact?.topic || null,
+    rule: "Ejercicios variados de los temas vistos hasta ahora según la jornalización.",
+  };
+}
+
 function getCalculusPlanForDate(dateKey = getLifeOSDateKey()) {
   const key = String(dateKey || "").slice(0, 10);
-  const exact = CALCULUS_JOURNALIZATION_II_PAC_2026.find(item => item.date === key);
-  if (exact) return { ...exact, dateKey:key, source: CALCULUS_SOURCE_LABEL };
-
   const day = parseDateKeyLocal(key).getDay();
+  const exact = CALCULUS_JOURNALIZATION_II_PAC_2026.find(item => item.date === key);
   const previous = CALCULUS_JOURNALIZATION_II_PAC_2026.filter(item => item.date < key && item.mode !== "Examen").slice(-5);
   const nextExam = CALCULUS_JOURNALIZATION_II_PAC_2026.find(item => item.date >= key && String(item.mode).toLowerCase().includes("examen"));
   const daysToExam = nextExam ? daysBetweenDateKeys(key, nextExam.date) : Infinity;
 
-  if (day === 0 || day === 6) {
-    const topics = previous.length ? previous.map(item => item.topic).slice(-3) : ["temas vistos en clase"];
-    return {
-      dateKey:key,
-      partial: nextExam?.partial || "repaso",
-      topic:`Repaso mixto de fin de semana: ${topics.join(" · ")}`,
-      focus:["Variados", "Errores de la semana", "Ejercicios tipo examen"],
-      mode: daysToExam <= 7 ? "Modo parcial" : "Repaso variado",
-      source: CALCULUS_SOURCE_LABEL,
-    };
+  if (day === 5 || day === 6 || day === 0) {
+    return buildCalculusCumulativeReviewPlan(key, nextExam, daysToExam, exact);
   }
 
+  if (exact) return { ...exact, dateKey:key, source: CALCULUS_SOURCE_LABEL, cumulativeReview:false, reviewTopics:getCalculusSeenTopicsUntil(key, true).map(item => item.topic) };
+
   if (daysToExam <= 7) {
+    const topics = getCalculusSeenTopicsUntil(key, true).map(item => item.topic);
     return {
       dateKey:key,
       partial: nextExam?.partial || "repaso",
       topic:`Modo parcial ${nextExam?.partial || ""}: repaso acumulado antes del examen`,
-      focus:["Pautas", "Tiempo real", "Errores repetidos"],
+      focus:["Pautas", "Tiempo real", "Errores repetidos", "Temas vistos"],
       mode:"Modo parcial",
       source: CALCULUS_SOURCE_LABEL,
+      cumulativeReview:true,
+      reviewTopics:topics,
+      rule:"Semana previa a examen: práctica más difícil tipo parcial con temas vistos.",
     };
   }
 
@@ -1526,6 +1681,8 @@ function getCalculusPlanForDate(dateKey = getLifeOSDateKey()) {
     focus:["Repasar", "Practicar", "Corregir"],
     mode:"Repaso",
     source: CALCULUS_SOURCE_LABEL,
+    cumulativeReview:false,
+    reviewTopics:getCalculusSeenTopicsUntil(key, true).map(item => item.topic),
   };
 }
 
@@ -1560,6 +1717,8 @@ function createCalculusCurrent(dateKey = getLifeOSDateKey(), plan = getCalculusP
     mode: plan.mode || "Práctica",
     focus: Array.isArray(plan.focus) ? plan.focus : [],
     source: plan.source || CALCULUS_SOURCE_LABEL,
+    cumulativeReview: Boolean(plan.cumulativeReview),
+    reviewTopics: Array.isArray(plan.reviewTopics) ? plan.reviewTopics : [],
     generatedAt: null,
     exercises: [],
     answersById: {},
@@ -1587,6 +1746,37 @@ function createCalculusInitialState() {
   };
 }
 
+
+const CALCULUS_DIFFICULTY_LEVELS = Object.freeze({
+  1: { level: 1, name: "Básico", description: "Reconocimiento directo o cálculo simple." },
+  2: { level: 2, name: "Fácil", description: "Procedimiento corto con poca trampa." },
+  3: { level: 3, name: "Intermedio", description: "Requiere elegir método o combinar pasos." },
+  4: { level: 4, name: "Difícil", description: "Mezcla conceptos, álgebra o análisis." },
+  5: { level: 5, name: "Tipo examen", description: "Ejercicio largo, con interpretación o varios casos." },
+});
+
+function inferCalculusDifficultyLevel(value) {
+  const raw = String(value ?? "").toLowerCase().trim();
+  const numeric = Number(String(raw).match(/[1-5]/)?.[0]);
+  if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 5) return numeric;
+  if (/b[aá]sic/.test(raw)) return 1;
+  if (/f[aá]cil/.test(raw)) return 2;
+  if (/intermedio|medio/.test(raw)) return 3;
+  if (/dif[ií]cil|avanz/.test(raw)) return 4;
+  if (/examen|parcial/.test(raw)) return 5;
+  return 3;
+}
+
+function getCalculusDifficultyInfo(value) {
+  const level = inferCalculusDifficultyLevel(value);
+  return CALCULUS_DIFFICULTY_LEVELS[level] || CALCULUS_DIFFICULTY_LEVELS[3];
+}
+
+function getCalculusDifficultyDisplay(value) {
+  const info = getCalculusDifficultyInfo(value);
+  return `Nivel ${info.level} · ${info.name}`;
+}
+
 function hasCalculusProgress(current) {
   if (!current || typeof current !== "object") return false;
   return Boolean(
@@ -1608,7 +1798,8 @@ function normalizeCalculusExercise(raw, idx = 0) {
     statement,
     topic: String(raw.topic || raw.tema || "Cálculo I").slice(0, 120),
     type: String(raw.type || raw.tipo || "práctica").slice(0, 80),
-    difficulty: String(raw.difficulty || raw.dificultad || "medio").slice(0, 30),
+    difficulty: getCalculusDifficultyDisplay(raw.difficultyLevel || raw.level || raw.difficulty || raw.dificultad || "intermedio"),
+    difficultyLevel: inferCalculusDifficultyLevel(raw.difficultyLevel || raw.level || raw.difficulty || raw.dificultad || "intermedio"),
     targetSkill: String(raw.targetSkill || raw.habilidad || "resolver con orden").slice(0, 120),
     hint: String(raw.hint || raw.pista || "").slice(0, 500),
   };
@@ -1620,7 +1811,7 @@ function normalizeCalculusPayload(payload, fallbackPlan = getCalculusPlanForDate
   return {
     title: String(payload?.title || `Práctica de ${fallbackPlan.topic}`).slice(0, 120),
     instructions: String(payload?.instructions || "Resolvé con procedimiento claro. No solo pongás respuesta final.").slice(0, 800),
-    difficulty: String(payload?.difficulty || fallbackPlan.mode || "medio").slice(0, 50),
+    difficulty: getCalculusDifficultyDisplay(payload?.difficultyLevel || payload?.difficulty || fallbackPlan.mode || "intermedio"),
     estimatedMinutes: Math.max(15, Math.min(120, Math.floor(Number(payload?.estimatedMinutes) || 75))),
     exercises,
   };
@@ -1644,6 +1835,7 @@ function getCalculusAdaptiveMode(plan, calculus) {
   const last = history[history.length - 1];
   const scoreValues = Object.values(last?.evaluationsById || {}).map(e => Number(e.score)).filter(n => Number.isFinite(n));
   const avg = scoreValues.length ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : null;
+  if (plan?.cumulativeReview) return "Repaso acumulativo: ejercicios variados de los temas vistos hasta ahora según la jornalización.";
   if (String(plan?.mode || "").toLowerCase().includes("examen") || String(plan?.mode || "").toLowerCase().includes("parcial")) return "Modo parcial: ejercicios más difíciles, mezclados y con menos pistas.";
   if (avg !== null && avg < 60) return "Refuerzo adaptativo: repetir errores de ayer con pasos más guiados.";
   if (avg !== null && avg >= 80) return "Progresión: subir dificultad y mezclar con temas anteriores.";
@@ -1866,7 +2058,7 @@ function loadInfo(s) {
 //     The key stays stable across version bumps, enabling migrations
 //     instead of invisible data loss.
 
-const STORAGE_SCHEMA_VERSION = 12; // integer — bump on schema change
+const STORAGE_SCHEMA_VERSION = 13; // integer — bump on schema change
 
 // Stable, version-independent storage key.
 // Version lives in the blob (_schema field), not the key.
@@ -1970,6 +2162,15 @@ const MIGRATIONS = Object.freeze({
     appSettings: snap?.appSettings && typeof snap.appSettings === "object"
       ? deepMerge(createAppSettingsInitial(), snap.appSettings)
       : createAppSettingsInitial(),
+    calculus: snap?.calculus && typeof snap.calculus === "object"
+      ? deepMerge(createCalculusInitialState(), snap.calculus)
+      : createCalculusInitialState(),
+  }),
+  [12]: (snap) => ({
+    ...snap,
+    rocketLeague: snap?.rocketLeague && typeof snap.rocketLeague === "object"
+      ? deepMerge(createRocketLeagueInitialState(), snap.rocketLeague)
+      : createRocketLeagueInitialState(),
     calculus: snap?.calculus && typeof snap.calculus === "object"
       ? deepMerge(createCalculusInitialState(), snap.calculus)
       : createCalculusInitialState(),
@@ -2096,6 +2297,10 @@ function validateSnapshotIntegrity(snap) {
   if (rocketLeague.current.elapsedBySubtask === null || typeof rocketLeague.current.elapsedBySubtask !== "object" || Array.isArray(rocketLeague.current.elapsedBySubtask)) return false;
   if (rocketLeague.current.matchCountBySubtask === null || typeof rocketLeague.current.matchCountBySubtask !== "object" || Array.isArray(rocketLeague.current.matchCountBySubtask)) return false;
   if (!rocketLeague.current.mental || typeof rocketLeague.current.mental !== "object") return false;
+  if (rocketLeague.speedflipDar !== undefined) {
+    if (!rocketLeague.speedflipDar || typeof rocketLeague.speedflipDar !== "object" || Array.isArray(rocketLeague.speedflipDar)) return false;
+    if (!Array.isArray(rocketLeague.speedflipDar.history)) return false;
+  }
 
   // App settings domain
   const { appSettings } = snap;
@@ -2564,6 +2769,24 @@ function persistentReducer(state, action) {
               ...matchCounts,
               [action.subtaskId]: nextCount,
             },
+          },
+        },
+      };
+    }
+
+    case AT.RL_SPEEDFLIP_DAR_SAVE: {
+      const rocketLeague = state.rocketLeague || createRocketLeagueInitialState();
+      const speedflipDar = rocketLeague.speedflipDar || createRocketLeagueInitialState().speedflipDar;
+      const session = normalizeSpeedflipDarSession(action.session || {});
+      const history = Array.isArray(speedflipDar.history) ? speedflipDar.history : [];
+      return {
+        ...state,
+        rocketLeague: {
+          ...rocketLeague,
+          speedflipDar: {
+            ...speedflipDar,
+            dominantSide: session.side || speedflipDar.dominantSide || "DAR Derecho",
+            history: [...history, session].slice(-40),
           },
         },
       };
@@ -3742,7 +3965,9 @@ function CalculusTrainerView() {
           settings: calculus.settings || {},
           recentHistory: getCalculusRecentHistory(calculus),
           weakTopics: getCalculusWeakTopics(calculus),
-          examMode: Boolean(calculus.settings?.examMode || String(plan.mode || "").toLowerCase().includes("examen") || String(plan.mode || "").toLowerCase().includes("simulación")),
+          seenTopics: Array.isArray(plan.reviewTopics) ? plan.reviewTopics : getCalculusSeenTopicsUntil(dateKey, true).map(item => item.topic),
+          cumulativeReview: Boolean(plan.cumulativeReview),
+          examMode: Boolean(calculus.settings?.examMode || String(plan.mode || "").toLowerCase().includes("examen") || String(plan.mode || "").toLowerCase().includes("simulación") || String(plan.mode || "").toLowerCase().includes("parcial")),
           profile: {
             course: "MM201 Cálculo I",
             source: CALCULUS_SOURCE_LABEL,
@@ -3806,6 +4031,7 @@ function CalculusTrainerView() {
           </div>
           <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
             {pill(plan.mode, String(plan.mode).toLowerCase().includes("parcial") ? "#fbbf24" : "#60a5fa")}
+            {plan.cumulativeReview && pill("Repaso acumulativo", "#34d399")}
             {pill(`Parcial ${plan.partial || "repaso"}`, "#a78bfa")}
             {pill(`${evaluatedCount}/${current.exercises?.length || 0} corregidos`, "#34d399")}
             {avgScore !== null && pill(`Promedio ${avgScore}/100`, avgScore >= 75 ? "#34d399" : "#fb923c")}
@@ -3826,6 +4052,7 @@ function CalculusTrainerView() {
           <div style={{ fontSize:10, color:"#60a5fa", textTransform:"uppercase", letterSpacing:1, fontWeight:900, marginBottom:6 }}>Tema de hoy</div>
           <div style={{ fontSize:20, color:"#f8fafc", fontWeight:900, lineHeight:1.12, marginBottom:9 }}>{plan.topic}</div>
           <div style={{ color:"#94a3b8", fontSize:13, lineHeight:1.55, marginBottom:12 }}>{adaptiveMode}</div>
+          {plan.cumulativeReview && <div style={{ color:"#86efac", fontSize:12, lineHeight:1.5, marginBottom:12, padding:10, borderRadius:12, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" }}>Ejercicios variados de los temas vistos hasta ahora según la jornalización. No incluye temas futuros.</div>}
           <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:14 }}>
             {(plan.focus || []).map(f => <span key={f} className="tl-ftag">{f}</span>)}
           </div>
@@ -3883,7 +4110,7 @@ function CalculusTrainerView() {
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, marginBottom:8 }}>
                   <div>
                     <div style={{ color:"#f8fafc", fontWeight:900, fontSize:15 }}>{idx + 1}. {ex.title}</div>
-                    <div style={{ color:"#64748b", fontSize:11, fontWeight:800, marginTop:2 }}>{ex.topic} · {ex.type} · {ex.difficulty}</div>
+                    <div style={{ color:"#64748b", fontSize:11, fontWeight:800, marginTop:2 }}>{ex.topic} · {ex.type} · {getCalculusDifficultyDisplay(ex.difficultyLevel || ex.difficulty)}</div>
                   </div>
                   {evaluation && <div style={{ padding:"5px 8px", borderRadius:999, background:(Number(evaluation.score) >= 75 ? "rgba(52,211,153,.12)" : "rgba(251,146,60,.12)"), color:(Number(evaluation.score) >= 75 ? "#86efac" : "#fdba74"), fontSize:11, fontWeight:900 }}>{Math.round(Number(evaluation.score) || 0)}/100</div>}
                 </div>
@@ -3914,10 +4141,72 @@ function CalculusTrainerView() {
         <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, alignItems:"center" }}>
           <textarea value={current.sessionNotes || ""} onChange={e => pDispatch(AC.calcFieldUpdate("sessionNotes", e.target.value))} placeholder="¿Qué se me hizo difícil? ¿Qué error repetí?" style={{ minHeight:58, borderRadius:14, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.32)", color:"#e2e8f0", padding:11, resize:"vertical", fontFamily:"inherit", fontSize:13, outline:"none" }}/>
           <select value={current.selfRating || ""} onChange={e => pDispatch(AC.calcFieldUpdate("selfRating", e.target.value ? Number(e.target.value) : null))} style={{ height:44, borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"#111827", color:"#e2e8f0", padding:"0 10px", fontWeight:800 }}>
-            <option value="">Nivel</option><option value="1">1/5</option><option value="2">2/5</option><option value="3">3/5</option><option value="4">4/5</option><option value="5">5/5</option>
+            <option value="">Nivel</option><option value="1">Nivel 1 · Básico</option><option value="2">Nivel 2 · Fácil</option><option value="3">Nivel 3 · Intermedio</option><option value="4">Nivel 4 · Difícil</option><option value="5">Nivel 5 · Tipo examen</option>
           </select>
         </div>
       </section>
+    </div>
+  );
+}
+
+
+function RocketSpeedflipDarCleanCancelCard({ recommended }) {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+  const speedflipDar = persistent.rocketLeague?.speedflipDar || createRocketLeagueInitialState().speedflipDar;
+  const history = Array.isArray(speedflipDar.history) ? speedflipDar.history : [];
+  const stats = useMemo(() => getSpeedflipDarStats(history), [history]);
+  const last = history[history.length - 1] || null;
+  const [form, setForm] = useState({ side: speedflipDar.dominantSide || "DAR Derecho", speed: "75%", attempts: 10, clean: 0, noseTouches: "2", touchMoment: "end", errorType: "early_release", notes: "" });
+  const preview = useMemo(() => normalizeSpeedflipDarSession({ ...form, attempts: Math.max(1, Number(form.attempts) || 10), clean: Math.min(Number(form.clean) || 0, Number(form.attempts) || 10) }), [form]);
+  const feedback = getSpeedflipDarSessionFeedback(last || preview);
+  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+  const save = () => {
+    unlockLifeOSAudio();
+    pDispatch(AC.rlSpeedflipDarSave(form));
+    playLifeOSSound("complete");
+    const id = Date.now();
+    uiDispatch(AC.toastAdd(id, "Speedflip DAR guardado", `${preview.cleanRate}% limpio · ${form.side}`));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
+  };
+  const inputStyle = { width:"100%", borderRadius:10, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.36)", color:T_COLOR.text, padding:"9px 10px", fontFamily:"inherit", fontSize:12, outline:"none" };
+  return (
+    <div className="g" style={{ padding:18, borderColor: recommended ? "rgba(251,191,36,.28)" : "rgba(251,191,36,.14)", background: recommended ? "linear-gradient(135deg,rgba(251,191,36,.09),rgba(255,255,255,.03))" : undefined }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+          <Zap size={18} color="#fbbf24"/>
+          <div style={{ ...S.stitle, marginBottom:0 }}>Speedflip DAR Clean Cancel</div>
+        </div>
+        {recommended && <span style={{ fontSize:10, color:"#fbbf24", fontWeight:900, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.10)", borderRadius:99, padding:"4px 8px" }}>Hoy toca</span>}
+      </div>
+      <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.55, marginBottom:12 }}>
+        Llegar al balón no basta: debe caer plano. Primero limpieza, después velocidad. Si raspa al final, sostené más el cancel; si raspa al inicio, revisá el primer diagonal.
+      </div>
+      <div style={{ display:"grid", gap:8, marginBottom:12 }}>
+        {["Warmup sin balón · 2 min", "10 repeticiones por lado · 3 min", "Lado dominante · 3 min", "Aplicación en Musty/speedflip map · 2 min"].map((txt, i) => (
+          <div key={txt} style={{ display:"flex", gap:8, alignItems:"center", fontSize:11.5, color:T_COLOR.muted }}><b style={{ color:"#fbbf24" }}>{i + 1}.</b><span>{txt}</span></div>
+        ))}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8 }} className="mob-layout-grid">
+        <select value={form.side} onChange={e => update("side", e.target.value)} style={inputStyle}><option>DAR Derecho</option><option>DAR Izquierdo</option></select>
+        <select value={form.speed} onChange={e => update("speed", e.target.value)} style={inputStyle}><option>75%</option><option>85%</option><option>100%</option></select>
+        <input type="number" min="1" max="200" value={form.attempts} onChange={e => update("attempts", e.target.value)} placeholder="Intentos" style={inputStyle}/>
+        <input type="number" min="0" max={form.attempts || 10} value={form.clean} onChange={e => update("clean", e.target.value)} placeholder="Intentos limpios" style={inputStyle}/>
+        <select value={form.noseTouches} onChange={e => update("noseTouches", e.target.value)} style={inputStyle}><option value="0">0 toques</option><option value="1">1 toque</option><option value="2">2 toques</option><option value="3+">3+ toques</option></select>
+        <select value={form.touchMoment} onChange={e => update("touchMoment", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_TOUCH_MOMENTS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <select value={form.errorType} onChange={e => update("errorType", e.target.value)} style={{ ...inputStyle, gridColumn:"1 / -1" }}>{Object.entries(SPEEDFLIP_DAR_ERROR_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <textarea value={form.notes} onChange={e => update("notes", e.target.value)} placeholder="Notas opcionales" style={{ ...inputStyle, gridColumn:"1 / -1", minHeight:66, resize:"vertical" }}/>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:12 }}>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Clean rate</div><b style={{ color:"#fbbf24", fontSize:18 }}>{preview.cleanRate}%</b></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Toques/intento</div><b style={{ color:T_COLOR.text, fontSize:18 }}>{preview.noseTouchAvg}</b></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Dominante</div><b style={{ color:"#86efac", fontSize:12 }}>{stats.cleanestSide.count ? `${stats.cleanestSide.side} · ${stats.cleanestSide.avg}%` : form.side}</b></div>
+      </div>
+      <div style={{ marginTop:12, padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5 }}>
+        <b style={{ color:"#e2e8f0" }}>{stats.status}</b>{stats.sessionsLeft !== "—" ? ` · Si mantenés este ritmo, podrías dominarlo en ${stats.sessionsLeft} sesiones.` : ""}<br/>{feedback}
+      </div>
+      <button onClick={save} style={{ marginTop:12, width:"100%", minHeight:40, borderRadius:12, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.12)", color:"#fbbf24", fontWeight:900, cursor:"pointer" }}>Guardar sesión</button>
+      {stats.lastFive.length > 0 && <div style={{ marginTop:12, display:"grid", gap:6 }}>{stats.lastFive.slice().reverse().map(s => <div key={s.id} style={{ display:"flex", justifyContent:"space-between", gap:8, fontSize:10.5, color:T_COLOR.muted, padding:7, borderRadius:9, background:"rgba(255,255,255,.03)" }}><span>{new Date(s.date).toLocaleDateString()} · {s.side} · {s.speed}</span><b style={{ color:s.cleanRate >= 80 ? "#86efac" : "#fbbf24" }}>{s.cleanRate}%</b></div>)}</div>}
     </div>
   );
 }
@@ -4104,6 +4393,7 @@ function RocketLeagueView() {
   const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer).every(task => completedSet.has(task.id));
   const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
   const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
+  const speedflipDarRecommended = plan.subtasks.some(task => task.speedflipDar || String(task.id).includes("speedflip") || String(task.title).toLowerCase().includes("speedflip"));
 
   const markTilted = useCallback(() => {
     unlockLifeOSAudio();
@@ -4220,7 +4510,7 @@ ${line}` : line));
                 ? Math.min(100, Math.round((matchCount / targetCount) * 100))
                 : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
               const over = !isMatchTask && elapsed > target;
-              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : task.type === RL_SUBTASK_TYPES.SPEEDFLIP ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
+              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : (task.type === RL_SUBTASK_TYPES.SPEEDFLIP || task.type === RL_SUBTASK_TYPES.SPEEDFLIP_DAR) ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
               return (
                 <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -4301,6 +4591,8 @@ ${line}` : line));
               Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.
             </div>
           </div>
+
+          <RocketSpeedflipDarCleanCancelCard recommended={speedflipDarRecommended}/>
 
           <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
