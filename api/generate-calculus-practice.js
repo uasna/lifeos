@@ -43,6 +43,10 @@ export default async function handler(req, res) {
         "Usa dificultad clara con difficultyLevel 1-5: 1 Básico, 2 Fácil, 3 Intermedio, 4 Difícil, 5 Tipo examen.",
         "No incluyas soluciones ni respuestas finales en el enunciado.",
         "Enunciados en español.",
+        "No generes solo ejercicios de procedimiento: mezcla formatos de estudio.",
+        "Incluye variedad razonable: procedimiento, verdadero/falso con justificación, selección múltiple, análisis conceptual y reto/competición contra reloj.",
+        "Para selección múltiple incluye options como arreglo de textos. Para verdadero/falso deja claro que debe justificar.",
+        "Si el tema es asíntotas, combina teoría (tipo de asíntota, dominio, discontinuidad removible) y práctica (límites, división polinomial, comportamiento por regiones).",
       ],
       todayPlan: plan,
       cumulativeReview,
@@ -56,12 +60,12 @@ export default async function handler(req, res) {
         difficulty: "básico|medio|tipo examen|difícil",
         estimatedMinutes: "number",
         exercises: [
-          { id: "e1", title: "string", statement: "string", topic: "string", type: "string", difficultyLevel: "number 1-5", difficulty: "Nivel X · Nombre", targetSkill: "string", hint: "string breve" }
+          { id: "e1", title: "string", statement: "string", topic: "string", type: "procedimiento|verdadero/falso|selección múltiple|conceptual|competición", questionMode: "string", options: ["A", "B", "C"], difficultyLevel: "number 1-5", difficulty: "Nivel X · Nombre", targetSkill: "string", hint: "string breve" }
         ]
       }
     }, null, 2);
 
-    const data = await callClaude({ system, user, maxTokens: 2600, temperature: 0.45 });
+    const data = await callClaude({ system, user, maxTokens: 3200, temperature: 0.45 });
     const parsed = parseModelJson(extractTextFromAnthropicResponse(data));
     if (!Array.isArray(parsed.exercises) || parsed.exercises.length === 0) throw new Error("Claude no generó ejercicios.");
     return jsonResponse(res, 200, {

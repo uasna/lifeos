@@ -1792,12 +1792,19 @@ function normalizeCalculusExercise(raw, idx = 0) {
   const id = String(raw.id || `calc-${idx + 1}`).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || `calc-${idx + 1}`;
   const statement = String(raw.statement || raw.enunciado || "").trim();
   if (!statement) return null;
+  const rawOptions = Array.isArray(raw.options || raw.opciones) ? (raw.options || raw.opciones) : [];
+  const options = rawOptions.map((opt, i) => typeof opt === "object"
+    ? { key: String(opt.key || opt.label || String.fromCharCode(65 + i)).slice(0, 6), text: String(opt.text || opt.value || opt.label || "").slice(0, 260) }
+    : { key: String.fromCharCode(65 + i), text: String(opt || "").slice(0, 260) }
+  ).filter(opt => opt.text).slice(0, 6);
   return {
     id,
     title: String(raw.title || raw.titulo || `Ejercicio ${idx + 1}`).slice(0, 80),
     statement,
     topic: String(raw.topic || raw.tema || "Cálculo I").slice(0, 120),
     type: String(raw.type || raw.tipo || "práctica").slice(0, 80),
+    questionMode: String(raw.questionMode || raw.formato || raw.type || raw.tipo || "procedimiento").slice(0, 80),
+    options,
     difficulty: getCalculusDifficultyDisplay(raw.difficultyLevel || raw.level || raw.difficulty || raw.dificultad || "intermedio"),
     difficultyLevel: inferCalculusDifficultyLevel(raw.difficultyLevel || raw.level || raw.difficulty || raw.dificultad || "intermedio"),
     targetSkill: String(raw.targetSkill || raw.habilidad || "resolver con orden").slice(0, 120),
@@ -1815,6 +1822,98 @@ function normalizeCalculusPayload(payload, fallbackPlan = getCalculusPlanForDate
     estimatedMinutes: Math.max(15, Math.min(120, Math.floor(Number(payload?.estimatedMinutes) || 75))),
     exercises,
   };
+}
+
+
+const CALCULUS_TOPIC_VIDEO_RECOMMENDATIONS = Object.freeze([
+  {
+    match: [/as[ií]ntota/, /vertical/, /horizontal/, /oblicua/],
+    title: "Videos para asíntotas",
+    note: "Empezá por una explicación visual antes de resolver. Te conviene ver primero dominio, grados y división polinomial.",
+    videos: [
+      { title: "JulioProfe · Asíntotas verticales, horizontales y oblicuas", url: "https://www.youtube.com/results?search_query=JulioProfe+as%C3%ADntotas+verticales+horizontales+oblicuas" },
+      { title: "Khan Academy Español · Asíntotas de funciones racionales", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+as%C3%ADntotas+funciones+racionales" },
+      { title: "math2me · Asíntotas con división polinomial", url: "https://www.youtube.com/results?search_query=math2me+as%C3%ADntotas+divisi%C3%B3n+polinomial" },
+    ],
+  },
+  {
+    match: [/l[ií]mite/, /laterales/, /impropios/, /infinito/],
+    title: "Videos para límites",
+    note: "Usalos para repasar antes de ejercicios acumulativos: laterales, infinitos y comportamiento en infinito.",
+    videos: [
+      { title: "JulioProfe · Límites laterales e infinitos", url: "https://www.youtube.com/results?search_query=JulioProfe+l%C3%ADmites+laterales+infinitos" },
+      { title: "Khan Academy Español · Límites al infinito", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+l%C3%ADmites+al+infinito" },
+      { title: "math2me · Límites indeterminados", url: "https://www.youtube.com/results?search_query=math2me+l%C3%ADmites+indeterminados" },
+    ],
+  },
+  {
+    match: [/continuidad/, /discontinuidad/],
+    title: "Videos para continuidad",
+    note: "Enfocate en continuidad por definición, discontinuidades removibles y laterales.",
+    videos: [
+      { title: "JulioProfe · Continuidad de funciones", url: "https://www.youtube.com/results?search_query=JulioProfe+continuidad+de+funciones" },
+      { title: "Khan Academy Español · Continuidad y discontinuidades", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+continuidad+discontinuidades" },
+    ],
+  },
+  {
+    match: [/derivada/, /tangente/, /cadena/, /l'hopital/, /lhopital/],
+    title: "Videos para derivadas",
+    note: "Cuando llegués a derivadas, priorizá definición, regla de cadena y aplicaciones antes del cálculo rápido.",
+    videos: [
+      { title: "JulioProfe · Derivadas desde cero", url: "https://www.youtube.com/results?search_query=JulioProfe+derivadas+desde+cero" },
+      { title: "Khan Academy Español · Regla de la cadena", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+regla+de+la+cadena" },
+    ],
+  },
+  {
+    match: [/integral/, /antiderivada/, /sustituci[oó]n/, /[aá]rea/],
+    title: "Videos para integrales",
+    note: "Para integrales conviene ver patrón, sustitución y luego ejercicios de área entre curvas.",
+    videos: [
+      { title: "JulioProfe · Integrales por sustitución", url: "https://www.youtube.com/results?search_query=JulioProfe+integrales+por+sustituci%C3%B3n" },
+      { title: "Khan Academy Español · Integral definida", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+integral+definida" },
+    ],
+  },
+]);
+
+function getCalculusVideoRecommendations(plan = getCalculusPlanForDate()) {
+  const haystack = `${plan.topic || ""} ${(plan.focus || []).join(" ")} ${(plan.reviewTopics || []).slice(-6).join(" ")}`.toLowerCase();
+  const found = CALCULUS_TOPIC_VIDEO_RECOMMENDATIONS.find(group => group.match.some(rx => rx.test(haystack)));
+  return found || {
+    title: "Videos de apoyo para el tema",
+    note: "Buscá primero una explicación corta y luego volvé a resolver sin mirar el procedimiento.",
+    videos: [
+      { title: `Buscar explicación de ${plan.topic || "Cálculo I"}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${plan.topic || "Cálculo I"} explicación ejercicios español`)}` },
+      { title: "Khan Academy Español · Cálculo I", url: "https://www.youtube.com/results?search_query=Khan+Academy+Espa%C3%B1ol+C%C3%A1lculo+I" },
+    ],
+  };
+}
+
+const CALCULUS_PINNED_PRACTICE_BY_DATE = Object.freeze({
+  "2026-05-26": {
+    title: "Práctica fijada · Asíntotas verticales, horizontales y oblicuas",
+    instructions: "Estos son los mismos ejercicios guardados desde tu PDF de hoy para no gastar tokens. Mañana LifeOS vuelve a generar práctica nueva según la jornalización.",
+    difficulty: "Nivel 3 · Intermedio",
+    estimatedMinutes: 85,
+    pinned: true,
+    exercises: [
+      { id:"pinned-asym-1", title:"Identificar asíntotas verticales por dominio", topic:"Asíntotas verticales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:1, statement:"Sea f(x) = (2x + 3)/(x² − 4). Determina los valores de x donde existen asíntotas verticales. Justifica por qué esos puntos hacen indefinida la función y analiza el comportamiento de los límites laterales.", hint:"Factorizá el denominador y buscá dónde se anula. Luego evaluá límites cuando x se acerca a esos valores desde ambos lados." },
+      { id:"pinned-asym-2", title:"Calcular asíntota horizontal con límites al infinito", topic:"Asíntotas horizontales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:2, statement:"Analiza g(x) = (3x² + 2x − 1)/(5x² + 4). Calcula limₓ→∞ g(x) y limₓ→−∞ g(x). ¿Existe asíntota horizontal? Si es así, escribe su ecuación.", hint:"Dividí numerador y denominador por la potencia más alta de x. Observá qué términos tienden a cero." },
+      { id:"pinned-asym-3", title:"Asíntota horizontal en función racional con raíces", topic:"Asíntotas horizontales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Para h(x) = √(4x² + 1)/(2x − 3), calcula limₓ→∞ h(x). ¿Existe asíntota horizontal? Justifica tu respuesta.", hint:"Recordá que √(x²) = |x|. Para x → ∞, |x| = x." },
+      { id:"pinned-asym-4", title:"Identificar asíntota oblicua por división polinomial", topic:"Asíntotas oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Sea f(x) = (x² + 3x + 2)/(x + 1). Realiza la división polinomial del numerador entre el denominador. ¿Existe asíntota oblicua? Si es así, escribe su ecuación y explica por qué la recta obtenida es la asíntota.", hint:"Dividí x² + 3x + 2 entre x + 1. Revisá si hay residuo y si existe discontinuidad removible." },
+      { id:"pinned-asym-5", title:"Análisis completo de asíntotas en función racional", topic:"Asíntotas verticales, horizontales y oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Analiza completamente la función f(x) = (2x² − x − 3)/(x² − 3). Encuentra: a) dominio, b) asíntotas verticales, c) asíntotas horizontales. Justifica cada respuesta.", hint:"Factorizá numerador y denominador. Identificá discontinuidades y luego compará grados para asíntotas horizontales." },
+      { id:"pinned-asym-6", title:"Asíntota oblicua con grados consecutivos", topic:"Asíntotas oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Dada f(x) = (x³ − 2x² + 1)/(x² + 1), realiza división polinomial. Determina si existe asíntota oblicua y escribe su ecuación. ¿Qué tipo de asíntota es?", hint:"Dividí x³ − 2x² + 1 entre x² + 1. El cociente es una expresión lineal: esa es la asíntota oblicua." },
+      { id:"pinned-asym-7", title:"Comportamiento de función cerca de asíntotas", topic:"Análisis gráfico de asíntotas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Para f(x) = (x + 2)/(x(x − 3)), identifica todas las asíntotas. Luego, describe el comportamiento de f(x) en cada región del dominio: x < 0, 0 < x < 3, x > 3. ¿La función cruza alguna asíntota?", hint:"Identificá asíntotas verticales x = 0 y x = 3, y horizontal y = 0. Luego evaluá signos por región." },
+      { id:"pinned-asym-8", title:"Caso especial: oblicua con cancelación de factores", topic:"Discontinuidad removible vs. asíntota", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Sea f(x) = (x² − 1)/(x − 1) para x ≠ 1. Simplifica la función. ¿Tiene asíntotas verticales? ¿Tiene asíntotas horizontales u oblicuas? Explica por qué la simplificación cambia el análisis.", hint:"Factorizá numerador y denominador. Cancelá factores comunes. La función simplificada no tiene asíntota vertical en x = 1, sino un agujero." },
+      { id:"pinned-asym-9", title:"Verdadero/Falso conceptual", topic:"Teoría de asíntotas", type:"Verdadero/Falso", questionMode:"verdadero/falso", difficultyLevel:2, statement:"Decide si cada afirmación es verdadera o falsa y justifica con una oración: a) Toda discontinuidad produce una asíntota vertical. b) Una función racional puede cruzar una asíntota horizontal. c) Si el grado del numerador es exactamente uno mayor que el del denominador, puede existir asíntota oblicua.", hint:"Pensá en discontinuidades removibles, comportamiento al infinito y división polinomial." },
+      { id:"pinned-asym-10", title:"Selección múltiple rápida", topic:"Clasificación de asíntotas", type:"Selección", questionMode:"selección múltiple", difficultyLevel:2, statement:"Para una función racional con grado del numerador 3 y grado del denominador 2, ¿qué comportamiento al infinito esperás normalmente?", options:["Asíntota horizontal y = 0", "Asíntota horizontal igual al cociente de coeficientes líderes", "Asíntota oblicua o polinomial lineal", "No se puede analizar con grados"], hint:"Compará los grados: numerador = denominador + 1." },
+      { id:"pinned-asym-11", title:"Competición contra reloj", topic:"Asíntotas mixtas", type:"Competición", questionMode:"reto contra reloj", difficultyLevel:3, statement:"Reto de 6 minutos: clasifica el tipo de asíntota de estas funciones sin resolver todo el procedimiento. Escribe solo el tipo y la razón: a) (x + 1)/(x² + 4), b) (3x² − 1)/(x² + 2), c) (x² + 5)/(x − 1), d) (x³ + 1)/(x² − 4).", hint:"Usá comparación de grados y luego revisá denominadores para verticales." },
+    ],
+  },
+});
+
+function getCalculusPinnedPracticeForDate(dateKey = getLifeOSDateKey()) {
+  const key = String(dateKey || "").slice(0, 10);
+  return CALCULUS_PINNED_PRACTICE_BY_DATE[key] || null;
 }
 
 function getCalculusRecentHistory(calculus, limit = 5) {
@@ -3950,11 +4049,20 @@ function CalculusTrainerView() {
   const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : null;
   const weakTopics = useMemo(() => getCalculusWeakTopics(calculus), [calculus]);
   const examModeOn = Boolean(calculus.settings?.examMode || String(plan.mode || "").toLowerCase().includes("examen") || String(plan.mode || "").toLowerCase().includes("simulación"));
+  const videoRecommendations = useMemo(() => getCalculusVideoRecommendations(plan), [plan]);
+  const pinnedToday = useMemo(() => getCalculusPinnedPracticeForDate(dateKey), [dateKey]);
 
   const generatePractice = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      const pinned = getCalculusPinnedPracticeForDate(dateKey);
+      if (pinned) {
+        pDispatch(AC.calcSessionGenerated({ ...pinned, meta: { source: "PDF guardado del día", dateKey, pinned: true } }));
+        uiDispatch(AC.toastAdd(Date.now(), "Práctica fijada cargada", "Mismos ejercicios del PDF de hoy · sin gastar API"));
+        playLifeOSSound("complete");
+        return;
+      }
       const res = await fetch("/api/generate-calculus-practice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4035,6 +4143,7 @@ function CalculusTrainerView() {
             {pill(`Parcial ${plan.partial || "repaso"}`, "#a78bfa")}
             {pill(`${evaluatedCount}/${current.exercises?.length || 0} corregidos`, "#34d399")}
             {avgScore !== null && pill(`Promedio ${avgScore}/100`, avgScore >= 75 ? "#34d399" : "#fb923c")}
+            {pinnedToday && pill("Ejercicios fijados hoy", "#fbbf24")}
           </div>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -4053,11 +4162,12 @@ function CalculusTrainerView() {
           <div style={{ fontSize:20, color:"#f8fafc", fontWeight:900, lineHeight:1.12, marginBottom:9 }}>{plan.topic}</div>
           <div style={{ color:"#94a3b8", fontSize:13, lineHeight:1.55, marginBottom:12 }}>{adaptiveMode}</div>
           {plan.cumulativeReview && <div style={{ color:"#86efac", fontSize:12, lineHeight:1.5, marginBottom:12, padding:10, borderRadius:12, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" }}>Ejercicios variados de los temas vistos hasta ahora según la jornalización. No incluye temas futuros.</div>}
+          {pinnedToday && <div style={{ color:"#fde68a", fontSize:12, lineHeight:1.5, marginBottom:12, padding:10, borderRadius:12, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.18)" }}>Hoy LifeOS usa los ejercicios guardados del PDF para no gastar créditos. Mañana vuelve a generar práctica nueva.</div>}
           <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:14 }}>
             {(plan.focus || []).map(f => <span key={f} className="tl-ftag">{f}</span>)}
           </div>
           <button disabled={loading} onClick={generatePractice} style={{ width:"100%", padding:"13px 14px", borderRadius:16, border:"1px solid rgba(96,165,250,.28)", background:loading ? "rgba(96,165,250,.08)" : "linear-gradient(135deg,#2563eb,#7c3aed)", color:"white", fontWeight:900, cursor:loading ? "wait" : "pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:9 }}>
-            {loading ? <RefreshCw size={17} className="spin"/> : <Sparkles size={17}/>} {generated ? "Regenerar práctica adaptativa" : "Generar práctica de hoy"}
+            {loading ? <RefreshCw size={17} className="spin"/> : <Sparkles size={17}/>} {pinnedToday ? "Cargar ejercicios guardados de hoy" : (generated ? "Regenerar práctica adaptativa" : "Generar práctica de hoy")}
           </button>
           {error && <div style={{ marginTop:10, padding:10, borderRadius:12, border:"1px solid rgba(248,113,113,.25)", background:"rgba(248,113,113,.08)", color:"#fca5a5", fontSize:12, fontWeight:800 }}>{error}</div>}
         </section>
@@ -4070,6 +4180,13 @@ function CalculusTrainerView() {
           <div style={{ marginTop:12, display:"grid", gap:8 }}>
             <div style={{ padding:10, borderRadius:12, background:"rgba(52,211,153,.08)", color:"#86efac", fontSize:12, fontWeight:800 }}>Variable necesaria: ANTHROPIC_API_KEY</div>
             <div style={{ padding:10, borderRadius:12, background:"rgba(167,139,250,.08)", color:"#c4b5fd", fontSize:12, fontWeight:800 }}>Modelo opcional: ANTHROPIC_MODEL</div>
+          </div>
+          <div style={{ marginTop:14, paddingTop:14, borderTop:"1px solid rgba(255,255,255,.08)" }}>
+            <div style={{ color:"#e2e8f0", fontWeight:900, fontSize:13, marginBottom:5 }}>Videos recomendados</div>
+            <div style={{ color:"#94a3b8", fontSize:11.5, lineHeight:1.45, marginBottom:8 }}>{videoRecommendations.note}</div>
+            <div style={{ display:"grid", gap:7 }}>
+              {videoRecommendations.videos.map(v => <a key={v.url} href={v.url} target="_blank" rel="noreferrer" style={{ padding:9, borderRadius:11, background:"rgba(96,165,250,.08)", border:"1px solid rgba(96,165,250,.13)", color:"#93c5fd", fontSize:11.5, fontWeight:900, textDecoration:"none", lineHeight:1.35 }}>{v.title}</a>)}
+            </div>
           </div>
         </aside>
       </div>
@@ -4115,8 +4232,11 @@ function CalculusTrainerView() {
                   {evaluation && <div style={{ padding:"5px 8px", borderRadius:999, background:(Number(evaluation.score) >= 75 ? "rgba(52,211,153,.12)" : "rgba(251,146,60,.12)"), color:(Number(evaluation.score) >= 75 ? "#86efac" : "#fdba74"), fontSize:11, fontWeight:900 }}>{Math.round(Number(evaluation.score) || 0)}/100</div>}
                 </div>
                 <div style={{ color:"#cbd5e1", fontSize:14, lineHeight:1.55, whiteSpace:"pre-wrap", marginBottom:10 }}>{ex.statement}</div>
+                {Array.isArray(ex.options) && ex.options.length > 0 && <div style={{ display:"grid", gap:7, marginBottom:10 }}>
+                  {ex.options.map(opt => <div key={`${ex.id}-${opt.key}`} style={{ padding:"8px 10px", borderRadius:11, background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.07)", color:"#cbd5e1", fontSize:12, lineHeight:1.35 }}><b style={{ color:"#93c5fd" }}>{opt.key}.</b> {opt.text}</div>)}
+                </div>}
                 {ex.hint && <div style={{ color:"#94a3b8", fontSize:12, marginBottom:10 }}><b style={{ color:"#cbd5e1" }}>Pista:</b> {ex.hint}</div>}
-                <textarea value={answer} onChange={e => setAnswerDrafts(prev => ({ ...prev, [ex.id]: e.target.value }))} placeholder="Escribí tu procedimiento aquí..." style={{ width:"100%", minHeight:86, borderRadius:14, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.35)", color:"#e2e8f0", padding:11, resize:"vertical", fontFamily:"inherit", fontSize:13, outline:"none" }}/>
+                <textarea value={answer} onChange={e => setAnswerDrafts(prev => ({ ...prev, [ex.id]: e.target.value }))} placeholder={Array.isArray(ex.options) && ex.options.length ? "Escribí la opción y tu justificación..." : "Escribí tu procedimiento aquí..."} style={{ width:"100%", minHeight:86, borderRadius:14, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.35)", color:"#e2e8f0", padding:11, resize:"vertical", fontFamily:"inherit", fontSize:13, outline:"none" }}/>
                 <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"center", marginTop:10, flexWrap:"wrap" }}>
                   <button disabled={evaluatingId === ex.id} onClick={() => evaluateExercise(ex)} style={{ padding:"10px 12px", borderRadius:12, border:"1px solid rgba(52,211,153,.24)", background:"rgba(52,211,153,.12)", color:"#86efac", fontWeight:900, cursor:evaluatingId === ex.id ? "wait" : "pointer", display:"flex", alignItems:"center", gap:7 }}>
                     {evaluatingId === ex.id ? <RefreshCw size={15} className="spin"/> : <CheckCircle2 size={15}/>} Corregir
@@ -4150,7 +4270,6 @@ function CalculusTrainerView() {
 }
 
 
-
 function RocketSpeedflipDarCleanCancelCard({ recommended }) {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
@@ -4171,9 +4290,8 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
   };
   const inputStyle = { width:"100%", borderRadius:10, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.36)", color:T_COLOR.text, padding:"9px 10px", fontFamily:"inherit", fontSize:12, outline:"none" };
-  const fieldCard = { display:"grid", gap:5 };
-  const labelStyle = { fontSize:11, color:"#e2e8f0", fontWeight:900 };
-  const hintStyle = { fontSize:10.5, color:T_COLOR.muted, lineHeight:1.45 };
+  const FieldHelp = ({ title, children, color="#94a3b8" }) => <div style={{ color, fontSize:10.5, lineHeight:1.35, marginTop:4 }}>{title && <b style={{ color:"#cbd5e1" }}>{title}: </b>}{children}</div>;
+  const MiniGuideRow = ({ title, text, color="#fbbf24" }) => <div style={{ padding:9, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", fontSize:11.5, lineHeight:1.42 }}><b style={{ color }}>{title}</b><div style={{ color:T_COLOR.muted, marginTop:2 }}>{text}</div></div>;
   return (
     <div className="g" style={{ padding:18, borderColor: recommended ? "rgba(251,191,36,.28)" : "rgba(251,191,36,.14)", background: recommended ? "linear-gradient(135deg,rgba(251,191,36,.09),rgba(255,255,255,.03))" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
@@ -4184,101 +4302,74 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
         {recommended && <span style={{ fontSize:10, color:"#fbbf24", fontWeight:900, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.10)", borderRadius:99, padding:"4px 8px" }}>Hoy toca</span>}
       </div>
 
-      <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6, marginBottom:12 }}>
-        <b style={{ color:"#e2e8f0" }}>Objetivo:</b> que el speedflip caiga más limpio, no solo llegar al balón.
-        <br/>
-        <b style={{ color:"#e2e8f0" }}>Qué cuenta como intento limpio:</b> el carro cae plano, no raspa dos veces con la trompa y podés seguir derecho sin corregir demasiado.
+      <div style={{ color:T_COLOR.muted, fontSize:12.5, lineHeight:1.6, marginBottom:12 }}>
+        <b style={{ color:"#fde68a" }}>Objetivo:</b> limpiar el aterrizaje antes de ir al mapa de Musty. Llegar al balón no basta si el carro raspa la trompa dos veces.
+        <br/><b style={{ color:"#fde68a" }}>Regla:</b> primero limpieza, después velocidad. Si raspa al final, sostené más el cancel; si raspa al inicio, revisá el primer diagonal.
       </div>
 
-      <div style={{ display:"grid", gap:8, marginBottom:12 }}>
-        {[
-          "Warmup sin balón · 2 min · hacé el movimiento lento y fijate si el carro cae plano.",
-          "10 repeticiones por lado · 3 min · contá intentos buenos y malos, sin buscar velocidad máxima.",
-          "Lado dominante · 3 min · repetí tu lado más estable para ganar consistencia.",
-          "Aplicación en Musty/speedflip map · 2 min · recién aquí buscá llegar al balón completo."
-        ].map((txt, i) => (
-          <div key={txt} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>
-            <b style={{ color:"#fbbf24", minWidth:14 }}>{i + 1}.</b><span>{txt}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display:"grid", gap:8, marginBottom:12, padding:10, borderRadius:12, background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.07)" }}>
-        <div style={{ fontSize:11, fontWeight:900, color:"#e2e8f0" }}>Cómo llenar este registro</div>
-        <div style={{ fontSize:10.5, color:T_COLOR.muted, lineHeight:1.55 }}>
-          Si en una sesión hiciste 10 intentos y 4 cayeron planos sin doble raspón, entonces sería:
-          <b style={{ color:"#e2e8f0" }}> Intentos totales = 10</b> y <b style={{ color:"#e2e8f0" }}>Intentos limpios = 4</b>.
-          Si casi todos rozaron la trompa 2 veces al caer, elegí <b style={{ color:"#e2e8f0" }}>2 toques</b>.
-        </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8, marginBottom:12 }} className="mob-layout-grid">
+        <MiniGuideRow title="1 · Warmup sin balón · 2 min" text="Repetí el movimiento sin buscar el balón. Solo mirá si cae plano." />
+        <MiniGuideRow title="2 · Repeticiones por lado · 3 min" text="Probá DAR Derecho o Izquierdo. Contá intentos buenos y malos." />
+        <MiniGuideRow title="3 · Lado dominante · 3 min" text="En tu caso: DAR Derecho. Consistencia antes que velocidad." />
+        <MiniGuideRow title="4 · Musty / speedflip map · 2 min" text="Ahora sí kickoff completo. Si llega pero raspa doble, no cuenta limpio." />
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
-        <div style={fieldCard}>
-          <label style={labelStyle}>Lado practicado</label>
-          <div style={hintStyle}>Qué air roll direccional usaste más hoy.</div>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Lado practicado</span>
           <select value={form.side} onChange={e => update("side", e.target.value)} style={inputStyle}><option>DAR Derecho</option><option>DAR Izquierdo</option></select>
-        </div>
-
-        <div style={fieldCard}>
-          <label style={labelStyle}>Velocidad de práctica</label>
-          <div style={hintStyle}>Usá 75% si todavía estás limpiando la caída. 100% solo si ya sale estable.</div>
+          <FieldHelp>Qué air roll usaste más en esta sesión.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Velocidad de práctica</span>
           <select value={form.speed} onChange={e => update("speed", e.target.value)} style={inputStyle}><option>75%</option><option>85%</option><option>100%</option></select>
-        </div>
-
-        <div style={fieldCard}>
-          <label style={labelStyle}>Intentos totales</label>
-          <div style={hintStyle}>Cuántos speedflips intentaste en toda la sesión.</div>
-          <input type="number" min="1" max="200" value={form.attempts} onChange={e => update("attempts", e.target.value)} placeholder="Ej: 10" style={inputStyle}/>
-        </div>
-
-        <div style={fieldCard}>
-          <label style={labelStyle}>Intentos limpios</label>
-          <div style={hintStyle}>Los que salieron bien: carro plano, sin raspón doble, controlable al caer.</div>
-          <input type="number" min="0" max={form.attempts || 10} value={form.clean} onChange={e => update("clean", e.target.value)} placeholder="Ej: 4" style={inputStyle}/>
-        </div>
-
-        <div style={fieldCard}>
-          <label style={labelStyle}>Toques de trompa más comunes</label>
-          <div style={hintStyle}>Cuántas veces la nariz del carro suele tocar el suelo al caer.</div>
-          <select value={form.noseTouches} onChange={e => update("noseTouches", e.target.value)} style={inputStyle}><option value="0">0 toques · cayó limpio</option><option value="1">1 toque · aceptable</option><option value="2">2 toques · está raspando doble</option><option value="3+">3+ toques · muy sucio</option></select>
-        </div>
-
-        <div style={fieldCard}>
-          <label style={labelStyle}>¿Cuándo raspa?</label>
-          <div style={hintStyle}>Elegí en qué momento sentís el raspón principal.</div>
+          <FieldHelp>Si estás raspando doble, volvé a 75%.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Intentos totales</span>
+          <input type="number" min="1" max="200" value={form.attempts} onChange={e => update("attempts", e.target.value)} placeholder="Ej. 10" style={inputStyle}/>
+          <FieldHelp>Cuántos speedflips intentaste en total.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Intentos limpios</span>
+          <input type="number" min="0" max={form.attempts || 10} value={form.clean} onChange={e => update("clean", e.target.value)} placeholder="Ej. 6" style={inputStyle}/>
+          <FieldHelp>Caen planos, sin doble raspón y con control.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Toques de trompa más comunes</span>
+          <select value={form.noseTouches} onChange={e => update("noseTouches", e.target.value)} style={inputStyle}><option value="0">0 toques</option><option value="1">1 toque</option><option value="2">2 toques</option><option value="3+">3+ toques</option></select>
+          <FieldHelp>No cuentes limpio si pega dos veces.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4 }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>¿Cuándo raspa?</span>
           <select value={form.touchMoment} onChange={e => update("touchMoment", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_TOUCH_MOMENTS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </div>
-
-        <div style={{ ...fieldCard, gridColumn:"1 / -1" }}>
-          <label style={labelStyle}>Error principal</label>
-          <div style={hintStyle}>Elegí el error que mejor explique por qué salió mal la mayoría de intentos.</div>
+          <FieldHelp>En qué parte del movimiento toca el suelo.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4, gridColumn:"1 / -1" }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Error principal</span>
           <select value={form.errorType} onChange={e => update("errorType", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_ERROR_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </div>
-
-        <div style={{ ...fieldCard, gridColumn:"1 / -1" }}>
-          <label style={labelStyle}>Notas opcionales</label>
-          <div style={hintStyle}>Ejemplo: “me sale mejor derecha”, “raspa al final”, “solté el cancel muy temprano”.</div>
-          <textarea value={form.notes} onChange={e => update("notes", e.target.value)} placeholder="Escribí algo corto si querés recordar cómo te fue" style={{ ...inputStyle, minHeight:72, resize:"vertical" }}/>
-        </div>
+          <FieldHelp>Elegí lo que más se repitió. LifeOS usa esto para recomendar el próximo ajuste.</FieldHelp>
+        </label>
+        <label style={{ display:"grid", gap:4, gridColumn:"1 / -1" }}>
+          <span style={{ fontSize:11, color:"#e2e8f0", fontWeight:900 }}>Notas rápidas</span>
+          <textarea value={form.notes} onChange={e => update("notes", e.target.value)} placeholder="Ej. raspa al final, me sale mejor derecha, solté el stick temprano..." style={{ ...inputStyle, minHeight:66, resize:"vertical" }}/>
+        </label>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:12 }}>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Clean rate</div><b style={{ color:"#fbbf24", fontSize:18 }}>{preview.cleanRate}%</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Porcentaje de intentos limpios.</div></div>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Toques/intento</div><b style={{ color:T_COLOR.text, fontSize:18 }}>{preview.noseTouchAvg}</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Promedio aproximado de roces al caer.</div></div>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Lado dominante</div><b style={{ color:"#86efac", fontSize:12 }}>{stats.cleanestSide.count ? `${stats.cleanestSide.side} · ${stats.cleanestSide.avg}%` : form.side}</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Tu lado más limpio hasta ahora.</div></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Clean rate</div><b style={{ color:"#fbbf24", fontSize:18 }}>{preview.cleanRate}%</b><div style={{ color:T_COLOR.muted, fontSize:10, marginTop:2 }}>limpios / total</div></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Toques/intento</div><b style={{ color:T_COLOR.text, fontSize:18 }}>{preview.noseTouchAvg}</b><div style={{ color:T_COLOR.muted, fontSize:10, marginTop:2 }}>menos es mejor</div></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Lado más limpio</div><b style={{ color:"#86efac", fontSize:12 }}>{stats.cleanestSide.count ? `${stats.cleanestSide.side} · ${stats.cleanestSide.avg}%` : form.side}</b></div>
       </div>
 
-      <div style={{ marginTop:12, padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
-        <b style={{ color:"#e2e8f0" }}>{stats.status}</b>{stats.sessionsLeft !== "—" ? ` · Si mantenés este ritmo, podrías dominarlo en ${stats.sessionsLeft} sesiones.` : ""}
-        <br/>{feedback}
-        <div style={{ marginTop:8, fontSize:10.5 }}>
-          <b style={{ color:"#e2e8f0" }}>Reglas rápidas para leer tu error:</b><br/>
-          • Si raspa al inicio: tu primer diagonal probablemente va demasiado frontal.<br/>
-          • Si raspa al final: probablemente soltaste el cancel muy temprano.<br/>
-          • Si cae torcido: el DAR está enderezando tarde o el cancel se sale hacia un lado.
-        </div>
+      <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8 }} className="mob-layout-grid">
+        <MiniGuideRow title="Cómo saber si fue limpio" text="Cae plano, no pega doble, no pierde dirección y no necesitás corregir mucho después del flip." color="#86efac" />
+        <MiniGuideRow title="Cómo leer errores" text="Inicio = diagonal muy frontal. Final = soltaste cancel temprano. Doble raspón = salida sucia." color="#fbbf24" />
       </div>
 
+      <div style={{ marginTop:12, padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5 }}>
+        <b style={{ color:"#e2e8f0" }}>{stats.status}</b>{stats.sessionsLeft !== "—" ? ` · Si mantenés este ritmo, podrías dominarlo en ${stats.sessionsLeft} sesiones.` : ""}<br/>{feedback}
+      </div>
       <button onClick={save} style={{ marginTop:12, width:"100%", minHeight:40, borderRadius:12, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.12)", color:"#fbbf24", fontWeight:900, cursor:"pointer" }}>Guardar sesión</button>
       {stats.lastFive.length > 0 && <div style={{ marginTop:12, display:"grid", gap:6 }}>{stats.lastFive.slice().reverse().map(s => <div key={s.id} style={{ display:"flex", justifyContent:"space-between", gap:8, fontSize:10.5, color:T_COLOR.muted, padding:7, borderRadius:9, background:"rgba(255,255,255,.03)" }}><span>{new Date(s.date).toLocaleDateString()} · {s.side} · {s.speed}</span><b style={{ color:s.cleanRate >= 80 ? "#86efac" : "#fbbf24" }}>{s.cleanRate}%</b></div>)}</div>}
     </div>
