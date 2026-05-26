@@ -317,7 +317,7 @@ function getActiveQuests(persistentState) {
 
 
 // ── Rocket League static training system ────────────────────────
-// Epic-safe custom training + optional Workshop maps (BakkesMod / Workshop Map Loader).
+// Epic-safe custom training + Workshop normal maps. Avoid extra-mode maps because Epic can bug with custom modes.
 
 const ROCKET_LEAGUE_SESSION_MINUTES = 60;
 const ROCKET_LEAGUE_PARENT_QUEST_ID = 2;
@@ -437,41 +437,73 @@ const ROCKET_LEAGUE_PACKS = Object.freeze({
   },
 });
 
+const ROCKET_LEAGUE_WORKSHOP_RULES = Object.freeze([
+  "Usar solo mapas Workshop normales: dribbling, rings, aerial control o recoveries simples.",
+  "Evitar mapas con modos extra, mutators raros, scripts de minijuego, multiplayer custom o reglas especiales.",
+  "Después de una partida, podés entrar directo al mapa Workshop normal sin reiniciar Rocket League.",
+  "Si un mapa se buguea en Epic, salí del mapa y cambiá a training pack; no gastés la sesión peleando con el loader.",
+]);
+
 const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
   dribbleChallenge2: {
     name: "Dribble Challenge #2",
-    source: "Workshop / BakkesMod",
+    source: "Workshop normal · Epic local map",
     focus: "dribbling en suelo, balance y control fino",
-  },
-  lethamyrRings: {
-    name: "Lethamyr's Giant Rings Map",
-    source: "Workshop / Lethamyr",
-    focus: "aerial control y air roll sin depender de la pelota",
-  },
-  speedJumpRings2: {
-    name: "Speed Jump: Rings 2 - By dmc",
-    source: "Workshop",
-    focus: "control aéreo, boost management y recoveries al caer",
-  },
-  hornetsNest: {
-    name: "Hornets Nest",
-    source: "Workshop",
-    focus: "recoveries, lectura del carro y control bajo presión",
-  },
-  airDribbleGauntlet: {
-    name: "Air Dribble Gauntlet 1/2",
-    source: "Lethamyr / Workshop",
-    focus: "ground-to-air y air dribble básico por niveles",
-  },
-  whackAMole: {
-    name: "Speed Training: Whack a Mole",
-    source: "Lethamyr",
-    focus: "car control, boost efficiency, aerials y recoveries",
+    kind: "Dribbling",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "No usar variantes con mutators o modos extra.",
+    howToUse: "Ideal después de una partida: entrá, hacé 10–15 min de control y salí sin reiniciar el juego.",
   },
   noobDribble: {
     name: "Noob Dribble",
-    source: "Workshop",
-    focus: "dribbling más suave para calentar sin frustrarte",
+    source: "Workshop normal · Epic local map",
+    focus: "dribbling suave para calentar sin frustrarte",
+    kind: "Dribbling fácil",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "No buscar speedrun; si se cae la pelota, reinicio tranquilo.",
+    howToUse: "Perfecto para días bajos o para limpiar control antes de jugar con amigos.",
+  },
+  lethamyrRings: {
+    name: "Lethamyr's Giant Rings Map",
+    source: "Workshop normal · Rings",
+    focus: "aerial control y air roll sin depender de la pelota",
+    kind: "Rings / aéreo",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "No usar retos con reglas extra; solo ruta normal de rings.",
+    howToUse: "Usalo para 10–15 min de control aéreo. Si perdés control, soltá air roll y estabilizá.",
+  },
+  speedJumpRings2: {
+    name: "Speed Jump: Rings 2 - By dmc",
+    source: "Workshop normal · Rings",
+    focus: "control aéreo, boost management y recoveries al caer",
+    kind: "Rings / recovery",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "No obsesionarse con terminarlo; la métrica es chocar menos y caer mejor.",
+    howToUse: "Buen bloque post-partida para bajar tilt y trabajar control sin pelota.",
+  },
+  airDribbleGauntlet: {
+    name: "Air Dribble Gauntlet 1/2",
+    source: "Workshop normal · niveles simples",
+    focus: "ground-to-air y air dribble básico por niveles",
+    kind: "Air dribble básico",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "Usar niveles fáciles; evitar versiones con modos especiales si Epic se buguea.",
+    howToUse: "Meta real: setup limpio + 1 toque útil. No forzar clips.",
+  },
+  cocoAimTraining: {
+    name: "Aim Training by Coco",
+    source: "Workshop normal · tiros",
+    focus: "puntería, lectura de tiro y contacto limpio",
+    kind: "Tiros / puntería",
+    modeSafe: true,
+    postMatch: true,
+    avoid: "Usar modo normal si el mapa ofrece variantes; no activar modos extra si fallan en Epic.",
+    howToUse: "Después de ranked, 10 min de tiros limpios para corregir puntería sin entrar a otra partida.",
   },
 });
 
@@ -801,7 +833,7 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
     makeRlPackSubtask("pack-speedflip-musty", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Mapa de Musty/speedflip después del clean cancel. Si llegás al balón pero raspás dos veces, cuenta como intento no limpio.", "#fbbf24"),
     RL_MECHANIC_DRILLS.recoveryChain,
-    makeRlWorkshopSubtask("workshop-hornets-nest", ROCKET_LEAGUE_WORKSHOP_MAPS.hornetsNest, 15, "Hacé rutas cortas. El objetivo no es terminar el mapa; es caer con ruedas, powerslide y volver al control.", "#34d399"),
+    makeRlWorkshopSubtask("workshop-speed-jump-rings-recovery", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings2, 15, "Rings/recovery normal: el objetivo no es terminar el mapa; es caer con ruedas, powerslide y volver al control sin buguear Epic.", "#34d399"),
     makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 5),
   ]),
   makeRlPlan("dribble-flick", "Dribble + Flick Day", "Control de suelo que amenaza gol", [
@@ -820,7 +852,7 @@ const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     RL_MECHANIC_DRILLS.shadowPatience,
     makeRlPackSubtask("pack-hard-saves", ROCKET_LEAGUE_PACKS.hardSaves, 10, "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento.", "#f472b6"),
     makeRlPackSubtask("pack-shadow-defense", ROCKET_LEAGUE_PACKS.shadowDefense, 10, "Aguantá la distancia. No te tires si el rival todavía no perdió control.", "#818cf8"),
-    makeRlWorkshopSubtask("workshop-whack-a-mole", ROCKET_LEAGUE_WORKSHOP_MAPS.whackAMole, 15, "Usalo como defensa activa: llegar, tocar, caer bien y moverte al siguiente objetivo.", "#38bdf8"),
+    makeRlPackSubtask("pack-recovery-training", ROCKET_LEAGUE_PACKS.recoveryTraining, 15, "Recovery training sin modos extra: caídas incómodas, half flips y salida limpia. Si querés Workshop ese día, usá Speed Jump Rings 2.", "#38bdf8"),
     makeRlMentalSubtask("mental-defense-review", "Defensa sin tilt", "Anotá si defendiste por miedo o por lectura. La meta es paciencia, no adivinar.", 5),
   ]),
   makeRlPlan("wall-backboard", "Wall + Backboard Day", "Pared útil, lectura y recovery", [
@@ -4620,7 +4652,7 @@ ${line}` : line));
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · custom training + workshop · Plat III → Diamond</div>
+          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · packs + workshop normal · Plat III → Diamond</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -4670,7 +4702,7 @@ ${line}` : line));
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: freeplay y 3 partidas de 1v1 son fijos; el resto rota entre packs, workshop y mecánicas. Si perdés 2 seguidas por tilt, no sigas ranked.
+              No ranked frío: freeplay y 3 partidas de 1v1 son fijos; el resto rota entre packs, workshop normal y mecánicas. Evitá mapas con modos extra porque Epic puede buguearse.
             </div>
           </div>
 
@@ -4724,8 +4756,10 @@ ${line}` : line));
                       )}
                       {task.workshop && (
                         <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
-                          <span style={{ fontSize:11, color:"#38bdf8", fontWeight:900, background:"rgba(56,189,248,.09)", border:"1px solid rgba(56,189,248,.18)", borderRadius:9, padding:"4px 8px" }}>Workshop: {task.workshop.name}</span>
+                          <span style={{ fontSize:11, color:"#38bdf8", fontWeight:900, background:"rgba(56,189,248,.09)", border:"1px solid rgba(56,189,248,.18)", borderRadius:9, padding:"4px 8px" }}>Workshop normal: {task.workshop.name}</span>
+                          <span style={{ fontSize:11, color:"#34d399", fontWeight:900, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)", borderRadius:9, padding:"4px 8px" }}>Epic safe · sin modos extra</span>
                           <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.workshop.focus}</span>
+                          <span style={{ fontSize:10.5, color:T_COLOR.muted, fontWeight:700, width:"100%" }}>{task.workshop.howToUse}</span>
                         </div>
                       )}
                       <div style={{ marginTop:10 }}>
@@ -4792,14 +4826,27 @@ ${line}` : line));
               <div style={{ ...S.stitle, marginBottom:0 }}>Workshop maps</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque Workshop, abrilo con tu método de custom maps. No necesitás terminar el mapa: trabajá el objetivo del día y cerrá el bloque al tiempo marcado.
+              Cuando toque Workshop, usá mapas normales cargados en Epic: dribbling, rings, aerial control o tiros. Podés entrar después de una partida sin reiniciar. Evitá mapas con modos extra, minijuegos o mutators raros porque Epic puede buguearse.
+            </div>
+            <div style={{ display:"grid", gap:6, marginTop:10 }}>
+              {ROCKET_LEAGUE_WORKSHOP_RULES.map((rule, i) => (
+                <div key={rule} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.2, color:T_COLOR.muted, lineHeight:1.35 }}>
+                  <span style={{ color:"#38bdf8", fontWeight:900 }}>{i + 1}.</span>
+                  <span>{rule}</span>
+                </div>
+              ))}
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).slice(0, 6).map(map => (
+              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).filter(map => map.modeSafe !== false).slice(0, 6).map(map => (
                 <div key={map.name} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                  <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{map.name}</div>
-                  <div style={{ fontSize:10.5, color:"#38bdf8", fontWeight:900, marginTop:2 }}>{map.source}</div>
+                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{map.name}</div>
+                    <span style={{ fontSize:9.5, color:"#34d399", fontWeight:900, border:"1px solid rgba(52,211,153,.18)", background:"rgba(52,211,153,.08)", borderRadius:99, padding:"2px 7px" }}>sin modos extra</span>
+                  </div>
+                  <div style={{ fontSize:10.5, color:"#38bdf8", fontWeight:900, marginTop:2 }}>{map.source} · {map.kind}</div>
                   <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{map.focus}</div>
+                  <div style={{ fontSize:10.5, color:"#cbd5e1", marginTop:5, lineHeight:1.35 }}>{map.howToUse}</div>
+                  <div style={{ fontSize:10, color:"#fbbf24", marginTop:5, lineHeight:1.35 }}>Evitar: {map.avoid}</div>
                 </div>
               ))}
             </div>
