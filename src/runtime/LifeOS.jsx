@@ -4150,6 +4150,7 @@ function CalculusTrainerView() {
 }
 
 
+
 function RocketSpeedflipDarCleanCancelCard({ recommended }) {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
@@ -4170,6 +4171,9 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
   };
   const inputStyle = { width:"100%", borderRadius:10, border:"1px solid rgba(255,255,255,.08)", background:"rgba(2,6,23,.36)", color:T_COLOR.text, padding:"9px 10px", fontFamily:"inherit", fontSize:12, outline:"none" };
+  const fieldCard = { display:"grid", gap:5 };
+  const labelStyle = { fontSize:11, color:"#e2e8f0", fontWeight:900 };
+  const hintStyle = { fontSize:10.5, color:T_COLOR.muted, lineHeight:1.45 };
   return (
     <div className="g" style={{ padding:18, borderColor: recommended ? "rgba(251,191,36,.28)" : "rgba(251,191,36,.14)", background: recommended ? "linear-gradient(135deg,rgba(251,191,36,.09),rgba(255,255,255,.03))" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
@@ -4179,32 +4183,102 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
         </div>
         {recommended && <span style={{ fontSize:10, color:"#fbbf24", fontWeight:900, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.10)", borderRadius:99, padding:"4px 8px" }}>Hoy toca</span>}
       </div>
-      <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.55, marginBottom:12 }}>
-        Llegar al balón no basta: debe caer plano. Primero limpieza, después velocidad. Si raspa al final, sostené más el cancel; si raspa al inicio, revisá el primer diagonal.
+
+      <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6, marginBottom:12 }}>
+        <b style={{ color:"#e2e8f0" }}>Objetivo:</b> que el speedflip caiga más limpio, no solo llegar al balón.
+        <br/>
+        <b style={{ color:"#e2e8f0" }}>Qué cuenta como intento limpio:</b> el carro cae plano, no raspa dos veces con la trompa y podés seguir derecho sin corregir demasiado.
       </div>
+
       <div style={{ display:"grid", gap:8, marginBottom:12 }}>
-        {["Warmup sin balón · 2 min", "10 repeticiones por lado · 3 min", "Lado dominante · 3 min", "Aplicación en Musty/speedflip map · 2 min"].map((txt, i) => (
-          <div key={txt} style={{ display:"flex", gap:8, alignItems:"center", fontSize:11.5, color:T_COLOR.muted }}><b style={{ color:"#fbbf24" }}>{i + 1}.</b><span>{txt}</span></div>
+        {[
+          "Warmup sin balón · 2 min · hacé el movimiento lento y fijate si el carro cae plano.",
+          "10 repeticiones por lado · 3 min · contá intentos buenos y malos, sin buscar velocidad máxima.",
+          "Lado dominante · 3 min · repetí tu lado más estable para ganar consistencia.",
+          "Aplicación en Musty/speedflip map · 2 min · recién aquí buscá llegar al balón completo."
+        ].map((txt, i) => (
+          <div key={txt} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>
+            <b style={{ color:"#fbbf24", minWidth:14 }}>{i + 1}.</b><span>{txt}</span>
+          </div>
         ))}
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8 }} className="mob-layout-grid">
-        <select value={form.side} onChange={e => update("side", e.target.value)} style={inputStyle}><option>DAR Derecho</option><option>DAR Izquierdo</option></select>
-        <select value={form.speed} onChange={e => update("speed", e.target.value)} style={inputStyle}><option>75%</option><option>85%</option><option>100%</option></select>
-        <input type="number" min="1" max="200" value={form.attempts} onChange={e => update("attempts", e.target.value)} placeholder="Intentos" style={inputStyle}/>
-        <input type="number" min="0" max={form.attempts || 10} value={form.clean} onChange={e => update("clean", e.target.value)} placeholder="Intentos limpios" style={inputStyle}/>
-        <select value={form.noseTouches} onChange={e => update("noseTouches", e.target.value)} style={inputStyle}><option value="0">0 toques</option><option value="1">1 toque</option><option value="2">2 toques</option><option value="3+">3+ toques</option></select>
-        <select value={form.touchMoment} onChange={e => update("touchMoment", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_TOUCH_MOMENTS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
-        <select value={form.errorType} onChange={e => update("errorType", e.target.value)} style={{ ...inputStyle, gridColumn:"1 / -1" }}>{Object.entries(SPEEDFLIP_DAR_ERROR_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
-        <textarea value={form.notes} onChange={e => update("notes", e.target.value)} placeholder="Notas opcionales" style={{ ...inputStyle, gridColumn:"1 / -1", minHeight:66, resize:"vertical" }}/>
+
+      <div style={{ display:"grid", gap:8, marginBottom:12, padding:10, borderRadius:12, background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.07)" }}>
+        <div style={{ fontSize:11, fontWeight:900, color:"#e2e8f0" }}>Cómo llenar este registro</div>
+        <div style={{ fontSize:10.5, color:T_COLOR.muted, lineHeight:1.55 }}>
+          Si en una sesión hiciste 10 intentos y 4 cayeron planos sin doble raspón, entonces sería:
+          <b style={{ color:"#e2e8f0" }}> Intentos totales = 10</b> y <b style={{ color:"#e2e8f0" }}>Intentos limpios = 4</b>.
+          Si casi todos rozaron la trompa 2 veces al caer, elegí <b style={{ color:"#e2e8f0" }}>2 toques</b>.
+        </div>
       </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        <div style={fieldCard}>
+          <label style={labelStyle}>Lado practicado</label>
+          <div style={hintStyle}>Qué air roll direccional usaste más hoy.</div>
+          <select value={form.side} onChange={e => update("side", e.target.value)} style={inputStyle}><option>DAR Derecho</option><option>DAR Izquierdo</option></select>
+        </div>
+
+        <div style={fieldCard}>
+          <label style={labelStyle}>Velocidad de práctica</label>
+          <div style={hintStyle}>Usá 75% si todavía estás limpiando la caída. 100% solo si ya sale estable.</div>
+          <select value={form.speed} onChange={e => update("speed", e.target.value)} style={inputStyle}><option>75%</option><option>85%</option><option>100%</option></select>
+        </div>
+
+        <div style={fieldCard}>
+          <label style={labelStyle}>Intentos totales</label>
+          <div style={hintStyle}>Cuántos speedflips intentaste en toda la sesión.</div>
+          <input type="number" min="1" max="200" value={form.attempts} onChange={e => update("attempts", e.target.value)} placeholder="Ej: 10" style={inputStyle}/>
+        </div>
+
+        <div style={fieldCard}>
+          <label style={labelStyle}>Intentos limpios</label>
+          <div style={hintStyle}>Los que salieron bien: carro plano, sin raspón doble, controlable al caer.</div>
+          <input type="number" min="0" max={form.attempts || 10} value={form.clean} onChange={e => update("clean", e.target.value)} placeholder="Ej: 4" style={inputStyle}/>
+        </div>
+
+        <div style={fieldCard}>
+          <label style={labelStyle}>Toques de trompa más comunes</label>
+          <div style={hintStyle}>Cuántas veces la nariz del carro suele tocar el suelo al caer.</div>
+          <select value={form.noseTouches} onChange={e => update("noseTouches", e.target.value)} style={inputStyle}><option value="0">0 toques · cayó limpio</option><option value="1">1 toque · aceptable</option><option value="2">2 toques · está raspando doble</option><option value="3+">3+ toques · muy sucio</option></select>
+        </div>
+
+        <div style={fieldCard}>
+          <label style={labelStyle}>¿Cuándo raspa?</label>
+          <div style={hintStyle}>Elegí en qué momento sentís el raspón principal.</div>
+          <select value={form.touchMoment} onChange={e => update("touchMoment", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_TOUCH_MOMENTS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+        </div>
+
+        <div style={{ ...fieldCard, gridColumn:"1 / -1" }}>
+          <label style={labelStyle}>Error principal</label>
+          <div style={hintStyle}>Elegí el error que mejor explique por qué salió mal la mayoría de intentos.</div>
+          <select value={form.errorType} onChange={e => update("errorType", e.target.value)} style={inputStyle}>{Object.entries(SPEEDFLIP_DAR_ERROR_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+        </div>
+
+        <div style={{ ...fieldCard, gridColumn:"1 / -1" }}>
+          <label style={labelStyle}>Notas opcionales</label>
+          <div style={hintStyle}>Ejemplo: “me sale mejor derecha”, “raspa al final”, “solté el cancel muy temprano”.</div>
+          <textarea value={form.notes} onChange={e => update("notes", e.target.value)} placeholder="Escribí algo corto si querés recordar cómo te fue" style={{ ...inputStyle, minHeight:72, resize:"vertical" }}/>
+        </div>
+      </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginTop:12 }}>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Clean rate</div><b style={{ color:"#fbbf24", fontSize:18 }}>{preview.cleanRate}%</b></div>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Toques/intento</div><b style={{ color:T_COLOR.text, fontSize:18 }}>{preview.noseTouchAvg}</b></div>
-        <div style={{ padding:10, borderRadius:11, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Dominante</div><b style={{ color:"#86efac", fontSize:12 }}>{stats.cleanestSide.count ? `${stats.cleanestSide.side} · ${stats.cleanestSide.avg}%` : form.side}</b></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(251,191,36,.08)", border:"1px solid rgba(251,191,36,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Clean rate</div><b style={{ color:"#fbbf24", fontSize:18 }}>{preview.cleanRate}%</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Porcentaje de intentos limpios.</div></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Toques/intento</div><b style={{ color:T_COLOR.text, fontSize:18 }}>{preview.noseTouchAvg}</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Promedio aproximado de roces al caer.</div></div>
+        <div style={{ padding:10, borderRadius:11, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.14)" }}><div style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900 }}>Lado dominante</div><b style={{ color:"#86efac", fontSize:12 }}>{stats.cleanestSide.count ? `${stats.cleanestSide.side} · ${stats.cleanestSide.avg}%` : form.side}</b><div style={{ marginTop:4, fontSize:10, color:T_COLOR.muted }}>Tu lado más limpio hasta ahora.</div></div>
       </div>
-      <div style={{ marginTop:12, padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5 }}>
-        <b style={{ color:"#e2e8f0" }}>{stats.status}</b>{stats.sessionsLeft !== "—" ? ` · Si mantenés este ritmo, podrías dominarlo en ${stats.sessionsLeft} sesiones.` : ""}<br/>{feedback}
+
+      <div style={{ marginTop:12, padding:10, borderRadius:12, background:"rgba(2,6,23,.25)", border:"1px solid rgba(255,255,255,.07)", color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
+        <b style={{ color:"#e2e8f0" }}>{stats.status}</b>{stats.sessionsLeft !== "—" ? ` · Si mantenés este ritmo, podrías dominarlo en ${stats.sessionsLeft} sesiones.` : ""}
+        <br/>{feedback}
+        <div style={{ marginTop:8, fontSize:10.5 }}>
+          <b style={{ color:"#e2e8f0" }}>Reglas rápidas para leer tu error:</b><br/>
+          • Si raspa al inicio: tu primer diagonal probablemente va demasiado frontal.<br/>
+          • Si raspa al final: probablemente soltaste el cancel muy temprano.<br/>
+          • Si cae torcido: el DAR está enderezando tarde o el cancel se sale hacia un lado.
+        </div>
       </div>
+
       <button onClick={save} style={{ marginTop:12, width:"100%", minHeight:40, borderRadius:12, border:"1px solid rgba(251,191,36,.28)", background:"rgba(251,191,36,.12)", color:"#fbbf24", fontWeight:900, cursor:"pointer" }}>Guardar sesión</button>
       {stats.lastFive.length > 0 && <div style={{ marginTop:12, display:"grid", gap:6 }}>{stats.lastFive.slice().reverse().map(s => <div key={s.id} style={{ display:"flex", justifyContent:"space-between", gap:8, fontSize:10.5, color:T_COLOR.muted, padding:7, borderRadius:9, background:"rgba(255,255,255,.03)" }}><span>{new Date(s.date).toLocaleDateString()} · {s.side} · {s.speed}</span><b style={{ color:s.cleanRate >= 80 ? "#86efac" : "#fbbf24" }}>{s.cleanRate}%</b></div>)}</div>}
     </div>
