@@ -1,5 +1,5 @@
 // ============================================================
-// LIFE OS v3.2 · Persistence Engine — Hardened Pass
+// LIFE OS v28.2 · Modular data extraction pass
 // ─ Dual-reducer state (persistent / UI)
 // ─ Typed action creators
 // ─ Numeric schema versioning (v1)
@@ -35,6 +35,50 @@ import {
   Shirt, Palette, Plus, Trash2,
 } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
+
+import {
+  ROCKET_LEAGUE_SESSION_MINUTES,
+  ROCKET_LEAGUE_PARENT_QUEST_ID,
+  ROCKET_LEAGUE_PROFILE,
+  ROCKET_LEAGUE_CONTROLLER_PRESET,
+  ROCKET_LEAGUE_RECOVERY_TIPS,
+  ROCKET_LEAGUE_PACKS,
+  ROCKET_LEAGUE_WORKSHOP_RULES,
+  ROCKET_LEAGUE_WORKSHOP_MAPS,
+  RL_SUBTASK_TYPES,
+  SPEEDFLIP_DAR_ERROR_LABELS,
+  SPEEDFLIP_DAR_TOUCH_MOMENTS,
+  normalizeSpeedflipDarSession,
+  getSpeedflipDarSessionFeedback,
+  getSpeedflipDarStats,
+  getRocketLeagueWeeklyFocus,
+  getRocketLeagueFocusRole,
+  getSecondsUntilNextRocketWeeklyFocus,
+  getRocketLeagueDateKey,
+  getRocketLeaguePlanForDate,
+  getRocketLeaguePlanById,
+  getRocketLeagueSubtaskTargetSeconds,
+  createRocketLeagueCurrent,
+  createRocketLeagueInitialState,
+  hasRocketLeagueProgress
+} from "../data/rocketLeagueData.js";
+import {
+  WARDROBE_TYPES,
+  WARDROBE_COLOR_GUIDE,
+  WARDROBE_FALLBACK_ITEMS
+} from "../data/wardrobeData.js";
+import {
+  CALCULUS_FIXED_START_MIN,
+  CALCULUS_FIXED_DURATION_MIN,
+  CALCULUS_FIXED_END_MIN,
+  CALCULUS_SOURCE_LABEL,
+  CALCULUS_JOURNALIZATION_II_PAC_2026,
+  CALCULUS_DIFFICULTY_LEVELS,
+  CALCULUS_I_VIDEO_SCOPE,
+  CALCULUS_I_VIDEO_BLOCKED_TERMS,
+  CALCULUS_PINNED_PRACTICE_BY_DATE
+} from "../data/calculusData.js";
+
 
 // ─────────────────────────────────────────────────────────────────
 // § 1 · ACTION TYPES (typed, frozen, tree-shakeable)
@@ -316,647 +360,7 @@ function getActiveQuests(persistentState) {
 }
 
 
-// ── Rocket League static training system ────────────────────────
-// Epic-safe custom training + Workshop normal maps. Avoid extra-mode maps because Epic can bug with custom modes.
-
-const ROCKET_LEAGUE_SESSION_MINUTES = 60;
-const ROCKET_LEAGUE_PARENT_QUEST_ID = 2;
-
-const ROCKET_LEAGUE_PROFILE = Object.freeze({
-  duel: "1v1 Plat I",
-  doubles: "2v2 Plat III",
-  standard: "3v3 Plat III",
-  platform: "Epic + Workshop maps",
-  target: "Plat III → Diamond",
-});
-
-const ROCKET_LEAGUE_CONTROLLER_PRESET = Object.freeze([
-  { label: "Sensibilidad suelo", value: "1.45", note: "Precisa para Plat alto; subí a 1.55 cuando los recoveries se sientan lentos." },
-  { label: "Sensibilidad aérea", value: "1.45", note: "Igual que suelo para no cambiar sensación al saltar o salir de pared." },
-  { label: "Zona muerta", value: "0.06", note: "DualSense nuevo: bajo y preciso. Si aparece drift, probá 0.07–0.08." },
-  { label: "Zona esquive", value: "0.70", note: "Reduce backflips/sideflips accidentales en fast aerial y speedflip." },
-  { label: "Ver a los lados", value: "5.00", note: "Camera swivel speed rápido sin sentirse nervioso." },
-  { label: "Vibración", value: "Off", note: "Menos distracción y lectura más limpia del control." },
-]);
-
-const ROCKET_LEAGUE_RECOVERY_TIPS = Object.freeze([
-  "Aterrizá con las ruedas hacia la dirección donde querés salir, no donde venís mirando.",
-  "Mantené powerslide al caer si el carro no está perfectamente alineado.",
-  "Después de cada tiro, buscá pad pequeño antes de mirar si fue gol.",
-  "Si caés en pared, convertí la caída en wavedash o salida lateral, no frenes.",
-  "En defensa, salvar al centro cuenta como error: priorizá esquina o lateral.",
-  "Cuando fallés un tiro, tu primera mecánica es recovery; no perseguir la pelota sin boost.",
-  "Si quedás mirando hacia tu arco después de un challenge, half flip + pad pequeño antes de volver a saltar.",
-]);
-
-const ROCKET_LEAGUE_PACKS = Object.freeze({
-  powershots: {
-    name: "Powershots",
-    code: "7028-5E10-88EF-E83E",
-    focus: "pegar fuerte, limpio y con dirección",
-  },
-  groundShots: {
-    name: "Ground Shots",
-    code: "6EB1-79B2-33B8-681C",
-    focus: "tiros básicos consistentes",
-  },
-  shotsYouShouldntMiss: {
-    name: "Shots You Shouldn't Miss",
-    code: "42BF-686D-E047-574B",
-    focus: "no fallar tiros ganables",
-  },
-  basicRebounds: {
-    name: "Basic Rebound Practice",
-    code: "3DBA-229E-745C-429C",
-    focus: "leer rebotes simples",
-  },
-  backboardReads: {
-    name: "Backboard Reads",
-    code: "2486-EEA6-B887-A040",
-    focus: "lecturas de pared/backboard",
-  },
-  aerialsOffWall: {
-    name: "Aerials Off Wall",
-    code: "5BFE-60D6-0D59-79F2",
-    focus: "salidas de pared y control aéreo",
-  },
-  shadowDefense: {
-    name: "Shadow Defense",
-    code: "5CCE-FB29-7B05-A0B1",
-    focus: "defender sin regalar espacio",
-  },
-  hardSaves: {
-    name: "Hard Saves & Clears",
-    code: "82D6-5637-12A7-5AC5",
-    focus: "salvadas incómodas y clears con intención",
-  },
-  overheadSaves: {
-    name: "Overhead Saves",
-    code: "9223-FCC3-D504-D1B8",
-    focus: "salvadas sobre tu cabeza y shadow bajo presión",
-  },
-  saveConsistency: {
-    name: "Save Consistency",
-    code: "5ED2-0D32-270A-3266",
-    focus: "salvadas repetibles sin pánico",
-  },
-  platDiamond: {
-    name: "Plat–Diamond Training",
-    code: "3B40-CE8C-58EB-32B3",
-    focus: "transición Plat alto hacia Diamond",
-  },
-  speedflipMusty: {
-    name: "Musty Speedflip Kickoff Test",
-    code: "A503-264C-A7EB-D282",
-    focus: "speedflip exigente para kickoff real",
-  },
-  airRollShots: {
-    name: "Power shot + Air Roll Shot",
-    code: "1C4E-D311-1506-B6C1",
-    focus: "tiros con ajuste de air roll antes del impacto",
-  },
-  airRollShotsAlt: {
-    name: "Air Roll Shots",
-    code: "84D2-072D-80CF-7D0D",
-    focus: "ángulos cerrados, botes largos y potencia con air roll",
-  },
-  directionalAirRoll: {
-    name: "Directional Air Roll Practice",
-    code: "F28D-A55C-C924-B26E",
-    focus: "control de air roll en tiros de suelo y aéreos",
-  },
-  recoveryTraining: {
-    name: "Recovery Training",
-    code: "DA42-75B1-0469-8A0F",
-    focus: "caídas incómodas, half flips y recoveries rápidas",
-  },
-  driftWavedashRecovery: {
-    name: "Drift & Wave Dash Recovery",
-    code: "C809-86F7-C4BB-F1C1",
-    focus: "derrape + wavedash para recuperar velocidad",
-  },
-});
-
-const ROCKET_LEAGUE_WORKSHOP_RULES = Object.freeze([
-  "Usar solo mapas Workshop normales: dribbling, rings, aerial control o recoveries simples.",
-  "Evitar mapas con modos extra, mutators raros, scripts de minijuego, multiplayer custom o reglas especiales.",
-  "Después de una partida, podés entrar directo al mapa Workshop normal sin reiniciar Rocket League.",
-  "Si un mapa se buguea en Epic, salí del mapa y cambiá a training pack; no gastés la sesión peleando con el loader.",
-]);
-
-const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
-  dribbleChallenge2: {
-    name: "Dribble Challenge #2",
-    source: "Workshop normal · Epic local map",
-    focus: "dribbling en suelo, balance y control fino",
-    kind: "Dribbling",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "No usar variantes con mutators o modos extra.",
-    howToUse: "Ideal después de una partida: entrá, hacé 10–15 min de control y salí sin reiniciar el juego.",
-  },
-  noobDribble: {
-    name: "Noob Dribble",
-    source: "Workshop normal · Epic local map",
-    focus: "dribbling suave para calentar sin frustrarte",
-    kind: "Dribbling fácil",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "No buscar speedrun; si se cae la pelota, reinicio tranquilo.",
-    howToUse: "Perfecto para días bajos o para limpiar control antes de jugar con amigos.",
-  },
-  lethamyrRings: {
-    name: "Lethamyr's Giant Rings Map",
-    source: "Workshop normal · Rings",
-    focus: "aerial control y air roll sin depender de la pelota",
-    kind: "Rings / aéreo",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "No usar retos con reglas extra; solo ruta normal de rings.",
-    howToUse: "Usalo para 10–15 min de control aéreo. Si perdés control, soltá air roll y estabilizá.",
-  },
-  speedJumpRings2: {
-    name: "Speed Jump: Rings 2 - By dmc",
-    source: "Workshop normal · Rings",
-    focus: "control aéreo, boost management y recoveries al caer",
-    kind: "Rings / recovery",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "No obsesionarse con terminarlo; la métrica es chocar menos y caer mejor.",
-    howToUse: "Buen bloque post-partida para bajar tilt y trabajar control sin pelota.",
-  },
-  airDribbleGauntlet: {
-    name: "Air Dribble Gauntlet 1/2",
-    source: "Workshop normal · niveles simples",
-    focus: "ground-to-air y air dribble básico por niveles",
-    kind: "Air dribble básico",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "Usar niveles fáciles; evitar versiones con modos especiales si Epic se buguea.",
-    howToUse: "Meta real: setup limpio + 1 toque útil. No forzar clips.",
-  },
-  cocoAimTraining: {
-    name: "Aim Training by Coco",
-    source: "Workshop normal · tiros",
-    focus: "puntería, lectura de tiro y contacto limpio",
-    kind: "Tiros / puntería",
-    modeSafe: true,
-    postMatch: true,
-    avoid: "Usar modo normal si el mapa ofrece variantes; no activar modos extra si fallan en Epic.",
-    howToUse: "Después de ranked, 10 min de tiros limpios para corregir puntería sin entrar a otra partida.",
-  },
-});
-
-const RL_SUBTASK_TYPES = Object.freeze({
-  FREEPLAY: "Freeplay",
-  SPEEDFLIP: "Speedflip",
-  SPEEDFLIP_DAR: "Speedflip DAR",
-  MECHANIC: "Mecánica",
-  PACK: "Training Pack",
-  WORKSHOP: "Workshop Map",
-  MATCHES: "Partidas",
-  MENTAL: "Mental",
-});
-
-const RL_FREEPLAY_SUBTASK = Object.freeze({
-  id: "freeplay",
-  title: "Freeplay agresivo",
-  type: RL_SUBTASK_TYPES.FREEPLAY,
-  minutes: 10,
-  instruction: "Bloque fijo diario: powershots, recoveries, pads pequeños y cero pausa entre toques. No ranked frío.",
-  focus: "ritmo + confianza",
-  accent: "#22d3ee",
-});
-
-const RL_ONE_V_ONE_SUBTASK = Object.freeze({
-  id: "one-v-one-before-friends",
-  title: "1v1 antes de jugar con amigos",
-  type: RL_SUBTASK_TYPES.MATCHES,
-  minutes: 0,
-  targetCount: 3,
-  noTimer: true,
-  instruction: "Bloque fijo diario: jugá 3 partidas de 1v1 como práctica real de kickoff, paciencia, shadow, 50s y reset mental antes de jugar con amigos.",
-  focus: "3 partidas · warmup competitivo",
-  accent: "#60a5fa",
-});
-
-const makeRlMechanicSubtask = (id, title, focus, instruction, minutes = 10, accent = "#fb7185") => Object.freeze({
-  id,
-  title,
-  type: RL_SUBTASK_TYPES.MECHANIC,
-  minutes,
-  instruction,
-  focus,
-  accent,
-});
-
-const makeRlPackSubtask = (id, pack, minutes, instruction, accent = "#34d399") => Object.freeze({
-  id,
-  title: pack.name,
-  type: RL_SUBTASK_TYPES.PACK,
-  minutes,
-  pack,
-  instruction,
-  focus: pack.focus,
-  accent,
-});
-
-const makeRlWorkshopSubtask = (id, workshop, minutes, instruction, accent = "#38bdf8") => Object.freeze({
-  id,
-  title: workshop.name,
-  type: RL_SUBTASK_TYPES.WORKSHOP,
-  minutes,
-  workshop,
-  instruction,
-  focus: workshop.focus,
-  accent,
-});
-
-const makeRlMentalSubtask = (id, title, instruction, minutes = 5) => Object.freeze({
-  id,
-  title,
-  type: RL_SUBTASK_TYPES.MENTAL,
-  minutes,
-  instruction,
-  focus: "menos tilt + mejores decisiones",
-  accent: "#a78bfa",
-});
-
-const RL_MECHANIC_DRILLS = Object.freeze({
-  speedflipBothSides: makeRlMechanicSubtask(
-    "mechanic-speedflip-both-sides",
-    "Speedflips · ambos lados",
-    "kickoff izquierdo + derecho sin hacerlo diario",
-    "5 min lado izquierdo + 5 min lado derecho. Priorizá aterrizaje recto y contacto; si falla el cancel, bajá velocidad.",
-    10,
-    "#fbbf24"
-  ),
-  driftCuts: makeRlMechanicSubtask(
-    "mechanic-drift-cuts",
-    "Drift cuts",
-    "derrapar para agarrar balón y cambiar dirección",
-    "Llevá la pelota hacia un lado, powerslide cut para recuperarla y salí con toque controlado. No busqués velocidad; buscá control.",
-    10
-  ),
-  basicFlicks: makeRlMechanicSubtask(
-    "mechanic-basic-flicks",
-    "Flicks básicos",
-    "dribbling estable → flick simple",
-    "Arrancá con pelota encima del carro. Practicá front flick y diagonal flick suave; si se cae, reiniciá sin tiltearte.",
-    10
-  ),
-  groundToAirIntro: makeRlMechanicSubtask(
-    "mechanic-ground-to-air",
-    "Ground to air dribble intro",
-    "subir la pelota sin regalar posesión",
-    "Desde dribble en suelo: primer toque levantando, salto controlado y un solo toque aéreo. La meta es setup limpio, no clip.",
-    10,
-    "#38bdf8"
-  ),
-  wallControl: makeRlMechanicSubtask(
-    "mechanic-wall-control",
-    "Wall control básico",
-    "primer toque desde pared + recovery",
-    "Subí la pelota a pared, tocá hacia adentro y aterrizá con powerslide. Si el toque sale mal, priorizá recovery inmediato.",
-    10,
-    "#60a5fa"
-  ),
-  recoveryChain: makeRlMechanicSubtask(
-    "mechanic-recoveries",
-    "Recoveries aplicadas",
-    "wavedash, powerslide landing y momentum",
-    "Cada tiro debe terminar con aterrizaje útil. Wavedash al caer, powerslide al girar y buscar pad pequeño.",
-    10,
-    "#34d399"
-  ),
-  savePathing: makeRlMechanicSubtask(
-    "mechanic-save-pathing",
-    "Salvadas + salida limpia",
-    "save sin regalar rebote al centro",
-    "Salvá hacia esquina, agarrá pad pequeño y salí por lateral. Si despejás al centro, repetí.",
-    10,
-    "#f472b6"
-  ),
-  shadowPatience: makeRlMechanicSubtask(
-    "mechanic-shadow-patience",
-    "Shadow patience",
-    "aguantar sin tirarte de más",
-    "Practicá retroceder con cámara al balón, cubrir net y desafiar solo cuando el rival perdería control.",
-    10,
-    "#818cf8"
-  ),
-  lowBoostDefense: makeRlMechanicSubtask(
-    "mechanic-low-boost-defense",
-    "Defensa con poco boost",
-    "pads pequeños + paciencia defensiva",
-    "Empezá con poco boost: cubrí net, tomá pads chicos y despejá a esquina. No saltes si el primer toque rival todavía no amenaza.",
-    10,
-    "#38bdf8"
-  ),
-  firstTouchControl: makeRlMechanicSubtask(
-    "mechanic-first-touch",
-    "Primer toque útil",
-    "control antes que pegar por pegar",
-    "Cada balón debe tener intención: controlar, tirar, fakear o salir a pared. Si el toque te aleja de la jugada, repetí.",
-    10,
-    "#22c55e"
-  ),
-  airDribbleIntro: makeRlMechanicSubtask(
-    "mechanic-air-dribble-intro",
-    "Air dribble intro",
-    "toques aéreos simples, sin freestyle",
-    "Usá pared o setup suave. Meta: 1–2 toques controlados y recovery. Si no hay setup limpio, no fuerces el aire.",
-    10,
-    "#22d3ee"
-  ),
-  airRollShotControl: makeRlMechanicSubtask(
-    "mechanic-air-roll-shot-control",
-    "Tiros con air roll",
-    "alinear el carro antes del impacto",
-    "Saltá, usá air roll solo para corregir ángulo y pegá con potencia. No gires por girar; air roll termina antes del contacto.",
-    10,
-    "#e879f9"
-  ),
-  halfFlipRecovery: makeRlMechanicSubtask(
-    "mechanic-half-flip-recovery",
-    "Half flip recovery",
-    "volver a la jugada sin gastar boost de más",
-    "Desde reversa o mala orientación: half flip, cancel limpio, enderezar con air roll/powerslide y salir hacia pad pequeño.",
-    10,
-    "#34d399"
-  ),
-  wallWavedash: makeRlMechanicSubtask(
-    "mechanic-wall-wavedash",
-    "Wall wavedash + salida",
-    "bajar de pared sin perder velocidad",
-    "Subí a pared, soltate, wavedash al piso y salí por lateral. Si aterrizás plano y frenás, repetí.",
-    10,
-    "#38bdf8"
-  ),
-  awkwardLanding: makeRlMechanicSubtask(
-    "mechanic-awkward-landing",
-    "Aterrizajes incómodos",
-    "corregir carro en el aire y caer útil",
-    "Tirate incómodo, girá el carro para caer con ruedas y mantené powerslide. Meta: no quedar muerto después del toque.",
-    10,
-    "#fbbf24"
-  ),
-  goalpostRecovery: makeRlMechanicSubtask(
-    "mechanic-goalpost-recovery",
-    "Poste → recovery defensiva",
-    "usar postes y pared de arco para volver rápido",
-    "Saltá desde defensa, tocá/salvá y usá poste o pared del arco para caer mirando hacia la jugada. Evitá quedar dentro de la red.",
-    10,
-    "#60a5fa"
-  ),
-});
-
-
-const RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK = Object.freeze({
-  id: "mechanic-speedflip-dar-clean-cancel",
-  title: "Speedflip DAR Clean Cancel",
-  type: RL_SUBTASK_TYPES.SPEEDFLIP_DAR,
-  minutes: 10,
-  instruction: "Bloque previo al mapa de Musty/speedflip: primero limpieza, después velocidad. Llegar al balón no basta: debe caer plano.",
-  focus: "DAR sostenido + cancel limpio + aterrizaje plano",
-  accent: "#fbbf24",
-  speedflipDar: true,
-});
-
-const SPEEDFLIP_DAR_ERROR_LABELS = Object.freeze({
-  frontal: "Diagonal demasiado frontal",
-  cancel_short: "Cancel no sostenido",
-  lateral: "Cancel demasiado lateral",
-  early_release: "Salida del cancel temprana",
-  dar_late: "DAR endereza tarde",
-  other: "Otro",
-});
-
-const SPEEDFLIP_DAR_TOUCH_MOMENTS = Object.freeze({
-  none: "No tocó",
-  start: "Inicio de la vuelta",
-  middle: "Mitad de la vuelta",
-  end: "Final de la vuelta",
-});
-
-function clampNumber(value, min = 0, max = 999) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function getSpeedflipDarNoseTouchValue(value) {
-  if (String(value) === "3+") return 3;
-  return Math.max(0, Math.min(3, Math.floor(Number(value) || 0)));
-}
-
-function normalizeSpeedflipDarSession(session = {}) {
-  const attempts = Math.max(1, Math.floor(clampNumber(session.attempts, 1, 200)));
-  const clean = Math.max(0, Math.min(attempts, Math.floor(clampNumber(session.clean, 0, attempts))));
-  const noseTouches = ["0", "1", "2", "3+"].includes(String(session.noseTouches)) ? String(session.noseTouches) : "0";
-  const side = String(session.side || "DAR Derecho").includes("Izquierdo") ? "DAR Izquierdo" : "DAR Derecho";
-  const speed = ["75%", "85%", "100%"].includes(String(session.speed)) ? String(session.speed) : "75%";
-  const touchMoment = SPEEDFLIP_DAR_TOUCH_MOMENTS[session.touchMoment] ? session.touchMoment : "none";
-  const errorType = SPEEDFLIP_DAR_ERROR_LABELS[session.errorType] ? session.errorType : "other";
-  const cleanRate = Math.round((clean / Math.max(attempts, 1)) * 100);
-  const noseTouchAvg = Math.round(((attempts - clean) / Math.max(attempts, 1)) * getSpeedflipDarNoseTouchValue(noseTouches) * 100) / 100;
-  return {
-    id: `sfd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    date: new Date().toISOString(),
-    side,
-    speed,
-    attempts,
-    clean,
-    noseTouches,
-    touchMoment,
-    errorType,
-    notes: String(session.notes || "").slice(0, 500),
-    cleanRate,
-    noseTouchAvg,
-  };
-}
-
-function getSpeedflipDarSessionFeedback(session) {
-  if (!session) return "Registrá una sesión para que LifeOS te dé feedback específico.";
-  const cleanRate = Number(session.cleanRate) || 0;
-  const moment = session.touchMoment;
-  const error = session.errorType;
-  if (moment === "start" || error === "frontal") return "El primer diagonal probablemente está demasiado hacia adelante. En DAR Derecho probá 11 sin irte a 12. En DAR Izquierdo probá 1 sin irte a 12.";
-  if (moment === "end" || error === "early_release" || error === "cancel_short") return "Probablemente estás soltando el cancel antes de tiempo. Mantené el stick abajo un instante más antes de volver a neutral.";
-  if (String(session.noseTouches) === "2" || String(session.noseTouches) === "3+" || error === "lateral") return "El cancel está entrando, pero la salida no está limpia. Priorizá 11→6 en DAR Derecho o 1→6/6:30 en DAR Izquierdo.";
-  if (cleanRate < 50) return "Mantené velocidad 75%. No subás todavía al mapa como métrica principal.";
-  if (cleanRate < 80) return "Vas cerca. Mantené 75% hasta estabilizar 8/10 intentos limpios.";
-  if (cleanRate < 90) return "Podés probar 85%, pero volvé a 75% si reaparece el doble toque.";
-  return "El patrón está entrando. Empezá a transferirlo al mapa de Musty con control.";
-}
-
-function getSpeedflipDarStats(history = []) {
-  const sessions = Array.isArray(history) ? history.slice(-8) : [];
-  const lastFive = sessions.slice(-5);
-  const avgClean = lastFive.length ? Math.round(lastFive.reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / lastFive.length) : 0;
-  const avgTouches = lastFive.length ? Math.round((lastFive.reduce((sum, s) => sum + (Number(s.noseTouchAvg) || 0), 0) / lastFive.length) * 100) / 100 : 0;
-  const bySide = ["DAR Derecho", "DAR Izquierdo"].map(side => {
-    const sideSessions = sessions.filter(s => s.side === side);
-    const avg = sideSessions.length ? Math.round(sideSessions.reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / sideSessions.length) : 0;
-    return { side, avg, count: sideSessions.length };
-  });
-  const cleanestSide = bySide.sort((a, b) => b.avg - a.avg)[0] || { side: "DAR Derecho", avg: 0, count: 0 };
-  const trend = sessions.length >= 3
-    ? Math.round((sessions.slice(-2).reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / 2) - (sessions.slice(0, 2).reduce((sum, s) => sum + (Number(s.cleanRate) || 0), 0) / 2))
-    : 0;
-  let status = "Necesito al menos 3 sesiones registradas para estimar.";
-  let sessionsLeft = "—";
-  if (sessions.length >= 3) {
-    if (avgClean >= 95 && avgTouches <= .25) { status = "Masterizado en práctica controlada"; sessionsLeft = "0–2"; }
-    else if (avgClean >= 85) { status = "Casi masterizado"; sessionsLeft = "3–6"; }
-    else if (avgClean >= 70) { status = "Cerca"; sessionsLeft = "6–10"; }
-    else if (avgClean >= 50) { status = "En progreso"; sessionsLeft = "10–14"; }
-    else { status = "Lejos todavía"; sessionsLeft = "14–21"; }
-  }
-  return { sessions, lastFive, avgClean, avgTouches, cleanestSide, trend, status, sessionsLeft };
-}
-
-const makeRlPlan = (id, title, focus, variableBlocks) => {
-  const blocks = [RL_FREEPLAY_SUBTASK, ...variableBlocks, RL_ONE_V_ONE_SUBTASK];
-  const timedMinutes = blocks.reduce((sum, task) => sum + Math.max(0, Number(task.minutes) || 0), 0);
-  return Object.freeze({
-    id: `${id}-60m-flex-v4`,
-    title,
-    focus,
-    minutes: timedMinutes,
-    subtasks: Object.freeze(blocks),
-  });
-};
-
-const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan("speedflip-recovery", "Speedflip DAR + Musty Day", "Kickoff útil: primero limpieza, después velocidad", [
-    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
-    makeRlPackSubtask("pack-speedflip-musty", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Mapa de Musty/speedflip después del clean cancel. Si llegás al balón pero raspás dos veces, cuenta como intento no limpio.", "#fbbf24"),
-    RL_MECHANIC_DRILLS.recoveryChain,
-    makeRlWorkshopSubtask("workshop-speed-jump-rings-recovery", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings2, 15, "Rings/recovery normal: el objetivo no es terminar el mapa; es caer con ruedas, powerslide y volver al control sin buguear Epic.", "#34d399"),
-    makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 5),
-  ]),
-  makeRlPlan("dribble-flick", "Dribble + Flick Day", "Control de suelo que amenaza gol", [
-    makeRlWorkshopSubtask("workshop-dribble-challenge-2", ROCKET_LEAGUE_WORKSHOP_MAPS.dribbleChallenge2, 15, "No corras. Balanceá la pelota y reiniciá cuando se caiga. Meta: control estable, no speedrun.", "#fb7185"),
-    RL_MECHANIC_DRILLS.basicFlicks,
-    makeRlPackSubtask("pack-ground-shots", ROCKET_LEAGUE_PACKS.groundShots, 10, "Terminá los dribbles con tiro simple. Si el tiro queda débil, revisá el primer toque.", "#34d399"),
-    makeRlMentalSubtask("mental-flick-review", "Revisión de posesión", "Escribí cuándo regalaste la pelota por apurarte. La respuesta suele ser: primer toque sin intención.", 15),
-  ]),
-  makeRlPlan("air-roll-shots", "Air Roll Shot Day", "Ajustar el carro para tirar fuerte sin girar por girar", [
-    makeRlWorkshopSubtask("workshop-rings-air-roll", ROCKET_LEAGUE_WORKSHOP_MAPS.lethamyrRings, 15, "Rings suave: air roll solo para alinear. Si perdés control, soltá air roll y estabilizá.", "#e879f9"),
-    RL_MECHANIC_DRILLS.airRollShotControl,
-    makeRlPackSubtask("pack-air-roll-shots", ROCKET_LEAGUE_PACKS.airRollShots, 10, "Buscá contacto limpio: air roll corrige ángulo, el flip genera potencia.", "#e879f9"),
-    makeRlMentalSubtask("mental-airroll-review", "Air roll review", "Marcá si giraste por costumbre o por corrección real. Menos giro, más impacto limpio.", 15),
-  ]),
-  makeRlPlan("saves-shadow", "Saves + Shadow Day", "Defender sin pánico ni clears al centro", [
-    RL_MECHANIC_DRILLS.shadowPatience,
-    makeRlPackSubtask("pack-hard-saves", ROCKET_LEAGUE_PACKS.hardSaves, 10, "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento.", "#f472b6"),
-    makeRlPackSubtask("pack-shadow-defense", ROCKET_LEAGUE_PACKS.shadowDefense, 10, "Aguantá la distancia. No te tires si el rival todavía no perdió control.", "#818cf8"),
-    makeRlPackSubtask("pack-recovery-training", ROCKET_LEAGUE_PACKS.recoveryTraining, 15, "Recovery training sin modos extra: caídas incómodas, half flips y salida limpia. Si querés Workshop ese día, usá Speed Jump Rings 2.", "#38bdf8"),
-    makeRlMentalSubtask("mental-defense-review", "Defensa sin tilt", "Anotá si defendiste por miedo o por lectura. La meta es paciencia, no adivinar.", 5),
-  ]),
-  makeRlPlan("wall-backboard", "Wall + Backboard Day", "Pared útil, lectura y recovery", [
-    RL_MECHANIC_DRILLS.wallControl,
-    makeRlPackSubtask("pack-backboard", ROCKET_LEAGUE_PACKS.backboardReads, 10, "Leé pared antes de saltar; si llegás tarde, defendé. Aterrizá listo para la siguiente jugada.", "#60a5fa"),
-    makeRlWorkshopSubtask("workshop-speed-jump-rings-2", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings2, 15, "Rings para control y boost. Si chocás mucho, bajá velocidad y priorizá ruta limpia.", "#22d3ee"),
-    makeRlPackSubtask("pack-aerials-off-wall", ROCKET_LEAGUE_PACKS.aerialsOffWall, 10, "Salidas de pared con intención. Si el setup es malo, no fuerces el aerial.", "#38bdf8"),
-    makeRlMentalSubtask("mental-wall-review", "Wall review", "Escribí si saltaste tarde o temprano. Ajustar timing vale más que pegar fuerte.", 5),
-  ]),
-  makeRlPlan("ground-to-air", "Ground to Air Day", "Levantar pelota sin regalar posesión", [
-    makeRlWorkshopSubtask("workshop-air-dribble-gauntlet", ROCKET_LEAGUE_WORKSHOP_MAPS.airDribbleGauntlet, 15, "Usá niveles fáciles. Meta: setup limpio + 1 toque útil. Nada de forzar clips.", "#22d3ee"),
-    RL_MECHANIC_DRILLS.groundToAirIntro,
-    makeRlPackSubtask("pack-plat-diamond", ROCKET_LEAGUE_PACKS.platDiamond, 10, "Aplicá lo básico: primer toque, setup, decisión. Si no hay control, no salgas al aire.", "#34d399"),
-    RL_MECHANIC_DRILLS.awkwardLanding,
-    makeRlMentalSubtask("mental-airdribble-review", "Setup review", "Anotá si el primer toque levantó bien la pelota o si empezaste el air dribble perdido.", 10),
-  ]),
-  makeRlPlan("low-boost-rebounds", "Low Boost + Clean Cancel", "Control con poco boost + speedflip limpio en baja presión", [
-    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
-    RL_MECHANIC_DRILLS.lowBoostDefense,
-    makeRlPackSubtask("pack-basic-rebounds", ROCKET_LEAGUE_PACKS.basicRebounds, 10, "Leé el rebote antes de saltar. Si llegás tarde, fake challenge y recuperá.", "#fbbf24"),
-    makeRlWorkshopSubtask("workshop-noob-dribble", ROCKET_LEAGUE_WORKSHOP_MAPS.noobDribble, 15, "Dribbling suave para control fino. No necesitás terminarlo: necesitás tocar mejor.", "#fb7185"),
-    makeRlMentalSubtask("mental-boost-review", "Boost review", "Anotá cuándo buscaste boost grande y dejaste la jugada. Cambiá por pads pequeños.", 5),
-  ]),
-  makeRlPlan("one-v-one-decision", "1v1 Decision + Kickoff Clean", "No regalar posesión y entrar a cada kickoff con calma", [
-    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
-    RL_MECHANIC_DRILLS.firstTouchControl,
-    makeRlPackSubtask("pack-shots-miss", ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, 10, "No fallar tiros ganables. Primero arco grande, luego precisión.", "#34d399"),
-    RL_MECHANIC_DRILLS.driftCuts,
-    makeRlPackSubtask("pack-powershots", ROCKET_LEAGUE_PACKS.powershots, 10, "Tirá fuerte solo si el balón queda delante. Si queda atrás, control primero.", "#fbbf24"),
-  ]),
-]);
-
-function getRocketLeagueDateKey(date = new Date()) {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function getRocketLeaguePlanForDate(dateKey = getRocketLeagueDateKey()) {
-  const seed = String(dateKey).split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  return ROCKET_LEAGUE_TRAINING_PLANS[seed % ROCKET_LEAGUE_TRAINING_PLANS.length];
-}
-
-function getRocketLeaguePlanById(planId) {
-  return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.id === planId) || null;
-}
-
-function getRocketLeagueSubtaskTargetSeconds(planId, subtaskId) {
-  const plan = getRocketLeaguePlanById(planId);
-  const subtask = plan?.subtasks?.find(task => task.id === subtaskId);
-  return subtask ? Math.max(0, Math.floor(Number(subtask.minutes) || 0) * 60) : 0;
-}
-
-function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = getRocketLeaguePlanForDate(dateKey).id) {
-  return {
-    dateKey,
-    planId,
-    completedSubtaskIds: [],
-    elapsedBySubtask: {},
-    matchCountBySubtask: {},
-    mental: {
-      moodBefore: null,
-      moodAfter: null,
-      tiltLevel: null,
-      note: "",
-      saved: false,
-    },
-  };
-}
-
-function createRocketLeagueInitialState() {
-  return {
-    current: createRocketLeagueCurrent(),
-    history: [],
-    speedflipDar: {
-      dominantSide: "DAR Derecho",
-      targetWeeklySessions: 3,
-      history: [],
-    },
-  };
-}
-
-function hasRocketLeagueProgress(current) {
-  if (!current || typeof current !== "object") return false;
-  const elapsed = Object.values(current.elapsedBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
-  const matchCount = Object.values(current.matchCountBySubtask || {}).reduce((sum, v) => sum + Math.max(0, Number(v) || 0), 0);
-  const mental = current.mental || {};
-  return (
-    (current.completedSubtaskIds || []).length > 0 ||
-    elapsed > 0 ||
-    matchCount > 0 ||
-    mental.moodBefore !== null ||
-    mental.moodAfter !== null ||
-    mental.tiltLevel !== null ||
-    Boolean(String(mental.note || "").trim()) ||
-    mental.saved === true
-  );
-}
-
-function hasRocketLeagueSpeedflipDarProgress(rocketLeague) {
-  return Array.isArray(rocketLeague?.speedflipDar?.history) && rocketLeague.speedflipDar.history.length > 0;
-}
+// ── Rocket League data/planning extracted to src/data/rocketLeagueData.js ─────
 
 function formatSeconds(totalSeconds = 0) {
   const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -1033,32 +437,14 @@ function seededShuffle(items = [], seedInput = "lifeos") {
 }
 
 
-const WARDROBE_TYPES = Object.freeze([
-  { id: "top", label: "Camisa" },
-  { id: "bottom", label: "Pantalón" },
-  { id: "shoes", label: "Tenis" },
-]);
+// WARDROBE_TYPES extracted to data module.
 
-const WARDROBE_COLOR_GUIDE = Object.freeze([
-  "negro", "terracota", "blanco cálido", "gris carbón", "verde oliva", "azul marino", "crema", "borgoña", "camel", "gris claro"
-]);
 
-const WARDROBE_FALLBACK_ITEMS = Object.freeze([
-  { id:"fb-top-black", type:"top", name:"Camisa negra", color:"negro", style:"casual limpio" },
-  { id:"fb-top-terra", type:"top", name:"Camisa terracota", color:"terracota", style:"casual cálido" },
-  { id:"fb-top-white", type:"top", name:"Camisa blanca", color:"blanco cálido", style:"casual limpio" },
-  { id:"fb-top-gray", type:"top", name:"Camisa gris", color:"gris", style:"casual neutro" },
-  { id:"fb-top-navy", type:"top", name:"Camisa azul marino", color:"azul marino", style:"casual profundo" },
-  { id:"fb-top-olive", type:"top", name:"Camisa verde oliva", color:"verde oliva", style:"casual tierra" },
-  { id:"fb-bottom-bone", type:"bottom", name:"Pantalón blanco hueso", color:"blanco hueso", style:"casual limpio" },
-  { id:"fb-bottom-beige", type:"bottom", name:"Pantalón beige", color:"beige", style:"casual cálido" },
-  { id:"fb-bottom-sky", type:"bottom", name:"Pantalón azul cielo desgastado", color:"azul cielo desgastado", style:"casual claro" },
-  { id:"fb-bottom-darkdenim", type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"casual base" },
-  { id:"fb-bottom-charcoal", type:"bottom", name:"Pantalón gris carbón", color:"gris carbón", style:"casual profundo" },
-  { id:"fb-shoes-black", type:"shoes", name:"Tenis negros", color:"negros", style:"base" },
-  { id:"fb-shoes-gray", type:"shoes", name:"Tenis grises", color:"grises", style:"neutro" },
-  { id:"fb-shoes-white", type:"shoes", name:"Tenis blancos", color:"blancos", style:"limpio" },
-]);
+// WARDROBE_COLOR_GUIDE extracted to data module.
+
+
+// WARDROBE_FALLBACK_ITEMS extracted to data module.
+
 
 function createWardrobeInitial() {
   return {
@@ -1547,66 +933,17 @@ const LIFEOS_MANUAL_REST_DAYS = Object.freeze({
   },
 });
 
-const CALCULUS_FIXED_START_MIN = 8 * 60 + 10;
-const CALCULUS_FIXED_DURATION_MIN = 95;
-const CALCULUS_FIXED_END_MIN = CALCULUS_FIXED_START_MIN + CALCULUS_FIXED_DURATION_MIN;
-const CALCULUS_SOURCE_LABEL = "Jornalización MM201 · II-PAC 2026";
+// CALCULUS_FIXED_START_MIN extracted to data module.
 
-const CALCULUS_JOURNALIZATION_II_PAC_2026 = Object.freeze([
-  { date:"2026-05-25", partial:1, topic:"Asíntotas: verticales, horizontales y oblicuas", focus:["Asíntotas verticales", "Asíntotas horizontales", "Asíntotas oblicuas"], mode:"Clase + práctica" },
-  { date:"2026-05-26", partial:1, topic:"Asíntotas: verticales, horizontales y oblicuas", focus:["Dominio", "Límites al infinito", "Rectas oblicuas"], mode:"Práctica guiada" },
-  { date:"2026-05-27", partial:1, topic:"Límites trigonométricos", focus:["Identidades", "Límites notables", "Simplificación"], mode:"Clase + práctica" },
-  { date:"2026-05-28", partial:1, topic:"Límites trigonométricos", focus:["Seno/coseno", "Tangente", "Transformaciones"], mode:"Práctica" },
-  { date:"2026-05-29", partial:1, topic:"Límites trigonométricos", focus:["Ejercicios mixtos", "Errores comunes", "Velocidad"], mode:"Cierre de tema" },
-  { date:"2026-06-01", partial:1, topic:"Continuidad y discontinuidad en un punto", focus:["Continuidad", "Discontinuidad removible", "Saltos"], mode:"Clase + práctica" },
-  { date:"2026-06-02", partial:1, topic:"Continuidad y discontinuidad en un punto", focus:["Condiciones", "Funciones por partes", "Justificación"], mode:"Práctica" },
-  { date:"2026-06-03", partial:1, topic:"Construcción de gráficas dadas condiciones de límites", focus:["Gráficas", "Límites laterales", "Asíntotas"], mode:"Tipo examen" },
-  { date:"2026-06-04", partial:1, topic:"Construcción de gráficas dadas condiciones de límites", focus:["Repaso parcial I", "Gráficas", "Continuidad"], mode:"Simulación corta" },
-  { date:"2026-06-05", partial:1, topic:"Examen 1 · 7:00–9:00 AM", focus:["Parcial I", "Llegar temprano", "Sin sobrecargar"], mode:"Examen" },
+// CALCULUS_FIXED_DURATION_MIN extracted to data module.
 
-  { date:"2026-06-08", partial:2, topic:"Pendiente de la recta tangente y definición de derivada", focus:["Pendiente", "Definición formal", "Límite incremental"], mode:"Clase + práctica" },
-  { date:"2026-06-09", partial:2, topic:"Derivadas laterales, diferenciabilidad y continuidad", focus:["Derivadas laterales", "Diferenciabilidad", "Continuidad"], mode:"Clase + práctica" },
-  { date:"2026-06-10", partial:2, topic:"Derivadas laterales, diferenciabilidad y continuidad", focus:["Funciones por partes", "Puntos críticos", "Justificación"], mode:"Práctica" },
-  { date:"2026-06-11", partial:2, topic:"Propiedades de la derivada y teoremas básicos", focus:["Reglas", "Linealidad", "Producto/cociente"], mode:"Clase + práctica" },
-  { date:"2026-06-12", partial:2, topic:"Propiedades de la derivada y teoremas básicos", focus:["Reglas mixtas", "Simplificación", "Velocidad"], mode:"Práctica" },
-  { date:"2026-06-15", partial:2, topic:"Derivada de funciones trigonométricas", focus:["sen/cos", "tan/sec", "Identidades"], mode:"Clase + práctica" },
-  { date:"2026-06-16", partial:2, topic:"Regla de la cadena y derivada de funciones compuestas", focus:["Cadena", "Composición", "Potencias"], mode:"Clase + práctica" },
-  { date:"2026-06-17", partial:2, topic:"Regla de la cadena y derivada de funciones compuestas", focus:["Ejercicios mixtos", "Errores de anidación", "Velocidad"], mode:"Práctica" },
-  { date:"2026-06-18", partial:2, topic:"Derivada de funciones trigonométricas inversas", focus:["arcsen", "arctan", "Composición"], mode:"Clase + práctica" },
-  { date:"2026-06-19", partial:2, topic:"Derivada logarítmica y exponencial", focus:["ln", "exp", "Base a"], mode:"Clase + práctica" },
-  { date:"2026-06-22", partial:2, topic:"Derivación implícita", focus:["y' implícita", "Orden", "Algebra"], mode:"Clase + práctica" },
-  { date:"2026-06-23", partial:2, topic:"Derivación implícita y derivadas de orden superior", focus:["Segunda derivada", "Implícita", "Simplificación"], mode:"Práctica" },
-  { date:"2026-06-24", partial:2, topic:"Derivación logarítmica", focus:["Logaritmos", "Productos", "Potencias variables"], mode:"Clase + práctica" },
-  { date:"2026-06-25", partial:2, topic:"Regla de L’Hopital", focus:["0/0", "∞/∞", "Condiciones"], mode:"Clase + práctica" },
-  { date:"2026-06-26", partial:2, topic:"Regla de L’Hopital", focus:["Casos mixtos", "Indeterminaciones", "Justificación"], mode:"Práctica" },
-  { date:"2026-06-29", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Crecimiento", "Concavidad", "Puntos críticos"], mode:"Clase + práctica" },
-  { date:"2026-06-30", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Extremos", "Inflexión", "Tabla de signos"], mode:"Práctica" },
-  { date:"2026-07-01", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Análisis completo", "Bosquejo", "Justificación"], mode:"Tipo examen" },
-  { date:"2026-07-02", partial:2, topic:"Gráficas con primera y segunda derivada", focus:["Repaso parcial II", "Derivadas", "L’Hopital"], mode:"Simulación corta" },
-  { date:"2026-07-03", partial:2, topic:"Examen 2 · 7:00–9:00 AM", focus:["Parcial II", "Llegar temprano", "No repasar pesado"], mode:"Examen" },
+// CALCULUS_FIXED_END_MIN extracted to data module.
 
-  { date:"2026-07-06", partial:3, topic:"Valores extremos y Teorema de Valor Medio", focus:["Extremos", "TVM", "Condiciones"], mode:"Clase + práctica" },
-  { date:"2026-07-07", partial:3, topic:"Problemas aplicados de optimización", focus:["Modelar", "Restricciones", "Derivar"], mode:"Clase + práctica" },
-  { date:"2026-07-08", partial:3, topic:"Problemas aplicados de optimización", focus:["Máximos/mínimos", "Unidades", "Interpretación"], mode:"Práctica" },
-  { date:"2026-07-09", partial:3, topic:"Problemas aplicados de optimización", focus:["Tipo examen", "Modelos mixtos", "Verificación"], mode:"Práctica intensa" },
-  { date:"2026-07-10", partial:3, topic:"Interpretación geométrica de la derivada: tangentes y normales", focus:["Recta tangente", "Recta normal", "Pendiente"], mode:"Clase + práctica" },
-  { date:"2026-07-13", partial:3, topic:"Tangentes y normales a curvas", focus:["Punto de tangencia", "Normal", "Ecuaciones"], mode:"Práctica" },
-  { date:"2026-07-14", partial:3, topic:"Definición de antiderivada", focus:["Antiderivada", "Constante C", "Familias"], mode:"Clase + práctica" },
-  { date:"2026-07-15", partial:3, topic:"Teoremas sobre la antiderivada", focus:["Reglas", "Linealidad", "Patrones"], mode:"Clase + práctica" },
-  { date:"2026-07-16", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["u-sustitución", "Diferenciales", "Reescritura"], mode:"Clase + práctica" },
-  { date:"2026-07-17", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Patrones", "Trig/exponencial", "Verificar"], mode:"Práctica" },
-  { date:"2026-07-20", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Ejercicios mixtos", "Cambio de variable", "Orden"], mode:"Práctica" },
-  { date:"2026-07-21", partial:3, topic:"Sustitución de variable e integración de función compuesta", focus:["Tipo examen", "Errores comunes", "Velocidad"], mode:"Práctica intensa" },
-  { date:"2026-07-22", partial:3, topic:"Integral definida: idea intuitiva y definición", focus:["Área", "Sumas", "Definición"], mode:"Clase + práctica" },
-  { date:"2026-07-23", partial:3, topic:"Teoremas de la integral definida y Teorema Fundamental del Cálculo", focus:["TFC", "Evaluación", "Propiedades"], mode:"Clase + práctica" },
-  { date:"2026-07-24", partial:3, topic:"Área de regiones entre curvas", focus:["Intersecciones", "Arriba-abajo", "Integral"], mode:"Clase + práctica" },
-  { date:"2026-07-27", partial:3, topic:"Área de regiones entre curvas", focus:["Bosquejo", "Límites", "Integración"], mode:"Práctica" },
-  { date:"2026-07-28", partial:3, topic:"Área de regiones entre curvas", focus:["Regiones mixtas", "Partir intervalos", "Verificar"], mode:"Práctica" },
-  { date:"2026-07-29", partial:3, topic:"Área entre curvas usando inversa cuando sea necesario", focus:["Inversa", "dx/dy", "Región"], mode:"Tipo examen" },
-  { date:"2026-07-30", partial:3, topic:"Área entre curvas usando inversa cuando sea necesario", focus:["Repaso parcial III", "Área", "Integrales"], mode:"Simulación corta" },
-  { date:"2026-07-31", partial:3, topic:"Examen 3 · 7:00–9:00 AM", focus:["Parcial III", "Llegar temprano", "Cierre"], mode:"Examen" },
-  { date:"2026-08-05", partial:"reposicion", topic:"Reposición · 7:00–9:00 AM", focus:["Temas débiles", "Pautas", "Errores repetidos"], mode:"Reposición" },
-]);
+// CALCULUS_SOURCE_LABEL extracted to data module.
+
+
+// CALCULUS_JOURNALIZATION_II_PAC_2026 extracted to data module.
+
 
 function parseDateKeyLocal(dateKey) {
   const [y, m, d] = String(dateKey || "").split("-").map(Number);
@@ -1779,13 +1116,8 @@ function createCalculusInitialState() {
 }
 
 
-const CALCULUS_DIFFICULTY_LEVELS = Object.freeze({
-  1: { level: 1, name: "Básico", description: "Reconocimiento directo o cálculo simple." },
-  2: { level: 2, name: "Fácil", description: "Procedimiento corto con poca trampa." },
-  3: { level: 3, name: "Intermedio", description: "Requiere elegir método o combinar pasos." },
-  4: { level: 4, name: "Difícil", description: "Mezcla conceptos, álgebra o análisis." },
-  5: { level: 5, name: "Tipo examen", description: "Ejercicio largo, con interpretación o varios casos." },
-});
+// CALCULUS_DIFFICULTY_LEVELS extracted to data module.
+
 
 function inferCalculusDifficultyLevel(value) {
   const raw = String(value ?? "").toLowerCase().trim();
@@ -1858,15 +1190,10 @@ function normalizeCalculusPayload(payload, fallbackPlan = getCalculusPlanForDate
 
 
 
-const CALCULUS_I_VIDEO_SCOPE = "Cálculo I · MM201 II-PAC 2026";
-const CALCULUS_I_VIDEO_BLOCKED_TERMS = Object.freeze([
-  "cálculo ii", "calculo ii", "cálculo 2", "calculo 2",
-  "cálculo iii", "calculo iii", "cálculo 3", "calculo 3",
-  "multivariable", "variable vectorial", "cálculo vectorial", "calculo vectorial",
-  "integrales múltiples", "integrales multiples", "dobles integrales", "triple integral",
-  "series", "sucesiones", "ecuaciones diferenciales", "laplace", "fourier",
-  "gradiente", "divergencia", "rotacional", "paramétricas", "parametricas"
-]);
+// CALCULUS_I_VIDEO_SCOPE extracted to data module.
+
+// CALCULUS_I_VIDEO_BLOCKED_TERMS extracted to data module.
+
 
 function makeCalculusIVideoSearch(query) {
   const base = `${query} Cálculo I español límites derivadas funciones`.trim();
@@ -1947,28 +1274,8 @@ function getCalculusVideoRecommendations(plan = getCalculusPlanForDate()) {
   };
 }
 
-const CALCULUS_PINNED_PRACTICE_BY_DATE = Object.freeze({
-  "2026-05-26": {
-    title: "Práctica fijada · Asíntotas verticales, horizontales y oblicuas",
-    instructions: "Estos son los mismos ejercicios guardados desde tu PDF de hoy para no gastar tokens. Mañana LifeOS vuelve a generar práctica nueva según la jornalización.",
-    difficulty: "Nivel 3 · Intermedio",
-    estimatedMinutes: 85,
-    pinned: true,
-    exercises: [
-      { id:"pinned-asym-1", title:"Identificar asíntotas verticales por dominio", topic:"Asíntotas verticales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:1, statement:"Sea f(x) = (2x + 3)/(x² − 4). Determina los valores de x donde existen asíntotas verticales. Justifica por qué esos puntos hacen indefinida la función y analiza el comportamiento de los límites laterales.", hint:"Factorizá el denominador y buscá dónde se anula. Luego evaluá límites cuando x se acerca a esos valores desde ambos lados." },
-      { id:"pinned-asym-2", title:"Calcular asíntota horizontal con límites al infinito", topic:"Asíntotas horizontales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:2, statement:"Analiza g(x) = (3x² + 2x − 1)/(5x² + 4). Calcula limₓ→∞ g(x) y limₓ→−∞ g(x). ¿Existe asíntota horizontal? Si es así, escribe su ecuación.", hint:"Dividí numerador y denominador por la potencia más alta de x. Observá qué términos tienden a cero." },
-      { id:"pinned-asym-3", title:"Asíntota horizontal en función racional con raíces", topic:"Asíntotas horizontales", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Para h(x) = √(4x² + 1)/(2x − 3), calcula limₓ→∞ h(x). ¿Existe asíntota horizontal? Justifica tu respuesta.", hint:"Recordá que √(x²) = |x|. Para x → ∞, |x| = x." },
-      { id:"pinned-asym-4", title:"Identificar asíntota oblicua por división polinomial", topic:"Asíntotas oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Sea f(x) = (x² + 3x + 2)/(x + 1). Realiza la división polinomial del numerador entre el denominador. ¿Existe asíntota oblicua? Si es así, escribe su ecuación y explica por qué la recta obtenida es la asíntota.", hint:"Dividí x² + 3x + 2 entre x + 1. Revisá si hay residuo y si existe discontinuidad removible." },
-      { id:"pinned-asym-5", title:"Análisis completo de asíntotas en función racional", topic:"Asíntotas verticales, horizontales y oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:3, statement:"Analiza completamente la función f(x) = (2x² − x − 3)/(x² − 3). Encuentra: a) dominio, b) asíntotas verticales, c) asíntotas horizontales. Justifica cada respuesta.", hint:"Factorizá numerador y denominador. Identificá discontinuidades y luego compará grados para asíntotas horizontales." },
-      { id:"pinned-asym-6", title:"Asíntota oblicua con grados consecutivos", topic:"Asíntotas oblicuas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Dada f(x) = (x³ − 2x² + 1)/(x² + 1), realiza división polinomial. Determina si existe asíntota oblicua y escribe su ecuación. ¿Qué tipo de asíntota es?", hint:"Dividí x³ − 2x² + 1 entre x² + 1. El cociente es una expresión lineal: esa es la asíntota oblicua." },
-      { id:"pinned-asym-7", title:"Comportamiento de función cerca de asíntotas", topic:"Análisis gráfico de asíntotas", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Para f(x) = (x + 2)/(x(x − 3)), identifica todas las asíntotas. Luego, describe el comportamiento de f(x) en cada región del dominio: x < 0, 0 < x < 3, x > 3. ¿La función cruza alguna asíntota?", hint:"Identificá asíntotas verticales x = 0 y x = 3, y horizontal y = 0. Luego evaluá signos por región." },
-      { id:"pinned-asym-8", title:"Caso especial: oblicua con cancelación de factores", topic:"Discontinuidad removible vs. asíntota", type:"Procedimiento", questionMode:"procedimiento", difficultyLevel:4, statement:"Sea f(x) = (x² − 1)/(x − 1) para x ≠ 1. Simplifica la función. ¿Tiene asíntotas verticales? ¿Tiene asíntotas horizontales u oblicuas? Explica por qué la simplificación cambia el análisis.", hint:"Factorizá numerador y denominador. Cancelá factores comunes. La función simplificada no tiene asíntota vertical en x = 1, sino un agujero." },
-      { id:"pinned-asym-9", title:"Verdadero/Falso conceptual", topic:"Teoría de asíntotas", type:"Verdadero/Falso", questionMode:"verdadero/falso", difficultyLevel:2, statement:"Decide si cada afirmación es verdadera o falsa y justifica con una oración: a) Toda discontinuidad produce una asíntota vertical. b) Una función racional puede cruzar una asíntota horizontal. c) Si el grado del numerador es exactamente uno mayor que el del denominador, puede existir asíntota oblicua.", hint:"Pensá en discontinuidades removibles, comportamiento al infinito y división polinomial." },
-      { id:"pinned-asym-10", title:"Selección múltiple rápida", topic:"Clasificación de asíntotas", type:"Selección", questionMode:"selección múltiple", difficultyLevel:2, statement:"Para una función racional con grado del numerador 3 y grado del denominador 2, ¿qué comportamiento al infinito esperás normalmente?", options:["Asíntota horizontal y = 0", "Asíntota horizontal igual al cociente de coeficientes líderes", "Asíntota oblicua o polinomial lineal", "No se puede analizar con grados"], hint:"Compará los grados: numerador = denominador + 1." },
-      { id:"pinned-asym-11", title:"Competición contra reloj", topic:"Asíntotas mixtas", type:"Competición", questionMode:"reto contra reloj", difficultyLevel:3, statement:"Reto de 6 minutos: clasifica el tipo de asíntota de estas funciones sin resolver todo el procedimiento. Escribe solo el tipo y la razón: a) (x + 1)/(x² + 4), b) (3x² − 1)/(x² + 2), c) (x² + 5)/(x − 1), d) (x³ + 1)/(x² − 4).", hint:"Usá comparación de grados y luego revisá denominadores para verticales." },
-    ],
-  },
-});
+// CALCULUS_PINNED_PRACTICE_BY_DATE extracted to data module.
+
 
 function getCalculusPinnedPracticeForDate(dateKey = getLifeOSDateKey()) {
   const key = String(dateKey || "").slice(0, 10);
@@ -4516,6 +3823,9 @@ function RocketLeagueView() {
   const nextRotationSeconds = getSecondsUntilNextLocalDay(tickNow);
   const tomorrowDateKey = getRocketLeagueDateKey(new Date(tickNow + 24 * 60 * 60 * 1000));
   const tomorrowPlan = useMemo(() => getRocketLeaguePlanForDate(tomorrowDateKey), [tomorrowDateKey]);
+  const weeklyFocus = useMemo(() => getRocketLeagueWeeklyFocus(dateKey), [dateKey]);
+  const focusRole = useMemo(() => getRocketLeagueFocusRole(dateKey), [dateKey]);
+  const nextWeeklyFocusSeconds = useMemo(() => getSecondsUntilNextRocketWeeklyFocus(tickNow), [tickNow]);
 
   useEffect(() => {
     if (!activeSubtaskId) return;
@@ -4652,7 +3962,7 @@ ${line}` : line));
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · packs + workshop normal · Plat III → Diamond</div>
+          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · 70% enfoque semanal + 30% variedad · Plat II · peak Diamond I low</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -4680,12 +3990,21 @@ ${line}` : line));
               <div style={{ minWidth:0 }}>
                 <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
                 <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
+                <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:8 }}>
+                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Foco semanal: {weeklyFocus.short}</span>
+                  <span style={{ fontSize:10.5, fontWeight:900, color:focusRole.type === "focus" ? "#34d399" : "#fbbf24", background:focusRole.type === "focus" ? "rgba(52,211,153,.08)" : "rgba(251,191,36,.08)", border:focusRole.type === "focus" ? "1px solid rgba(52,211,153,.16)" : "1px solid rgba(251,191,36,.16)", borderRadius:999, padding:"4px 8px" }}>{focusRole.label}</span>
+                </div>
               </div>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }} className="mob-layout-grid">
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }} className="mob-layout-grid">
               <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                 <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Duración</div>
                 <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
+              </div>
+              <div style={{ padding:12, borderRadius:12, background:`${weeklyFocus.accent}10`, border:`1px solid ${weeklyFocus.accent}22` }}>
+                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Foco</div>
+                <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>{weeklyFocus.short}</div>
+                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                 <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Tiempo</div>
@@ -4702,7 +4021,7 @@ ${line}` : line));
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: freeplay y 3 partidas de 1v1 son fijos; el resto rota entre packs, workshop normal y mecánicas. Evitá mapas con modos extra porque Epic puede buguearse.
+              No ranked frío: freeplay y 3 partidas de 1v1 son fijos. LifeOS usa 70% enfoque semanal ({weeklyFocus.label}) y 30% variedad para que mejores una mecánica sin aburrirte ni oxidar otras.
             </div>
           </div>
 
@@ -4818,7 +4137,7 @@ ${line}` : line));
             </div>
           </div>
 
-          <RocketSpeedflipDarCleanCancelCard recommended={speedflipDarRecommended}/>
+          {speedflipDarRecommended && <RocketSpeedflipDarCleanCancelCard recommended={speedflipDarRecommended}/>}
 
           <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
@@ -4826,7 +4145,7 @@ ${line}` : line));
               <div style={{ ...S.stitle, marginBottom:0 }}>Workshop maps</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque Workshop, usá mapas normales cargados en Epic: dribbling, rings, aerial control o tiros. Podés entrar después de una partida sin reiniciar. Evitá mapas con modos extra, minijuegos o mutators raros porque Epic puede buguearse.
+              Cuando toque Workshop, usá solo mapas que tengas disponibles en BakkesPlugins/loader y que sean entrenamiento normal: dribbling, rings o air dribble. Podés entrar después de una partida sin reiniciar. Evitá mapas con modos extra, carreras, rumble, minijuegos o mutators raros porque Epic puede buguearse.
             </div>
             <div style={{ display:"grid", gap:6, marginTop:10 }}>
               {ROCKET_LEAGUE_WORKSHOP_RULES.map((rule, i) => (
@@ -4837,7 +4156,7 @@ ${line}` : line));
               ))}
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).filter(map => map.modeSafe !== false).slice(0, 6).map(map => (
+              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).filter(map => map.modeSafe !== false && map.activeRotation !== false).slice(0, 6).map(map => (
                 <div key={map.name} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", flexWrap:"wrap" }}>
                     <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{map.name}</div>
