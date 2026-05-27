@@ -3590,6 +3590,22 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
   );
 }
 
+function getRocketLeagueTaskRole(task, plan) {
+  if (task?.trainingRole) return task.trainingRole;
+  if (task?.type === RL_SUBTASK_TYPES.FREEPLAY || task?.type === RL_SUBTASK_TYPES.MATCHES) return "Bloque fijo";
+  if (task?.type === RL_SUBTASK_TYPES.MENTAL) return "Registro mental";
+  if (plan?.primaryMechanicLabel && String(task?.title || "").toLowerCase().includes(String(plan.primaryMechanicLabel).toLowerCase().split(" ")[0])) return "Foco principal";
+  return "Apoyo técnico";
+}
+
+function getRocketLeagueRoleBadgeStyle(role, accent = "#22d3ee") {
+  if (role === "Foco principal") return { color:"#fbbf24", background:"rgba(251,191,36,.09)", border:"1px solid rgba(251,191,36,.18)" };
+  if (role === "Apoyo técnico") return { color:"#34d399", background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" };
+  if (role === "Bloque fijo") return { color:"#22d3ee", background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.16)" };
+  if (role === "Registro mental") return { color:"#c4b5fd", background:"rgba(167,139,250,.08)", border:"1px solid rgba(167,139,250,.16)" };
+  return { color:accent, background:`${accent}12`, border:`1px solid ${accent}24` };
+}
+
 function RocketLeagueView() {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
@@ -3860,7 +3876,7 @@ ${line}` : line));
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
                 <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
-                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>No ranked frío</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>70/30 real</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
                 <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próxima rotación</div>
@@ -3869,7 +3885,10 @@ ${line}` : line));
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: freeplay y 3 partidas de 1v1 son fijos. LifeOS usa 70% enfoque semanal ({weeklyFocus.label}) y 30% variedad para que mejores una mecánica sin aburrirte ni oxidar otras.
+              No son 3 mecánicas a masterizar. Hoy el foco principal es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel || "Los demás bloques son apoyo corto para transferir el foco a situaciones reales."}
+            </div>
+            <div style={{ marginTop:10, padding:12, borderRadius:12, background:"rgba(52,211,153,.06)", border:"1px solid rgba(52,211,153,.15)", color:"#bbf7d0", fontSize:11.8, lineHeight:1.55 }}>
+              <b style={{ color:"#34d399" }}>Lectura correcta:</b> 70% se invierte en la mecánica del foco; 30% mantiene variedad conectada. En un día de speedflip, recoveries e Ice Rings solo corrigen aterrizaje, powerslide y salida limpia.
             </div>
           </div>
 
@@ -3902,6 +3921,8 @@ ${line}` : line));
                 : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
               const over = !isMatchTask && elapsed > target;
               const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : (task.type === RL_SUBTASK_TYPES.SPEEDFLIP || task.type === RL_SUBTASK_TYPES.SPEEDFLIP_DAR) ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
+              const taskRole = getRocketLeagueTaskRole(task, plan);
+              const taskRoleStyle = getRocketLeagueRoleBadgeStyle(taskRole, task.accent);
               return (
                 <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -3913,8 +3934,14 @@ ${line}` : line));
                         <span style={{ fontSize:10, fontWeight:900, color:task.accent, letterSpacing:1 }}>#{index + 1}</span>
                         <span style={{ fontSize:13.5, fontWeight:800, color:T_COLOR.text }}>{task.title}</span>
                         <span style={{ fontSize:10, fontWeight:800, color:T_COLOR.muted, border:"1px solid rgba(255,255,255,.08)", borderRadius:99, padding:"2px 7px" }}>{task.type}</span>
+                        <span style={{ fontSize:10, fontWeight:900, ...taskRoleStyle, borderRadius:99, padding:"2px 7px" }}>{taskRole}</span>
                       </div>
                       <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>{task.instruction}</div>
+                      {task.roleReason && (
+                        <div style={{ marginTop:7, fontSize:10.8, color:taskRole === "Foco principal" ? "#fde68a" : "#bbf7d0", lineHeight:1.45, background:taskRole === "Foco principal" ? "rgba(251,191,36,.055)" : "rgba(52,211,153,.045)", border:taskRole === "Foco principal" ? "1px solid rgba(251,191,36,.12)" : "1px solid rgba(52,211,153,.10)", borderRadius:9, padding:"7px 8px" }}>
+                          {task.roleReason}
+                        </div>
+                      )}
                       {task.pack && (
                         <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
                           <span style={{ fontSize:11, color:"#22d3ee", fontWeight:900, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", borderRadius:9, padding:"4px 8px" }}>Código: {task.pack.code}</span>
@@ -3979,6 +4006,7 @@ ${line}` : line));
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 60 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>1v1 antes de amigos</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mental</span><b style={{ color:mental.saved ? "#34d399" : "#64748b" }}>{mental.saved ? "Guardado" : "Sin guardar"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Foco real</span><b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.short}</b></div>
             </div>
             <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
               Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.

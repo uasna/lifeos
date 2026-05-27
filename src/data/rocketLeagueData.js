@@ -271,6 +271,21 @@ export const RL_SUBTASK_TYPES = Object.freeze({
   MENTAL: "Mental",
 });
 
+export const RL_TRAINING_ROLES = Object.freeze({
+  FIXED: "Bloque fijo",
+  MAIN: "Foco principal",
+  SUPPORT: "Apoyo técnico",
+  VARIETY: "Variedad controlada",
+  REVIEW: "Registro mental",
+});
+
+export const withRlTrainingRole = (task, role, reason = "", extra = {}) => Object.freeze({
+  ...task,
+  ...extra,
+  trainingRole: role,
+  roleReason: reason,
+});
+
 export const RL_FREEPLAY_SUBTASK = Object.freeze({
   id: "freeplay",
   title: "Freeplay agresivo",
@@ -278,6 +293,8 @@ export const RL_FREEPLAY_SUBTASK = Object.freeze({
   minutes: 10,
   instruction: "Bloque fijo diario: powershots, recoveries, pads pequeños y cero pausa entre toques. No ranked frío.",
   focus: "ritmo + confianza",
+  trainingRole: RL_TRAINING_ROLES.FIXED,
+  roleReason: "Siempre va primero para entrar caliente; no compite con el foco principal.",
   accent: "#22d3ee",
 });
 
@@ -290,6 +307,8 @@ export const RL_ONE_V_ONE_SUBTASK = Object.freeze({
   noTimer: true,
   instruction: "Bloque fijo diario: jugá 3 partidas de 1v1 como práctica real de kickoff, paciencia, shadow, 50s y reset mental antes de jugar con amigos.",
   focus: "3 partidas · warmup competitivo",
+  trainingRole: RL_TRAINING_ROLES.FIXED,
+  roleReason: "Es práctica real obligatoria, no otra mecánica a masterizar hoy.",
   accent: "#60a5fa",
 });
 
@@ -472,6 +491,8 @@ export const RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK = Object.freeze({
   minutes: 10,
   instruction: "Bloque previo al mapa de Musty/speedflip: primero limpieza, después velocidad. Llegar al balón no basta: debe caer plano.",
   focus: "DAR sostenido + cancel limpio + aterrizaje plano",
+  trainingRole: RL_TRAINING_ROLES.MAIN,
+  roleReason: "Esta sí es la mecánica que se está masterizando en el día de speedflip.",
   accent: "#fbbf24",
   speedflipDar: true,
 });
@@ -663,6 +684,9 @@ export const makeRlPlan = (id, title, focus, variableBlocks, meta = {}) => {
     title,
     focus,
     primaryFocus: meta.primaryFocus || inferRocketLeaguePrimaryFocus(id),
+    primaryMechanicLabel: meta.primaryMechanicLabel || null,
+    supportLabel: meta.supportLabel || "apoyo técnico corto para transferir el foco principal a situaciones reales",
+    masteryNote: meta.masteryNote || "No son varias mecánicas a masterizar el mismo día: hay un foco principal y bloques de apoyo.",
     balance: "70% enfoque semanal · 30% variedad",
     minutes: timedMinutes,
     subtasks: Object.freeze(blocks),
@@ -671,12 +695,37 @@ export const makeRlPlan = (id, title, focus, variableBlocks, meta = {}) => {
 
 export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
   makeRlPlan("speedflip-recovery", "Speedflip DAR + Musty Day", "Kickoff útil: primero limpieza, después velocidad", [
-    RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
-    makeRlPackSubtask("pack-speedflip-musty", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Mapa de Musty/speedflip después del clean cancel. Si llegás al balón pero raspás dos veces, cuenta como intento no limpio.", "#fbbf24"),
-    RL_MECHANIC_DRILLS.recoveryChain,
-    makeRlWorkshopSubtask("workshop-ice-rings-recovery", ROCKET_LEAGUE_WORKSHOP_MAPS.iceRings, 15, "Ice Rings en modo recovery: no busques speedrun. Caé con ruedas, powerslide y recuperá control después de cada choque o caída incómoda.", "#34d399"),
-    makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 5),
-  ], { primaryFocus: "speedflip" }),
+    withRlTrainingRole(
+      RL_SPEEDFLIP_DAR_CLEAN_CANCEL_SUBTASK,
+      RL_TRAINING_ROLES.MAIN,
+      "La mecánica del día es el cancel limpio: 11→6 con DAR Derecho o 1→6/6:30 con DAR Izquierdo."
+    ),
+    withRlTrainingRole(
+      makeRlPackSubtask("pack-speedflip-musty", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Transferencia al mapa de Musty/speedflip. Si llegás al balón pero raspás dos veces, cuenta como intento no limpio.", "#fbbf24"),
+      RL_TRAINING_ROLES.MAIN,
+      "Sigue siendo speedflip: solo cambia de práctica aislada a aplicación en mapa."
+    ),
+    withRlTrainingRole(
+      RL_MECHANIC_DRILLS.recoveryChain,
+      RL_TRAINING_ROLES.SUPPORT,
+      "Apoyo, no foco nuevo: corrige aterrizaje, powerslide y salida después del speedflip."
+    ),
+    withRlTrainingRole(
+      makeRlWorkshopSubtask("workshop-ice-rings-recovery", ROCKET_LEAGUE_WORKSHOP_MAPS.iceRings, 8, "Apoyo corto 5–10 min. Ice Rings en modo recovery: no speedrun, no masterizar rings hoy. Caé con ruedas, powerslide y recuperá control después de cada choque o caída incómoda.", "#34d399"),
+      RL_TRAINING_ROLES.SUPPORT,
+      "Solo se usa para que el aterrizaje del speedflip no muera al tocar suelo; si se siente como otro entrenamiento completo, paralo en 8 min."
+    ),
+    withRlTrainingRole(
+      makeRlMentalSubtask("mental-recovery-review", "Recovery review", "Anotá 1 momento donde quedaste muerto y cómo lo vas a recuperar mañana.", 5),
+      RL_TRAINING_ROLES.REVIEW,
+      "Registro rápido para detectar si el problema fue cancel, aterrizaje o salida."
+    ),
+  ], {
+    primaryFocus: "speedflip",
+    primaryMechanicLabel: "Speedflip limpio",
+    supportLabel: "Recoveries e Ice Rings son apoyo corto para aterrizaje/salida; no cuentan como mecánica nueva a masterizar.",
+    masteryNote: "Hoy se masteriza speedflip limpio. Recoveries e Ice Rings solo existen para que el carro caiga plano y puedas seguir la jugada."
+  }),
   makeRlPlan("dribble-flick", "Dribble + Flick Day", "Control de suelo que amenaza gol", [
     makeRlWorkshopSubtask("workshop-dribbling-challenge-1-remastered", ROCKET_LEAGUE_WORKSHOP_MAPS.dribblingChallenge1Remastered, 15, "No corras. Balanceá la pelota y reiniciá cuando se caiga. Meta: control estable, no speedrun.", "#fb7185"),
     RL_MECHANIC_DRILLS.basicFlicks,
@@ -693,7 +742,7 @@ export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     RL_MECHANIC_DRILLS.shadowPatience,
     makeRlPackSubtask("pack-hard-saves", ROCKET_LEAGUE_PACKS.hardSaves, 10, "Salvá fuerte hacia esquina. Si despejás al centro, repetí el intento.", "#f472b6"),
     makeRlPackSubtask("pack-shadow-defense", ROCKET_LEAGUE_PACKS.shadowDefense, 10, "Aguantá la distancia. No te tires si el rival todavía no perdió control.", "#818cf8"),
-    makeRlPackSubtask("pack-recovery-training", ROCKET_LEAGUE_PACKS.recoveryTraining, 15, "Recovery training sin modos extra: caídas incómodas, half flips y salida limpia. Si querés Workshop ese día, usá Medieval Rings.", "#38bdf8"),
+    makeRlPackSubtask("pack-recovery-training", ROCKET_LEAGUE_PACKS.recoveryTraining, 15, "Recovery training sin modos extra: caídas incómodas, half flips y salida limpia. Si querés Workshop ese día, usá Ice Rings suave como apoyo de recovery.", "#38bdf8"),
     makeRlMentalSubtask("mental-defense-review", "Defensa sin tilt", "Anotá si defendiste por miedo o por lectura. La meta es paciencia, no adivinar.", 5),
   ], { primaryFocus: "recoveries" }),
   makeRlPlan("wall-backboard", "Wall + Backboard Day", "Pared útil, lectura y recovery", [
