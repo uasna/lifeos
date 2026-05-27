@@ -78,6 +78,16 @@ import {
   CALCULUS_I_VIDEO_BLOCKED_TERMS,
   CALCULUS_PINNED_PRACTICE_BY_DATE
 } from "../data/calculusData.js";
+import {
+  BLENDER_SESSION_MINUTES,
+  BLENDER_PARENT_QUEST_ID,
+  BLENDER_PROFILE,
+  BLENDER_NO_NUMPAD_GUIDE,
+  BLENDER_BEGINNER_RULES,
+  BLENDER_SKILL_LADDER,
+  getBlenderDateKey,
+  getBlenderPlanForDate
+} from "../data/blenderData.js";
 
 import {
   T, fmt, fmtDur, buildTimed,
@@ -208,7 +218,6 @@ const DAY_FULL   = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","
 const SWIM_PAIRS = [[1,3],[1,4],[2,4]];
 
 const LIFEOS_LINKS = Object.freeze([
-  { id:"calculo",   label:"Cálculo Trainer",   url:"https://uasna.github.io/calculo-trainer.html", note:"Ejercicios de cálculo con corrección inteligente." },
   { id:"vacaciones",label:"Plan de vacaciones",url:"https://uasna.github.io/vacaciones-v2.html",   note:"Ruta diaria de cálculo, RL y Blender." },
   { id:"blender",   label:"Blender Path",      url:"https://uasna.github.io/blender-path.html",    note:"Ruta de aprendizaje y proyectos de Blender." },
   { id:"portfolio", label:"UASNA 3D",          url:"https://uasna.github.io/",                     note:"Portafolio público de renders y trabajos 3D." },
@@ -218,24 +227,21 @@ const QUESTS = Object.freeze([
   {
     id:1,
     title:"Estudiar cálculo",
-    sub:"8:10–9:45 · tema II-PAC 2026, ejercicios y corrección",
+    sub:"8:10–9:40 · bloque externo · marcar al terminar",
     xp:18,
     icon:BookOpen,
     diff:"DIFÍCIL",
     cat:"work",
     accent:"#60a5fa",
     iconKey:"BookOpen",
-    linkLabel:"Abrir Cálculo Trainer",
-    link:"https://uasna.github.io/calculo-trainer.html",
-    links:[
-      { label:"Cálculo Trainer", url:"https://uasna.github.io/calculo-trainer.html" },
-      { label:"Plan de vacaciones", url:"https://uasna.github.io/vacaciones-v2.html" },
-    ],
+    linkLabel:"",
+    link:"",
+    links:[],
   },
   {
     id:2,
     title:"Rocket League training",
-    sub:"60 min · freeplay, speedflips, mecánicas, packs y mental",
+    sub:"90 min · entrenamiento enfocado · ranked opcional",
     xp:12,
     icon:Target,
     diff:"MEDIO",
@@ -279,14 +285,14 @@ const QUESTS = Object.freeze([
   {
     id:5,
     title:"Blender / 3D",
-    sub:"30–45 min · ruta, práctica o proyecto low poly",
+    sub:"2:40–3:40 PM · ejercicios principiante de Blender",
     xp:12,
     icon:Dumbbell,
     diff:"MEDIO",
     cat:"work",
     accent:"#34d399",
     iconKey:"Dumbbell",
-    linkLabel:"Abrir Blender Path",
+    linkLabel:"Abrir Blender",
     link:"https://uasna.github.io/blender-path.html",
     links:[
       { label:"Blender Path", url:"https://uasna.github.io/blender-path.html" },
@@ -500,6 +506,33 @@ function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getSche
 function isNightlyQuest(q) {
   const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
   return text.includes("reflex") || text.includes("diario") || text.includes("nocturn") || text.includes("journal");
+}
+
+function isTypingQuest(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  return text.includes("mecanografía") || text.includes("mecanografia") || text.includes("typing") || text.includes("teclado");
+}
+
+function isBlenderQuest(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  return text.includes("blender") || text.includes("3d");
+}
+
+function isRocketQuest(q) {
+  const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
+  return q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket");
+}
+
+function createFixedQuestScheduleBlock(q, key, name, type, duration, desc, startMin, dateKey, focus = []) {
+  return B(key, name || q?.title || "Bloque", type, duration, desc || q?.sub || "Misión diaria", {
+    questId: q?.id,
+    quest: q || null,
+    focus: focus.length ? focus : (q ? questScheduleFocus(q) : ["Bloque", "Ejecución"]),
+    randomized: false,
+    dateKey,
+    startMin,
+    endMin: startMin + duration,
+  });
 }
 
 function getLifeOSDayMode(state, dateKey = getLifeOSDateKey()) {
@@ -1265,7 +1298,7 @@ function questScheduleFocus(q) {
   const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
   if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return ["Freeplay", "Speedflips", "Flicks", "Mental"];
   if (text.includes("cálculo") || text.includes("calculo")) return ["Tema del día", "Ejercicios", "Corrección"];
-  if (text.includes("blender")) return ["Proyecto", "Práctica", "Low poly"];
+  if (text.includes("blender")) return ["Principiante", "Ejercicio del día", "Sin numpad"];
   if (text.includes("inglés") || text.includes("ingles")) return ["Listening", "Vocabulario", "Speaking"];
   if (text.includes("reflex")) return ["Cierre", "Plan mañana", "Mental"];
   return ["Misión", "Ejecución"];
@@ -1285,58 +1318,117 @@ function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getSchedu
     ]);
   }
 
-  const seedBase = `${weekKey}:day-${dayIdx}:missions`;
-  const rand = seededRandom(hashStringSeed(seedBase));
   const blocks = [];
-
   const calculusQuest = active.find(isCalculusQuest);
-  const nightly = active.filter(q => !isCalculusQuest(q) && isNightlyQuest(q));
-  const movable = active.filter(q => !isCalculusQuest(q) && !isNightlyQuest(q));
+  const typingQuest = active.find(isTypingQuest);
+  const blenderQuest = active.find(isBlenderQuest);
+  const rocketQuest = active.find(isRocketQuest);
+  const nightlyQuest = active.find(isNightlyQuest);
 
   if (calculusQuest) {
     const calc = createCalculusScheduleBlock(calculusQuest, scheduleDateKey);
     calc.startMin = CALCULUS_FIXED_START_MIN;
     calc.endMin = CALCULUS_FIXED_END_MIN;
     blocks.push(calc);
+
+    blocks.push(createFixedQuestScheduleBlock(
+      calculusQuest,
+      "calc-night-review",
+      "Repaso cálculo nocturno",
+      "FOCUS",
+      30,
+      "11:15–11:45 PM · repaso externo, dudas y preparación del proyecto de Cálculo antes de dormir",
+      T(23, 15),
+      scheduleDateKey,
+      ["Repaso", "Dudas", "Preparar mañana"]
+    ));
   }
 
-  const afterCalcStartPool = dayIdx >= 5
-    ? [T(10, 15), T(10, 35), T(11, 0), T(11, 30)]
-    : [T(10, 10), T(10, 35), T(11, 0), T(13, 30), T(14, 10)];
-  const regularStartPool = dayIdx >= 5
-    ? [T(8, 30), T(9, 0), T(9, 30), T(10, 0), T(10, 30)]
-    : [T(13, 45), T(14, 0), T(14, 15), T(14, 30), T(14, 45), T(15, 0)];
-  const startPool = calculusQuest ? afterCalcStartPool : regularStartPool;
-  const start = startPool[Math.floor(rand() * startPool.length)] || (calculusQuest ? T(10, 10) : (dayIdx >= 5 ? T(9) : T(14)));
+  const fixedQuestIds = new Set([
+    calculusQuest?.id,
+    typingQuest?.id,
+    blenderQuest?.id,
+    rocketQuest?.id,
+    nightlyQuest?.id,
+  ].filter(Boolean));
 
-  const rolling = [];
-  if (movable.length || nightly.length) {
-    if (dayIdx < 5) rolling.push(B("buf0", "Preparación", "BUFFER", 15, "Abrí LifeOS · agua · cero distracciones"));
-    else rolling.push(B("ease", "Arranque suave", "RECOVERY", 10, "Sin prisa · prepará el día"));
-  }
-
-  const shuffled = seededShuffle(movable, seedBase);
-  const ordered = [...shuffled, ...nightly];
-
-  ordered.forEach((q, idx) => {
-    const duration = parseQuestDurationMinutes(q, idx === 0 ? 60 : 30);
-    const type = questScheduleType(q);
-    rolling.push(B(`quest-${q.id}`, q.title, type, duration, q.sub || "Misión diaria", {
+  const morningMovable = active.filter(q => !fixedQuestIds.has(q.id));
+  const morningBlocks = [];
+  morningMovable.forEach((q, idx) => {
+    const duration = parseQuestDurationMinutes(q, idx === 0 ? 35 : 25);
+    morningBlocks.push(B(`quest-${q.id}`, q.title, questScheduleType(q), duration, q.sub || "Misión diaria", {
       questId: q.id,
       quest: q,
       focus: questScheduleFocus(q),
-      randomized: true,
+      randomized: false,
       scheduleWeekKey: weekKey,
       dateKey:scheduleDateKey,
     }));
-    if (idx < ordered.length - 1) {
-      const bufferDur = q.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? 15 : 10;
-      rolling.push(B(`buf-${q.id}`, "Reset corto", idx >= ordered.length - 2 ? "RECOVERY" : "BUFFER", bufferDur, "Agua · estirar · preparar siguiente bloque"));
-    }
+    if (idx < morningMovable.length - 1) morningBlocks.push(B(`buf-${q.id}`, "Reset corto", "BUFFER", 10, "Agua · estirar · preparar siguiente bloque"));
   });
+  blocks.push(...buildTimed(T(10, 0), morningBlocks));
 
-  const timedRolling = buildTimed(start, rolling);
-  return [...blocks, ...timedRolling].sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
+  blocks.push(createFixedQuestScheduleBlock(
+    typingQuest,
+    "typing-fixed-afternoon",
+    typingQuest?.title || "Mecanografía",
+    "SKILL",
+    25,
+    typingQuest?.sub || "2:15–2:40 PM · práctica limpia de teclado",
+    T(14, 15),
+    scheduleDateKey,
+    ["Precisión", "Ritmo", "Constancia"]
+  ));
+
+  blocks.push(createFixedQuestScheduleBlock(
+    blenderQuest,
+    "blender-fixed-afternoon",
+    blenderQuest?.title || "Blender",
+    "CREATIVE",
+    BLENDER_SESSION_MINUTES,
+    "2:40–3:40 PM · Blender principiante: ejercicio del día, tareas y práctica sin numpad",
+    T(14, 40),
+    scheduleDateKey,
+    ["Principiante", "Ejercicio del día", "Sin numpad"]
+  ));
+
+  if (rocketQuest) {
+    blocks.push(createFixedQuestScheduleBlock(
+      rocketQuest,
+      "rocket-fixed-afternoon",
+      rocketQuest.title,
+      "FLOW",
+      ROCKET_LEAGUE_SESSION_MINUTES,
+      "3:40–5:10 PM · 90 min full entrenamiento; ranked/1v1 queda opcional",
+      T(15, 40),
+      scheduleDateKey,
+      ["Fundamentos", "Training", "Sin ranked obligatorio"]
+    ));
+  }
+
+  blocks.push(B("free-after-rocket", "Tiempo libre total", "RECOVERY", 20, "5:10 PM en adelante · estudiar, series, descansar o ranked solo si de verdad querés", {
+    focus:["Libre", "Descanso", "Sin obligación"],
+    randomized:false,
+    dateKey:scheduleDateKey,
+    startMin:T(17, 10),
+    endMin:T(17, 30),
+  }));
+
+  if (nightlyQuest) {
+    blocks.push(createFixedQuestScheduleBlock(
+      nightlyQuest,
+      "night-reflection-fixed",
+      nightlyQuest.title,
+      "RECOVERY",
+      Math.max(5, Math.min(15, parseQuestDurationMinutes(nightlyQuest, 5))),
+      "11:45 PM · cierre rápido antes de dormir a las 12:00 AM",
+      T(23, 45),
+      scheduleDateKey,
+      ["Cierre", "Plan mañana", "Dormir"]
+    ));
+  }
+
+  return blocks.sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
 }
 
 function getScheduleBlocks(dayIdx, swimDays, quests = QUESTS, weekKey = getScheduleWeekKey()) {
@@ -2489,14 +2581,14 @@ function useMobile() {
 const MOB_PRIMARY_ITEMS = [
   { id:"dashboard",    icon:Home,     label:"Hoy"      },
   { id:"quests",       icon:Target,   label:"Misiones" },
-  { id:"calculus",     icon:BookOpen, label:"Cálculo"  },
   { id:"rocketLeague", icon:Gamepad2, label:"Rocket"   },
+  { id:"schedule",     icon:Calendar, label:"Horario"  },
 ];
 
 const MOB_MORE_ITEMS = [
-  { id:"schedule",   icon:Calendar,      label:"Horario"   },
   { id:"focus",      icon:Timer,         label:"Sesión"    },
   { id:"wardrobe",   icon:Shirt,         label:"Clóset"    },
+  { id:"blender",    icon:Layers,        label:"Blender"   },
   { id:"stats",      icon:BarChart2,     label:"Análisis"  },
   { id:"reflection", icon:MessageSquare, label:"Reflexión", accent:true },
   { id:"profile",    icon:User,          label:"Perfil"    },
@@ -3171,12 +3263,12 @@ function DashboardView() {
               {nextBlock?.startMin !== undefined ? `${fmt(nextBlock.startMin)}–${fmt(nextBlock.endMin)} · ` : ""}{nextBlock?.desc || nextQuest?.sub || "No hay tareas pendientes."}
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:13 }}>
-              <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); uiDispatch(AC.setView(nextQuest?.id === 1 ? "calculus" : nextQuest?.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? "rocketLeague" : "focus")); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.10)", color:"#22d3ee", borderRadius:11, padding:"10px 13px", fontWeight:900, cursor:"pointer" }}>Empezar ahora</button>
+              <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); uiDispatch(AC.setView(nextQuest?.id === 1 ? "schedule" : nextQuest?.id === ROCKET_LEAGUE_PARENT_QUEST_ID ? "rocketLeague" : "focus")); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.10)", color:"#22d3ee", borderRadius:11, padding:"10px 13px", fontWeight:900, cursor:"pointer" }}>Empezar ahora</button>
               {nextQuest && <button onClick={() => handleQuestComplete(nextQuest)} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.09)", color:"#34d399", borderRadius:11, padding:"10px 13px", fontWeight:900, cursor:"pointer" }}>Completar</button>}
             </div>
           </div>
           <div style={{ display:"grid", gap:8 }}>
-            <div style={{ padding:11, borderRadius:13, background:"rgba(96,165,250,.08)", border:"1px solid rgba(96,165,250,.16)" }}><b style={{ color:"#93c5fd" }}>Cálculo:</b> <span style={{ color:T_COLOR.muted }}>8:10–9:45 · {calcPlan.topic}</span></div>
+            <div style={{ padding:11, borderRadius:13, background:"rgba(96,165,250,.08)", border:"1px solid rgba(96,165,250,.16)" }}><b style={{ color:"#93c5fd" }}>Cálculo:</b> <span style={{ color:T_COLOR.muted }}>8:10–9:45 · bloque externo · marcar al terminar</span></div>
             <div style={{ padding:11, borderRadius:13, background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.16)" }}><b style={{ color:"#67e8f9" }}>Rocket:</b> <span style={{ color:T_COLOR.muted }}>{rocketPlan.focus || rocketPlan.title}</span></div>
             {todayOutfit && <div style={{ padding:11, borderRadius:13, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.15)" }}><b style={{ color:"#fbbf24" }}>Outfit:</b> <span style={{ color:T_COLOR.muted }}>{todayOutfit.title}</span></div>}
           </div>
@@ -3221,13 +3313,13 @@ function DashboardView() {
         <div style={{ display:"flex", flexDirection:"column", gap:15 }}>
           <div className="g" style={{ padding:18 }}>
             <div style={S.stitle}>Ruta mínima si estás cansado</div>
-            <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6, marginBottom:12 }}>No abandones todo: Cálculo 20 min, Rocket solo freeplay + 1v1, reflexión 2 min. El modo bajo energía reduce el castigo.</div>
+            <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6, marginBottom:12 }}>No abandones todo: Cálculo externo 20 min, Rocket solo freeplay + 1v1, reflexión 2 min. El modo bajo energía reduce el castigo.</div>
             <button onClick={() => setDayMode("lowEnergy")} style={{ border:"1px solid rgba(251,191,36,.25)", background:"rgba(251,191,36,.08)", color:"#fbbf24", borderRadius:10, padding:"10px 12px", fontWeight:900, cursor:"pointer" }}>Activar bajo energía</button>
           </div>
           <div className="g" style={{ padding:18 }}>
             <div style={S.stitle}>Atajos</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {[ ["calculus", "Cálculo"], ["rocketLeague", "Rocket"], ["wardrobe", "Clóset"], ["stats", "Análisis"] ].map(([view,label]) => <button key={view} onClick={() => uiDispatch(AC.setView(view))} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:T_COLOR.text, borderRadius:10, padding:"10px 9px", fontWeight:900, cursor:"pointer" }}>{label}</button>)}
+              {[ ["schedule", "Horario"], ["rocketLeague", "Rocket"], ["blender", "Blender"], ["wardrobe", "Clóset"], ["stats", "Análisis"] ].map(([view,label]) => <button key={view} onClick={() => uiDispatch(AC.setView(view))} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:T_COLOR.text, borderRadius:10, padding:"10px 9px", fontWeight:900, cursor:"pointer" }}>{label}</button>)}
             </div>
           </div>
         </div>
@@ -3592,6 +3684,7 @@ function RocketSpeedflipDarCleanCancelCard({ recommended }) {
 
 function getRocketLeagueTaskRole(task, plan) {
   if (task?.trainingRole) return task.trainingRole;
+  if (task?.optional) return "Opcional";
   if (task?.type === RL_SUBTASK_TYPES.FREEPLAY || task?.type === RL_SUBTASK_TYPES.MATCHES) return "Bloque fijo";
   if (task?.type === RL_SUBTASK_TYPES.MENTAL) return "Registro mental";
   if (plan?.primaryMechanicLabel && String(task?.title || "").toLowerCase().includes(String(plan.primaryMechanicLabel).toLowerCase().split(" ")[0])) return "Foco principal";
@@ -3603,6 +3696,7 @@ function getRocketLeagueRoleBadgeStyle(role, accent = "#22d3ee") {
   if (role === "Apoyo técnico") return { color:"#34d399", background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" };
   if (role === "Bloque fijo") return { color:"#22d3ee", background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.16)" };
   if (role === "Registro mental") return { color:"#c4b5fd", background:"rgba(167,139,250,.08)", border:"1px solid rgba(167,139,250,.16)" };
+  if (role === "Opcional") return { color:"#94a3b8", background:"rgba(148,163,184,.07)", border:"1px solid rgba(148,163,184,.16)" };
   return { color:accent, background:`${accent}12`, border:`1px solid ${accent}24` };
 }
 
@@ -3623,8 +3717,9 @@ function RocketLeagueView() {
     [activeQuests]
   );
   const parentCompleted = (persistent.quests.completedIds || []).includes(ROCKET_LEAGUE_PARENT_QUEST_ID);
-  const allComplete = plan.subtasks.every(task => completedSet.has(task.id));
-  const doneCount = plan.subtasks.filter(task => completedSet.has(task.id)).length;
+  const requiredRocketTasks = plan.subtasks.filter(task => !task.optional);
+  const allComplete = requiredRocketTasks.every(task => completedSet.has(task.id));
+  const doneCount = requiredRocketTasks.filter(task => completedSet.has(task.id)).length;
   const totalTargetSeconds = plan.subtasks.reduce((sum, task) => sum + task.minutes * 60, 0);
 
   const [activeSubtaskId, setActiveSubtaskId] = useState(null);
@@ -3709,7 +3804,7 @@ function RocketLeagueView() {
     }
   }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, uiDispatch]);
 
-  const progressPct = Math.min(100, Math.round((doneCount / Math.max(plan.subtasks.length, 1)) * 100));
+  const progressPct = Math.min(100, Math.round((doneCount / Math.max(requiredRocketTasks.length, 1)) * 100));
   const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
 
   const toggleTimer = useCallback((subtaskId) => {
@@ -3788,7 +3883,7 @@ function RocketLeagueView() {
   const moodOptions = [1, 2, 3, 4, 5];
   const activeTask = activeSubtaskId ? plan.subtasks.find(task => task.id === activeSubtaskId) : null;
   const nextIncompleteTask = plan.subtasks.find(task => !completedSet.has(task.id));
-  const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer).every(task => completedSet.has(task.id));
+  const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer && !task.optional).every(task => completedSet.has(task.id));
   const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
   const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
   const speedflipDarRecommended = plan.subtasks.some(task => task.speedflipDar || String(task.id).includes("speedflip") || String(task.title).toLowerCase().includes("speedflip"));
@@ -3826,7 +3921,7 @@ ${line}` : line));
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · 70% enfoque semanal + 30% variedad · Plat II · peak Diamond I low</div>
+          <div style={S.psub}>60 min con día monográfico + 3 partidas 1v1 · 30 min mecánica + 10 min descanso · Plat II · peak Diamond I low</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -3855,7 +3950,7 @@ ${line}` : line));
                 <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
                 <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
                 <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:8 }}>
-                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Foco semanal: {weeklyFocus.short}</span>
+                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Foco del día: {weeklyFocus.short}</span>
                   <span style={{ fontSize:10.5, fontWeight:900, color:focusRole.type === "focus" ? "#34d399" : "#fbbf24", background:focusRole.type === "focus" ? "rgba(52,211,153,.08)" : "rgba(251,191,36,.08)", border:focusRole.type === "focus" ? "1px solid rgba(52,211,153,.16)" : "1px solid rgba(251,191,36,.16)", borderRadius:999, padding:"4px 8px" }}>{focusRole.label}</span>
                 </div>
               </div>
@@ -3866,7 +3961,7 @@ ${line}` : line));
                 <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:`${weeklyFocus.accent}10`, border:`1px solid ${weeklyFocus.accent}22` }}>
-                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Foco</div>
+                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Día</div>
                 <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>{weeklyFocus.short}</div>
                 <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
               </div>
@@ -3876,7 +3971,7 @@ ${line}` : line));
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
                 <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
-                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>70/30 real</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>30 + 10 + 10</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
                 <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próxima rotación</div>
@@ -3885,10 +3980,10 @@ ${line}` : line));
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No son 3 mecánicas a masterizar. Hoy el foco principal es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel || "Los demás bloques son apoyo corto para transferir el foco a situaciones reales."}
+              No es rutina random. Hoy el foco principal es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel || "La estructura es: calentamiento, 30 min de mecánica, 10 min descanso, 10 min aplicación."}
             </div>
             <div style={{ marginTop:10, padding:12, borderRadius:12, background:"rgba(52,211,153,.06)", border:"1px solid rgba(52,211,153,.15)", color:"#bbf7d0", fontSize:11.8, lineHeight:1.55 }}>
-              <b style={{ color:"#34d399" }}>Lectura correcta:</b> 70% se invierte en la mecánica del foco; 30% mantiene variedad conectada. En un día de speedflip, recoveries e Ice Rings solo corrigen aterrizaje, powerslide y salida limpia.
+              <b style={{ color:"#34d399" }}>Lectura correcta:</b> un día = una mecánica principal. El descanso de 10 min evita practicar cansado y el bloque final solo transfiere esa mecánica a una situación más real.
             </div>
           </div>
 
@@ -4003,13 +4098,13 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:allComplete ? "rgba(52,211,153,.22)" : "rgba(251,191,36,.16)" }}>
             <div style={S.stitle}>Resumen Rocket</div>
             <div style={{ display:"grid", gap:8, fontSize:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 60 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>1v1 antes de amigos</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 90 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Ranked opcional</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mental</span><b style={{ color:mental.saved ? "#34d399" : "#64748b" }}>{mental.saved ? "Guardado" : "Sin guardar"}</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Foco real</span><b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.short}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mecánica del día</span><b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.short}</b></div>
             </div>
             <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
-              Si terminás entrenamiento y el tilt está alto, jugá casual/freeplay antes de ranked. Si el 1v1 sale mal, tomalo como calentamiento, no como fracaso.
+              Si terminás los 90 min y no tenés ganas de ranked, cerrá ahí. Ranked/1v1 es opcional: primero consistencia, después cola competitiva.
             </div>
           </div>
 
@@ -4151,6 +4246,175 @@ ${line}` : line));
               {mental.saved ? "Reflexión guardada" : "Guardar reflexión Rocket League"}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function BlenderView() {
+  const { persistent, pDispatch } = useAppData();
+  const { uiDispatch } = useAppUI();
+
+  const todayKey = useMemo(() => getBlenderDateKey(), []);
+  const plan = useMemo(() => getBlenderPlanForDate(new Date()), []);
+  const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
+  const blenderQuest = useMemo(
+    () => activeQuests.find(q => q.id === BLENDER_PARENT_QUEST_ID) || activeQuests.find(isBlenderQuest) || QUESTS.find(q => q.id === BLENDER_PARENT_QUEST_ID),
+    [activeQuests]
+  );
+  const questDone = Boolean(blenderQuest && (persistent.quests.completedIds || []).includes(blenderQuest.id));
+  const storageKey = `lifeos:blender:${todayKey}:completedTasks`;
+  const [completedTaskIds, setCompletedTaskIds] = useState(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem(storageKey, JSON.stringify(completedTaskIds)); } catch {}
+  }, [storageKey, completedTaskIds]);
+
+  const completedSet = useMemo(() => new Set(completedTaskIds), [completedTaskIds]);
+  const completedMinutes = useMemo(
+    () => plan.tasks.filter(t => completedSet.has(t.id)).reduce((sum, t) => sum + (Number(t.minutes) || 0), 0),
+    [plan.tasks, completedSet]
+  );
+  const pct = Math.round((completedTaskIds.length / Math.max(plan.tasks.length, 1)) * 100);
+
+  const toggleTask = useCallback((taskId) => {
+    unlockLifeOSAudio();
+    setCompletedTaskIds(ids => ids.includes(taskId) ? ids.filter(id => id !== taskId) : [...ids, taskId]);
+    playLifeOSSound("menu");
+  }, []);
+
+  const toggleBlenderQuest = useCallback(() => {
+    if (!blenderQuest) return;
+    unlockLifeOSAudio();
+    if (!questDone) playLifeOSSound("complete");
+    const oldNivel = SELECTORS.level(persistent.xp.total);
+    pDispatch(AC.questComplete(blenderQuest.id, blenderQuest.xp, oldNivel));
+    const id = Date.now();
+    uiDispatch(AC.setBurst(blenderQuest.id));
+    uiDispatch(AC.toastAdd(id, questDone ? "Blender desmarcado" : "+12 XP", questDone ? "Bloque de Blender pendiente" : "Blender completado"));
+    setTimeout(() => uiDispatch(AC.clearBurst()), 900);
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
+    const newNivel = SELECTORS.level(Math.max(0, persistent.xp.total + (questDone ? -blenderQuest.xp : blenderQuest.xp)));
+    if (!questDone && newNivel > oldNivel) {
+      setTimeout(() => { uiDispatch(AC.showNivelUp()); setTimeout(() => uiDispatch(AC.hideNivelUp()), 3200); }, 300);
+    }
+  }, [blenderQuest, questDone, persistent.xp.total, pDispatch, uiDispatch]);
+
+  return (
+    <div style={{ animation:"sldIn .3s ease" }}>
+      <div style={S.ptitle}>Blender Trainer</div>
+      <div style={S.psub}>Ruta principiante principiante · 2:40–3:40 PM · optimizada para laptop/teclado sin numpad</div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1.35fr .65fr", gap:16, marginBottom:18 }} className="mob-layout-grid">
+        <div className="g" style={{ padding:22, borderColor:"rgba(52,211,153,.18)", background:"linear-gradient(135deg,rgba(52,211,153,.08),rgba(255,255,255,.025))" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:11, color:plan.accent, fontWeight:900, letterSpacing:1.2, textTransform:"uppercase" }}>Plan de hoy</div>
+              <div style={{ fontFamily:T_FONT.display, fontSize:26, fontWeight:900, color:T_COLOR.text, marginTop:4 }}>{plan.title}</div>
+              <div style={{ color:T_COLOR.subtext, lineHeight:1.65, marginTop:8, maxWidth:760 }}>{plan.goal}</div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:900, color:plan.accent }}>{completedMinutes}/{plan.minutes}</div>
+              <div style={{ fontSize:11, color:T_COLOR.muted, fontWeight:800, textTransform:"uppercase" }}>min completados</div>
+            </div>
+          </div>
+          <div style={{ height:9, borderRadius:999, background:"rgba(255,255,255,.07)", overflow:"hidden", marginTop:18 }}>
+            <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${plan.accent}88,${plan.accent})`, transition:"width .25s ease" }}/>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginTop:14, flexWrap:"wrap" }}>
+            <div style={{ fontSize:12, color:T_COLOR.muted }}>{completedTaskIds.length}/{plan.tasks.length} tareas · {pct}% del bloque</div>
+            <button onClick={toggleBlenderQuest} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.25)" : "rgba(52,211,153,.32)"}`, background:questDone ? "rgba(148,163,184,.08)" : "rgba(52,211,153,.10)", color:questDone ? "#94a3b8" : "#34d399", borderRadius:12, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
+              {questDone ? "Bloque marcado" : "Marcar Blender completado"}
+            </button>
+          </div>
+        </div>
+
+        <div className="g" style={{ padding:22 }}>
+          <div style={S.stitle}>Perfil del bloque</div>
+          {[BLENDER_PROFILE.level, BLENDER_PROFILE.hardware, BLENDER_PROFILE.session].map((item, idx) => (
+            <div key={idx} style={{ display:"flex", gap:8, alignItems:"flex-start", marginTop:10, color:T_COLOR.subtext, fontSize:13, lineHeight:1.5 }}>
+              <CheckCircle2 size={15} color="#34d399" style={{ flexShrink:0, marginTop:2 }}/>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:14, marginBottom:18 }} className="mob-layout-grid">
+        {plan.tasks.map(task => {
+          const done = completedSet.has(task.id);
+          return (
+            <div key={task.id} className="g" style={{ padding:18, borderColor:done ? `${task.accent}55` : "rgba(255,255,255,.07)", background:done ? `${task.accent}12` : "rgba(255,255,255,.03)" }}>
+              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
+                <div>
+                  <div style={{ fontSize:10, color:task.accent, fontWeight:900, letterSpacing:1.1, textTransform:"uppercase" }}>{task.role} · {task.minutes} min</div>
+                  <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:900, color:T_COLOR.text, marginTop:5 }}>{task.title}</div>
+                </div>
+                <button onClick={() => toggleTask(task.id)} style={{ border:`1px solid ${done ? task.accent : "rgba(255,255,255,.12)"}`, background:done ? `${task.accent}22` : "rgba(255,255,255,.04)", color:done ? task.accent : T_COLOR.subtext, borderRadius:10, padding:"8px 10px", fontWeight:900, cursor:"pointer" }}>
+                  {done ? <CheckCircle2 size={17}/> : <Circle size={17}/>} 
+                </button>
+              </div>
+              <div style={{ marginTop:12, color:T_COLOR.subtext, fontSize:13, lineHeight:1.6 }}>{task.instruction}</div>
+              <div style={{ marginTop:12, padding:"10px 12px", borderRadius:12, background:"rgba(0,0,0,.18)", border:"1px solid rgba(255,255,255,.06)", color:T_COLOR.text, fontSize:12, lineHeight:1.5 }}>
+                <b>Entrega:</b> {task.deliverable}
+              </div>
+              {task.focus?.length > 0 && (
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:10 }}>
+                  {task.focus.map(f => <span key={f} style={{ fontSize:10, fontWeight:800, color:task.accent, border:`1px solid ${task.accent}33`, background:`${task.accent}11`, borderRadius:999, padding:"4px 8px" }}>{f}</span>)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }} className="mob-layout-grid">
+        <div className="g" style={{ padding:22 }}>
+          <div style={S.stitle}>Sin teclado numérico</div>
+          <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:12 }}>
+            LifeOS no te va a enseñar como si tuvieras numpad. La ruta usa alternativas para laptop y teclado compacto.
+          </div>
+          {BLENDER_NO_NUMPAD_GUIDE.map((item, idx) => (
+            <div key={idx} style={{ padding:"11px 0", borderTop:idx ? "1px solid rgba(255,255,255,.06)" : "0" }}>
+              <div style={{ color:T_COLOR.text, fontWeight:900, fontSize:13 }}>{item.title}</div>
+              <div style={{ color:T_COLOR.subtext, fontSize:12, lineHeight:1.6, marginTop:4 }}>{item.body}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="g" style={{ padding:22 }}>
+          <div style={S.stitle}>Reglas de principiante</div>
+          {BLENDER_BEGINNER_RULES.map((rule, idx) => (
+            <div key={idx} style={{ display:"flex", gap:9, alignItems:"flex-start", color:T_COLOR.subtext, fontSize:12, lineHeight:1.55, marginTop:10 }}>
+              <span style={{ color:"#34d399", fontWeight:900 }}>{idx + 1}.</span>
+              <span>{rule}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="g" style={{ padding:22, marginTop:16 }}>
+        <div style={S.stitle}>Escalera de habilidades</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginTop:12 }} className="mob-layout-grid">
+          {BLENDER_SKILL_LADDER.map(step => (
+            <div key={step.level} style={{ border:"1px solid rgba(255,255,255,.07)", background:"rgba(255,255,255,.03)", borderRadius:14, padding:14 }}>
+              <div style={{ fontSize:10, color:"#34d399", fontWeight:900, letterSpacing:1, textTransform:"uppercase" }}>{step.level}</div>
+              <div style={{ color:T_COLOR.text, fontWeight:900, marginTop:4 }}>{step.title}</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:10 }}>
+                {step.items.map(item => <span key={item} style={{ fontSize:10, color:T_COLOR.subtext, border:"1px solid rgba(255,255,255,.08)", borderRadius:999, padding:"4px 7px" }}>{item}</span>)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -6216,7 +6480,7 @@ function SettingsView() {
         <div className="g" style={{ padding:22 }}>
           <div style={S.stitle}>Sistema</div>
           <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7 }}>
-            LIFE OS v3.2 · Estado operativo · Schema {STORAGE_SCHEMA_VERSION}
+            LIFE OS v31.5 · Estado operativo · Schema {STORAGE_SCHEMA_VERSION}
           </div>
         </div>
       </div>
@@ -6234,7 +6498,6 @@ const NAV_GROUPS = [
     items: [
       { id:"dashboard",    icon:Home,     label:"Hoy"      },
       { id:"quests",       icon:Target,   label:"Misiones" },
-      { id:"calculus",     icon:BookOpen, label:"Cálculo"  },
       { id:"schedule",     icon:Calendar, label:"Horario"  },
       { id:"focus",        icon:Timer,    label:"Sesión"   },
     ],
@@ -6243,6 +6506,7 @@ const NAV_GROUPS = [
     title: "Sistemas",
     items: [
       { id:"rocketLeague", icon:Gamepad2, label:"Rocket" },
+      { id:"blender",      icon:Layers,   label:"Blender" },
       { id:"wardrobe",     icon:Shirt,    label:"Clóset" },
       { id:"reflection",   icon:MessageSquare, label:"Reflexión", accent:true },
     ],
@@ -6267,16 +6531,20 @@ const VIEW_ALIASES = Object.freeze({
   terminal:     "dashboard",
   misiones:     "quests",
   quests:       "quests",
-  calculo:      "calculus",
-  cálculo:      "calculus",
-  calculus:     "calculus",
-  mm201:        "calculus",
-  trainercalc:  "calculus",
+  calculo:      "schedule",
+  cálculo:      "schedule",
+  calculus:     "schedule",
+  mm201:        "schedule",
+  trainercalc:  "schedule",
   rocket:       "rocketLeague",
   rocketleague: "rocketLeague",
   rl:           "rocketLeague",
   training:     "rocketLeague",
   rocketLeague: "rocketLeague",
+  blender:      "blender",
+  blender3d:    "blender",
+  b3d:          "blender",
+  "3d":         "blender",
   horario:      "schedule",
   schedule:     "schedule",
   plan:         "schedule",
@@ -6315,6 +6583,7 @@ const VIEW_MAP = {
   quests:       QuestsView,
   calculus:     CalculusTrainerView,
   rocketLeague: RocketLeagueView,
+  blender:      BlenderView,
   schedule:     ScheduleView,
   focus:        FocusSessionView,
   wardrobe:     WardrobeView,
@@ -6732,7 +7001,7 @@ export default function LifeOS() {
           <aside className="sb">
             <div className="sb-logo">
               <div className="sb-icon"><Zap size={17} color="white"/></div>
-              <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v3.2</div></div>
+              <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v31.5</div></div>
             </div>
 
             <nav style={{ flex:1, overflow:"auto", paddingRight:2 }}>
