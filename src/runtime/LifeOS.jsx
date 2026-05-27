@@ -93,6 +93,10 @@ import {
   xpToNextLevel, calculateQuestPenaltyValue
 } from "../utils/xp.js";
 
+import CalculusTrainerViewFeature from "../features/calculus/CalculusTrainerView.jsx";
+import RocketLeagueViewFeature from "../features/rocket/RocketLeagueView.jsx";
+import WardrobeViewFeature from "../features/wardrobe/WardrobeView.jsx";
+
 
 // ─────────────────────────────────────────────────────────────────
 // § 1 · ACTION TYPES (typed, frozen, tree-shakeable)
@@ -4641,6 +4645,47 @@ function WardrobeView() {
   const { uiDispatch } = useAppUI();
   return <WardrobeViewFeature deps={createFeatureViewDeps({ persistent, pDispatch, uiDispatch })}/>;
 }
+function isLifeOSStandalone() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone === true;
+}
+
+function isLikelyMobileDevice() {
+  if (typeof window === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent || "") || window.matchMedia?.("(max-width: 760px)")?.matches;
+}
+
+async function showLifeOSLocalNotification(title, body, tag = "lifeos-local") {
+  if (typeof window === "undefined" || !("Notification" in window)) return false;
+  if (Notification.permission !== "granted") return false;
+
+  const options = {
+    body,
+    tag,
+    renotify: true,
+    icon: "/pwa-192.png",
+    badge: "/pwa-192.png",
+    data: { url: "/" },
+  };
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, options);
+      return true;
+    }
+    new Notification(title, options);
+    return true;
+  } catch {
+    try {
+      new Notification(title, options);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function SettingsView() {
   const {
     persistent, pDispatch,

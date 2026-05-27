@@ -10,7 +10,7 @@ function RocketSpeedflipDarCleanCancelCard({ recommended, deps }) {
     createRocketLeagueInitialState, normalizeSpeedflipDarSession,
     getSpeedflipDarSessionFeedback, getSpeedflipDarStats,
     SPEEDFLIP_DAR_ERROR_LABELS, SPEEDFLIP_DAR_TOUCH_MOMENTS,
-    unlockLifeOSAudio, playLifeOSSound, T_COLOR
+    unlockLifeOSAudio, playLifeOSSound, T_COLOR, S
   } = deps;
   const speedflipDar = persistent.rocketLeague?.speedflipDar || createRocketLeagueInitialState().speedflipDar;
   const history = Array.isArray(speedflipDar.history) ? speedflipDar.history : [];
