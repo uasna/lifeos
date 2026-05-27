@@ -1,5 +1,5 @@
 // ============================================================
-// LIFE OS v28.2 · Modular data extraction pass
+// LIFE OS v29 · Utilities extraction pass
 // ─ Dual-reducer state (persistent / UI)
 // ─ Typed action creators
 // ─ Numeric schema versioning (v1)
@@ -78,6 +78,20 @@ import {
   CALCULUS_I_VIDEO_BLOCKED_TERMS,
   CALCULUS_PINNED_PRACTICE_BY_DATE
 } from "../data/calculusData.js";
+
+import {
+  T, fmt, fmtDur, buildTimed,
+  formatSeconds, formatCountdownSeconds,
+  getSecondsUntilNextLocalDay, formatLocalDateKey, getLifeOSDateKey,
+  getScheduleWeekKey, getSecondsUntilNextScheduleWeek,
+  parseDateKeyLocal, addDaysToDateKey, daysBetweenDateKeys, getDateKeyForScheduleDay
+} from "../utils/time.js";
+import { hashStringSeed, seededRandom, seededShuffle } from "../utils/random.js";
+import { getStoredAudioPrefs, persistAudioPrefs, unlockLifeOSAudio, playLifeOSSound } from "../utils/audio.js";
+import {
+  XP_LEVEL_SIZE, levelFromXp, levelPctFromXp, levelXpFromXp,
+  xpToNextLevel, calculateQuestPenaltyValue
+} from "../utils/xp.js";
 
 
 // ─────────────────────────────────────────────────────────────────
@@ -362,79 +376,7 @@ function getActiveQuests(persistentState) {
 
 // ── Rocket League data/planning extracted to src/data/rocketLeagueData.js ─────
 
-function formatSeconds(totalSeconds = 0) {
-  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function formatCountdownSeconds(totalSeconds = 0) {
-  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  const seconds = safe % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function getSecondsUntilNextLocalDay(nowMs = Date.now()) {
-  const now = new Date(nowMs);
-  const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
-  return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
-}
-
-function formatLocalDateKey(date = new Date()) {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function getScheduleWeekKey(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const dayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1; // Monday = 0
-  d.setDate(d.getDate() - dayIdx);
-  return formatLocalDateKey(d);
-}
-
-function getSecondsUntilNextScheduleWeek(nowMs = Date.now()) {
-  const now = new Date(nowMs);
-  const next = new Date(now);
-  const daysUntilMonday = now.getDay() === 0 ? 1 : 8 - now.getDay();
-  next.setDate(now.getDate() + daysUntilMonday);
-  next.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
-}
-
-function hashStringSeed(input = "lifeos") {
-  let h = 2166136261;
-  const str = String(input);
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function seededRandom(seed) {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6D2B79F5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function seededShuffle(items = [], seedInput = "lifeos") {
-  const arr = [...items];
-  const rand = seededRandom(hashStringSeed(seedInput));
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
+// ── Shared time/random utilities extracted to src/utils/*.js ──────────────
 
 
 // WARDROBE_TYPES extracted to data module.
@@ -560,10 +502,6 @@ function isNightlyQuest(q) {
   return text.includes("reflex") || text.includes("diario") || text.includes("nocturn") || text.includes("journal");
 }
 
-function getLifeOSDateKey(date = new Date()) {
-  return getRocketLeagueDateKey(date);
-}
-
 function getLifeOSDayMode(state, dateKey = getLifeOSDateKey()) {
   if (isLifeOSManualRestDay(dateKey)) return "rest";
   const entry = state?.appSettings?.restDays?.[dateKey];
@@ -585,11 +523,14 @@ function calculateMissedQuestPenalty(state, completedIds = [], dateKey = getLife
   const missedBreakdown = missedQuests.map(q => {
     const baseXp = Math.max(0, Number(q.xp) || 0);
     const roleMeta = getQuestRoleMeta(q);
-    const roleMultiplier = Number(roleMeta.penalty ?? 0);
     const started = startedSet.has(q.id);
-    const startedMultiplier = started && partialEnabled ? 0.5 : 1;
-    const energyMultiplier = lowEnergy ? 0.35 : 1;
-    const penaltyXp = Math.ceil(baseXp * roleMultiplier * startedMultiplier * energyMultiplier);
+    const penaltyXp = calculateQuestPenaltyValue({
+      baseXp,
+      rolePenalty: roleMeta.penalty,
+      started,
+      partialEnabled,
+      lowEnergy,
+    });
     return { ...q, role:getQuestRole(q), roleLabel:roleMeta.label, started, lowEnergy, penaltyXp };
   });
   const missedXp = missedBreakdown.reduce((sum, q) => sum + q.penaltyXp, 0);
@@ -762,71 +703,8 @@ function createAppSettingsInitial() {
   };
 }
 
-function getStoredAudioPrefs() {
-  try {
-    const raw = localStorage.getItem("lifeos:audio");
-    if (!raw) return createAppSettingsInitial().sound;
-    return deepMerge(createAppSettingsInitial().sound, JSON.parse(raw));
-  } catch {
-    return createAppSettingsInitial().sound;
-  }
-}
+// ── Audio utilities extracted to src/utils/audio.js ─────────────────────
 
-function persistAudioPrefs(sound) {
-  try { localStorage.setItem("lifeos:audio", JSON.stringify(sound)); } catch {}
-}
-
-let lifeOSAudioCtx = null;
-
-function getLifeOSAudioContext() {
-  if (typeof window === "undefined") return null;
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!Ctx) return null;
-  if (!lifeOSAudioCtx) lifeOSAudioCtx = new Ctx();
-  return lifeOSAudioCtx;
-}
-
-function unlockLifeOSAudio() {
-  const ctx = getLifeOSAudioContext();
-  if (ctx?.state === "suspended") ctx.resume().catch(() => {});
-}
-
-function playLifeOSSound(kind = "complete") {
-  const prefs = getStoredAudioPrefs();
-  if (!prefs.enabled) return;
-  if (kind === "menu" && prefs.menu === false) return;
-  if (kind === "timer" && prefs.timer === false) return;
-  if (kind === "mission" && prefs.mission === false) return;
-  if ((kind === "complete" || !["menu","timer","mission"].includes(kind)) && prefs.complete === false) return;
-
-  const ctx = getLifeOSAudioContext();
-  if (!ctx) return;
-  if (ctx.state === "suspended") ctx.resume().catch(() => {});
-
-  const now = ctx.currentTime;
-  const volume = Math.max(0, Math.min(1, Number(prefs.volume) || 0.75));
-  const patterns = {
-    menu: [440, 554.37],
-    timer: [660, 880],
-    complete: [523.25, 659.25, 783.99],
-    mission: [392, 523.25, 659.25, 987.77],
-  };
-  const notes = patterns[kind] || patterns.complete;
-
-  notes.forEach((freq, index) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = kind === "timer" ? "triangle" : "sine";
-    osc.frequency.setValueAtTime(freq, now + index * 0.09);
-    gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-    gain.gain.exponentialRampToValueAtTime((kind === "mission" ? 0.055 : 0.04) * volume, now + index * 0.09 + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.12);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now + index * 0.09);
-    osc.stop(now + index * 0.09 + 0.14);
-  });
-}
 
 const ACHIEVEMENTS = Object.freeze([
   { id:1, title:"Primera victoria",      desc:"Completá tu primera misión",  icon:Sword,  rarity:"COMÚN",    glow:"#94a3b8", unlocked:true  },
@@ -945,28 +823,8 @@ const LIFEOS_MANUAL_REST_DAYS = Object.freeze({
 // CALCULUS_JOURNALIZATION_II_PAC_2026 extracted to data module.
 
 
-function parseDateKeyLocal(dateKey) {
-  const [y, m, d] = String(dateKey || "").split("-").map(Number);
-  return new Date(y || 2000, (m || 1) - 1, d || 1);
-}
+// ── Date-key utilities extracted to src/utils/time.js ───────────────────
 
-function addDaysToDateKey(dateKey, days = 0) {
-  const d = parseDateKeyLocal(dateKey);
-  d.setDate(d.getDate() + days);
-  return formatLocalDateKey(d);
-}
-
-function daysBetweenDateKeys(fromKey, toKey) {
-  const a = parseDateKeyLocal(fromKey);
-  const b = parseDateKeyLocal(toKey);
-  a.setHours(0, 0, 0, 0);
-  b.setHours(0, 0, 0, 0);
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-function getDateKeyForScheduleDay(weekKey, dayIdx) {
-  return addDaysToDateKey(weekKey || getScheduleWeekKey(), dayIdx || 0);
-}
 
 function isLifeOSManualRestDay(dateKey) {
   return Boolean(LIFEOS_MANUAL_REST_DAYS[String(dateKey || "").slice(0, 10)]);
@@ -1375,18 +1233,8 @@ const SCHEDULE_BLOCKS = Object.freeze({
   ],
 });
 
-const T       = (h, m=0) => h*60+m;
-const fmt     = m => `${Math.floor(m/60)}:${String(m%60).padStart(2,"0")}`;
-const fmtDur  = m => m >= 60 ? `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}` : `${m}m`;
+// ── Schedule time helpers extracted to src/utils/time.js ───────────────
 
-function buildTimed(startMin, blocks) {
-  let cur = startMin;
-  return blocks.map(b => {
-    const item = { ...b, startMin: cur, endMin: cur + b.duration };
-    cur += b.duration;
-    return item;
-  });
-}
 
 function parseQuestDurationMinutes(q, fallback = 30) {
   const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
@@ -2558,11 +2406,11 @@ function uiReducer(state, action) {
 
 const SELECTORS = Object.freeze({
   // ── Progresoion ───────────────────────────────────────────────
-  level:         (totalXp)  => Math.floor(totalXp / 500) + 1,
-  levelPct:      (totalXp)  => ((totalXp % 500) / 500) * 100,
-  levelXp:       (totalXp)  => totalXp % 500,
+  level:         levelFromXp,
+  levelPct:      levelPctFromXp,
+  levelXp:       levelXpFromXp,
   rank:          (level)    => RANK_NAMES[Math.min(level - 1, 9)],
-  xpToNextNivel: (totalXp)  => 500 - (totalXp % 500),
+  xpToNextNivel: xpToNextLevel,
 
   // ── Planner ───────────────────────────────────────────────────
   swimDays:      (pairIdx)  => SWIM_PAIRS[pairIdx % SWIM_PAIRS.length],
