@@ -1207,7 +1207,7 @@ const SCHEDULE_BLOCKS = Object.freeze({
     B("swim","Swimming","PHYSICAL",90,"1h30 pool session",{focus:["Floating","Breathing","Water confidence"]}),
     B("walk2","Change + Walk Back","BUFFER",20,"Dry off · change · 10 min walk home"),
     B("rec","Post-swim Decompression","RECOVERY",20,"Rehydrate · snack · let mind drift"),
-    B("rl","Rocket League","FLOW",90,"90 min · ciclo de 2 semanas",{focus:["Foco del ciclo","Fundamentos","Ranked opcional"]}),
+    B("rl","Rocket League","FLOW",60,"1h training block",{focus:["Powershots","Recoveries","Speedflips","Fast aerials"]}),
     B("buf1","Transition","BUFFER",15,"Hydrate · step away from screen"),
     B("blen","Blender","CREATIVE",60,"1h · current project or random challenge"),
     B("buf2","Transition","BUFFER",10,"Light stretch · mind reset"),
@@ -1219,7 +1219,7 @@ const SCHEDULE_BLOCKS = Object.freeze({
     B("buf0","Arrival Buffer","BUFFER",15,"Settle in · quick mental reset"),
     B("calc","Calculus I","FOCUS",90,"1h30 deep problem work",{focus:["Limits","Derivatives","Integrals"]}),
     B("brk","Break","RECOVERY",15,"Step away · stretch · breathe deeply"),
-    B("rl","Rocket League","FLOW",90,"90 min · ciclo de 2 semanas",{focus:["Foco del ciclo","Fundamentos","Replay corto"]}),
+    B("rl","Rocket League","FLOW",60,"1h focused training session",{focus:["Powershots","Speedflips","Replay analysis","Positioning"]}),
     B("buf1","Transition","BUFFER",15,"Hydrate · mental reset"),
     B("blen","Blender","CREATIVE",60,"1h · project or random challenge"),
     B("buf2","Transition","BUFFER",15,"Screen break · stretch"),
@@ -1235,7 +1235,7 @@ const SCHEDULE_BLOCKS = Object.freeze({
     B("brk","Ease-out Break","RECOVERY",20,"Stretch · breathe · reset brain"),
     B("blen","Blender","CREATIVE",75,"1h15 · momentum build on current project"),
     B("buf1","Transition","BUFFER",15,"Hydrate · rest eyes"),
-    B("rl","Rocket League","FLOW",90,"90 min · fundamentos por ciclo",{focus:["Ciclo 2 semanas","Consistencia","Mentalidad"]}),
+    B("rl","Rocket League","FLOW",60,"1h warm-up for the week",{focus:["Fundamentals","Consistency","Mentality reset"]}),
     B("buf2","Transition","BUFFER",15,"Light snack · stretch"),
     B("type","Typing Practice","SKILL",20,"20 min · WPM baseline for the week"),
     B("read","Lectura profunda","SKILL",35,"Relaxed reading · any genre"),
@@ -1253,7 +1253,7 @@ const SCHEDULE_BLOCKS = Object.freeze({
     B("buf0","Arrival Buffer","BUFFER",15,"Settle in · ease into the session"),
     B("blen","Blender","CREATIVE",75,"1h15 project deep dive or challenge"),
     B("buf1","Transition","BUFFER",15,"Stretch · step back from screen"),
-    B("rl","Rocket League","FLOW",90,"90 min · ciclo Rocket",{focus:["Foco del ciclo","Posicionamiento","Mentalidad"]}),
+    B("rl","Rocket League","FLOW",60,"1h training block",{focus:["Mechanics","Positioning","Decision-making","Mentality"]}),
     B("buf2","Transition","BUFFER",15,"Reset · hydrate · quick snack"),
     B("skills","Skill Stack","SKILL",45,"Typing 20 min · Non-dom writing 15 min · Breathwork 10 min"),
     B("buf3","Break","RECOVERY",15,"Decompress · no task pressure"),
@@ -1296,7 +1296,7 @@ function questScheduleType(q) {
 
 function questScheduleFocus(q) {
   const text = `${q?.title || ""} ${q?.sub || ""}`.toLowerCase();
-  if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return ["Freeplay", "Foco del ciclo", "Fundamentos", "Replay corto"];
+  if (q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket")) return ["Freeplay", "Speedflips", "Flicks", "Mental"];
   if (text.includes("cálculo") || text.includes("calculo")) return ["Tema del día", "Ejercicios", "Corrección"];
   if (text.includes("blender")) return ["Principiante", "Ejercicio del día", "Sin numpad"];
   if (text.includes("inglés") || text.includes("ingles")) return ["Listening", "Vocabulario", "Speaking"];
@@ -3219,7 +3219,7 @@ function DashboardView() {
       unlockLifeOSAudio();
       playLifeOSSound("menu");
       uiDispatch(AC.setView("rocketLeague"));
-      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá los 90 min; ranked/1v1/2v2 queda opcional"));
+      uiDispatch(AC.toastAdd(id, "Abrí Rocket League", "Completá los 90 min; ranked queda opcional"));
       setTimeout(() => uiDispatch(AC.toastRemove(id)), 2700);
       return;
     }
@@ -3696,7 +3696,6 @@ function getRocketLeagueRoleBadgeStyle(role, accent = "#22d3ee") {
   if (role === "Apoyo técnico") return { color:"#34d399", background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" };
   if (role === "Bloque fijo") return { color:"#22d3ee", background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.16)" };
   if (role === "Registro mental") return { color:"#c4b5fd", background:"rgba(167,139,250,.08)", border:"1px solid rgba(167,139,250,.16)" };
-  if (role === "Mantenimiento diario") return { color:"#86efac", background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)" };
   if (role === "Opcional") return { color:"#94a3b8", background:"rgba(148,163,184,.07)", border:"1px solid rgba(148,163,184,.16)" };
   return { color:accent, background:`${accent}12`, border:`1px solid ${accent}24` };
 }
@@ -3780,14 +3779,12 @@ function RocketLeagueView() {
     [plan.subtasks, getElapsedSeconds]
   );
 
+  const nextRotationSeconds = getSecondsUntilNextLocalDay(tickNow);
   const tomorrowDateKey = getRocketLeagueDateKey(new Date(tickNow + 24 * 60 * 60 * 1000));
   const tomorrowPlan = useMemo(() => getRocketLeaguePlanForDate(tomorrowDateKey), [tomorrowDateKey]);
   const weeklyFocus = useMemo(() => getRocketLeagueWeeklyFocus(dateKey), [dateKey]);
   const focusRole = useMemo(() => getRocketLeagueFocusRole(dateKey), [dateKey]);
   const nextWeeklyFocusSeconds = useMemo(() => getSecondsUntilNextRocketWeeklyFocus(tickNow), [tickNow]);
-  const rocketCycle = plan.cycle || weeklyFocus;
-  const maintenanceFundamentals = plan.maintenanceFundamentals || [];
-  const forbiddenMainFocus = plan.forbiddenMainFocus || [];
 
   useEffect(() => {
     if (!activeSubtaskId) return;
@@ -3843,7 +3840,7 @@ function RocketLeagueView() {
     if (before < target && after >= target) {
       playLifeOSSound("complete");
       const id = Date.now();
-      uiDispatch(AC.toastAdd(id, `${task.title}: registrado`, `${target} partidas opcionales registradas`));
+      uiDispatch(AC.toastAdd(id, `${task.title}: completado`, `${target} partidas de 1v1 listas`));
       setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
     }
   }, [getMatchCount, pDispatch, uiDispatch]);
@@ -3885,7 +3882,7 @@ function RocketLeagueView() {
   const mental = current.mental || createRocketLeagueCurrent().mental;
   const moodOptions = [1, 2, 3, 4, 5];
   const activeTask = activeSubtaskId ? plan.subtasks.find(task => task.id === activeSubtaskId) : null;
-  const nextIncompleteTask = plan.subtasks.find(task => !task.optional && !completedSet.has(task.id));
+  const nextIncompleteTask = plan.subtasks.find(task => !completedSet.has(task.id));
   const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer && !task.optional).every(task => completedSet.has(task.id));
   const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
   const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
@@ -3924,7 +3921,7 @@ ${line}` : line));
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>90 min diarios · roadmap por ciclos de 2 semanas · máximo 1 mecánica nueva · ranked opcional · Plat/Diamond bajo</div>
+          <div style={S.psub}>90 min · ciclos de 2 semanas · 1 mecánica nueva a la vez · Training Packs + Freeplay</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -3938,7 +3935,7 @@ ${line}` : line));
           </div>
           <ProgresoBar pct={progressPct} gradient="linear-gradient(90deg,#22d3ee,#a78bfa)" height={7}/>
           <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:T_COLOR.muted, marginTop:8 }}>
-            <span>{doneCount}/{requiredRocketTasks.length} bloques obligatorios</span>
+            <span>{doneCount}/{plan.subtasks.length} submisiones</span>
             <span>{formatSeconds(totalElapsedSeconds)} / {formatSeconds(totalTargetSeconds)}</span>
           </div>
         </div>
@@ -3953,7 +3950,7 @@ ${line}` : line));
                 <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
                 <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
                 <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:8 }}>
-                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Foco del ciclo: {weeklyFocus.short}</span>
+                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Ciclo actual: {weeklyFocus.short}</span>
                   <span style={{ fontSize:10.5, fontWeight:900, color:focusRole.type === "focus" ? "#34d399" : "#fbbf24", background:focusRole.type === "focus" ? "rgba(52,211,153,.08)" : "rgba(251,191,36,.08)", border:focusRole.type === "focus" ? "1px solid rgba(52,211,153,.16)" : "1px solid rgba(251,191,36,.16)", borderRadius:999, padding:"4px 8px" }}>{focusRole.label}</span>
                 </div>
               </div>
@@ -3964,9 +3961,9 @@ ${line}` : line));
                 <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:`${weeklyFocus.accent}10`, border:`1px solid ${weeklyFocus.accent}22` }}>
-                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Semana</div>
-                <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>Semana {weeklyFocus.weekNumber} · {weeklyFocus.short}</div>
-                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>cambio en {formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
+                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Ciclo</div>
+                <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>{weeklyFocus.short}</div>
+                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                 <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Tiempo</div>
@@ -3974,38 +3971,19 @@ ${line}` : line));
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
                 <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
-                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>1 foco · 2 semanas</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>1 mecánica nueva</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
                 <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próximo ciclo</div>
                 <div style={{ fontSize:18, fontWeight:900, color:"#c4b5fd", fontVariantNumeric:"tabular-nums" }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
-                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Mañana sigue: {tomorrowPlan.primaryMechanicLabel || tomorrowPlan.title}</div>
+                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Plan diario: {tomorrowPlan.title}</div>
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No es rutina random ni mecánica distinta cada día. El foco principal del ciclo es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel}
+              Roadmap por ciclos: el foco actual es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel || "90 min: freeplay, foco principal, descanso, aplicación, fundamentos, replay y cierre."}
             </div>
             <div style={{ marginTop:10, padding:12, borderRadius:12, background:"rgba(52,211,153,.06)", border:"1px solid rgba(52,211,153,.15)", color:"#bbf7d0", fontSize:11.8, lineHeight:1.55 }}>
-              <b style={{ color:"#34d399" }}>Lectura correcta:</b> un ciclo = una mecánica/fundamento principal. Mejor 80% sólido que speedflip, air dribble y musty flick al 30%.
-            </div>
-            <div style={{ marginTop:10, display:"grid", gridTemplateColumns:"1.1fr .9fr", gap:10 }} className="mob-layout-grid">
-              <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:900, letterSpacing:.8 }}>Dominar antes de avanzar</div>
-                <div style={{ fontSize:12, color:T_COLOR.text, fontWeight:800, marginTop:5, lineHeight:1.45 }}>{rocketCycle.masteryGate || plan.masteryNote}</div>
-                <div style={{ fontSize:11, color:"#fbbf24", fontWeight:800, marginTop:7 }}>{rocketCycle.speedflipRule || "Speedflip solo cuando toque el ciclo correcto."}</div>
-              </div>
-              <div style={{ padding:12, borderRadius:12, background:"rgba(15,23,42,.45)", border:"1px solid rgba(248,113,113,.16)" }}>
-                <div style={{ fontSize:10, color:"#fca5a5", textTransform:"uppercase", fontWeight:900, letterSpacing:.8 }}>No entrenar como foco principal</div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
-                  {forbiddenMainFocus.map(item => <span key={item} style={{ fontSize:10.5, color:"#fecaca", background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.16)", borderRadius:999, padding:"4px 7px", fontWeight:800 }}>{item}</span>)}
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop:10, padding:12, borderRadius:12, background:"rgba(34,211,238,.055)", border:"1px solid rgba(34,211,238,.14)" }}>
-              <div style={{ fontSize:10, color:"#22d3ee", textTransform:"uppercase", fontWeight:900, letterSpacing:.8, marginBottom:8 }}>Fundamentos que se mantienen</div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
-                {maintenanceFundamentals.map(item => <span key={item} style={{ fontSize:10.8, color:"#bae6fd", background:"rgba(34,211,238,.08)", border:"1px solid rgba(34,211,238,.15)", borderRadius:999, padding:"4px 8px", fontWeight:800 }}>{item}</span>)}
-              </div>
+              <b style={{ color:"#34d399" }}>Lectura correcta:</b> una mecánica nueva por ciclo de 2 semanas. Recoveries, boost management, no double commit, anti-tilt y replay note se mantienen como fundamentos diarios.
             </div>
           </div>
 
@@ -4126,7 +4104,7 @@ ${line}` : line));
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Foco del ciclo</span><b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.short}</b></div>
             </div>
             <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
-              Si terminás los 90 min y no tenés ganas de ranked, cerrá ahí. Ranked/1v1/2v2 es opcional: primero consistencia, después cola competitiva.
+              Si terminás los 90 min y no tenés ganas de ranked, cerrá ahí. Ranked/1v1 es opcional: primero consistencia, después cola competitiva.
             </div>
           </div>
 
@@ -4135,10 +4113,10 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
               <Layers size={18} color="#38bdf8"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop maps</div>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop pausado</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque Workshop, usá solo mapas normales de dribbling o rings/aerial control. Air dribble avanzado no es foco principal. Evitá modos extra, carreras, rumble, minijuegos o mutators raros porque Epic puede buguearse.
+              Workshop queda fuera hasta nuevo aviso. La rutina activa usa Freeplay + Training Packs para controlar mejor la dificultad y evitar que Dribbling Challenge/Rings se vuelvan foco antes de tiempo.
             </div>
             <div style={{ display:"grid", gap:6, marginTop:10 }}>
               {ROCKET_LEAGUE_WORKSHOP_RULES.map((rule, i) => (
@@ -4167,13 +4145,13 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:"rgba(232,121,249,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
               <Target size={18} color="#e879f9"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Air roll shots</div>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Training Packs útiles</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque este bloque: usá air roll solo para alinear el carro antes del golpe. La meta es tiro fuerte + caída limpia, no girar bonito.
+              Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.airRollShotsAlt, ROCKET_LEAGUE_PACKS.directionalAirRoll].map(pack => (
+              {[ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].map(pack => (
                 <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
                   <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>

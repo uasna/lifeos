@@ -141,8 +141,9 @@ export default function RocketLeagueViewFeature({ deps }) {
     [activeQuests]
   );
   const parentCompleted = (persistent.quests.completedIds || []).includes(ROCKET_LEAGUE_PARENT_QUEST_ID);
-  const allComplete = plan.subtasks.every(task => completedSet.has(task.id));
-  const doneCount = plan.subtasks.filter(task => completedSet.has(task.id)).length;
+  const requiredRocketTasks = plan.subtasks.filter(task => !task.optional);
+  const allComplete = requiredRocketTasks.every(task => completedSet.has(task.id));
+  const doneCount = requiredRocketTasks.filter(task => completedSet.has(task.id)).length;
   const totalTargetSeconds = plan.subtasks.reduce((sum, task) => sum + task.minutes * 60, 0);
 
   const [activeSubtaskId, setActiveSubtaskId] = useState(null);
@@ -227,7 +228,7 @@ export default function RocketLeagueViewFeature({ deps }) {
     }
   }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, uiDispatch]);
 
-  const progressPct = Math.min(100, Math.round((doneCount / Math.max(plan.subtasks.length, 1)) * 100));
+  const progressPct = Math.min(100, Math.round((doneCount / Math.max(requiredRocketTasks.length, 1)) * 100));
   const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
 
   const toggleTimer = useCallback((subtaskId) => {
@@ -344,7 +345,7 @@ ${line}` : line));
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
         <div>
           <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>60 min flexibles + 3 partidas 1v1 · 70% enfoque semanal + 30% variedad · Plat II · peak Diamond I low</div>
+          <div style={S.psub}>90 min · ciclos de 2 semanas · 1 mecánica nueva a la vez · Training Packs + Freeplay</div>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
@@ -373,7 +374,7 @@ ${line}` : line));
                 <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
                 <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
                 <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:8 }}>
-                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Foco semanal: {weeklyFocus.short}</span>
+                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Ciclo actual: {weeklyFocus.short}</span>
                   <span style={{ fontSize:10.5, fontWeight:900, color:focusRole.type === "focus" ? "#34d399" : "#fbbf24", background:focusRole.type === "focus" ? "rgba(52,211,153,.08)" : "rgba(251,191,36,.08)", border:focusRole.type === "focus" ? "1px solid rgba(52,211,153,.16)" : "1px solid rgba(251,191,36,.16)", borderRadius:999, padding:"4px 8px" }}>{focusRole.label}</span>
                 </div>
               </div>
@@ -384,7 +385,7 @@ ${line}` : line));
                 <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:`${weeklyFocus.accent}10`, border:`1px solid ${weeklyFocus.accent}22` }}>
-                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Foco</div>
+                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Ciclo</div>
                 <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>{weeklyFocus.short}</div>
                 <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
               </div>
@@ -394,16 +395,16 @@ ${line}` : line));
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
                 <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
-                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>No ranked frío</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>1 mecánica nueva</div>
               </div>
               <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
-                <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próxima rotación</div>
-                <div style={{ fontSize:18, fontWeight:900, color:"#c4b5fd", fontVariantNumeric:"tabular-nums" }}>{formatCountdownSeconds(nextRotationSeconds)}</div>
-                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Mañana: {tomorrowPlan.title}</div>
+                <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próximo ciclo</div>
+                <div style={{ fontSize:18, fontWeight:900, color:"#c4b5fd", fontVariantNumeric:"tabular-nums" }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
+                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Plan diario: {tomorrowPlan.title}</div>
               </div>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              No ranked frío: freeplay y 3 partidas de 1v1 son fijos. LifeOS usa 70% enfoque semanal ({weeklyFocus.label}) y 30% variedad para que mejores una mecánica sin aburrirte ni oxidar otras.
+              Regla central: máximo 1 mecánica nueva a la vez. Este ciclo dura 2 semanas ({weeklyFocus.label}); ranked/1v1/2v2 queda opcional y Workshop está pausado hasta nuevo aviso.
             </div>
           </div>
 
@@ -510,7 +511,7 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:allComplete ? "rgba(52,211,153,.22)" : "rgba(251,191,36,.16)" }}>
             <div style={S.stitle}>Resumen Rocket</div>
             <div style={{ display:"grid", gap:8, fontSize:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 60 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 90 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>1v1 antes de amigos</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
               <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mental</span><b style={{ color:mental.saved ? "#34d399" : "#64748b" }}>{mental.saved ? "Guardado" : "Sin guardar"}</b></div>
             </div>
@@ -524,10 +525,10 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
               <Layers size={18} color="#38bdf8"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop maps</div>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop pausado</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque Workshop, usá solo mapas que tengas disponibles en BakkesPlugins/loader y que sean entrenamiento normal: dribbling, rings o air dribble. Podés entrar después de una partida sin reiniciar. Evitá mapas con modos extra, carreras, rumble, minijuegos o mutators raros porque Epic puede buguearse.
+              Workshop queda fuera hasta nuevo aviso. La rutina activa usa Freeplay + Training Packs para controlar mejor la dificultad y evitar que Dribbling Challenge/Rings se vuelvan foco antes de tiempo.
             </div>
             <div style={{ display:"grid", gap:6, marginTop:10 }}>
               {ROCKET_LEAGUE_WORKSHOP_RULES.map((rule, i) => (
@@ -556,13 +557,13 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:"rgba(232,121,249,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
               <Target size={18} color="#e879f9"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Air roll shots</div>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Training Packs útiles</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Cuando toque este bloque: usá air roll solo para alinear el carro antes del golpe. La meta es tiro fuerte + caída limpia, no girar bonito.
+              Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.airRollShotsAlt, ROCKET_LEAGUE_PACKS.directionalAirRoll].map(pack => (
+              {[ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].map(pack => (
                 <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
                   <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>
