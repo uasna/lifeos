@@ -241,10 +241,11 @@ export const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
     focus: "calentamiento aéreo y primer toque controlado",
     kind: "Air dribble warmup",
     modeSafe: true,
-    activeRotation: true,
+    activeRotation: false,
+    libraryOnlyReason: "Fuera del foco principal: LifeOS prioriza aerial control direccional, no air dribble avanzado.",
     postMatch: true,
-    avoid: "Si empezás perdido, bajá ritmo y repetí setups fáciles.",
-    howToUse: "Úsalo antes de Air Dribble Gauntlet o en días de baja energía.",
+    avoid: "No usar como foco principal. Si aparece, máximo reto opcional corto y sin clips.",
+    howToUse: "Solo biblioteca opcional: setup limpio + 1 toque útil, nunca como rutina central.",
   },
   airDribbleGauntlet: {
     name: "Air Dribble Gauntlet",
@@ -252,11 +253,12 @@ export const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
     focus: "ground-to-air y air dribble básico por niveles",
     kind: "Air dribble básico",
     modeSafe: true,
-    activeRotation: true,
+    activeRotation: false,
     occasionalOnly: true,
+    libraryOnlyReason: "Air dribble queda fuera del foco principal para Platino/Diamond bajo.",
     postMatch: true,
-    avoid: "Usar niveles fáciles; evitar forzar clips o mapas con reglas raras.",
-    howToUse: "Meta real: setup limpio + 1 toque útil. No forzar clips.",
+    avoid: "No usar como foco principal ni para clips. Prioridad: shots, dribble, aerial control direccional y speedflip limpio cuando toque.",
+    howToUse: "Solo biblioteca opcional: setup limpio + 1 toque útil. No forzar clips.",
   },
 });
 
@@ -301,16 +303,16 @@ export const RL_FREEPLAY_SUBTASK = Object.freeze({
 
 export const RL_ONE_V_ONE_SUBTASK = Object.freeze({
   id: "optional-ranked-application",
-  title: "Ranked / 1v1 opcional",
+  title: "Ranked / 1v1 / 2v2 opcional",
   type: RL_SUBTASK_TYPES.MATCHES,
   minutes: 0,
   targetCount: 3,
   noTimer: true,
   optional: true,
-  instruction: "Opcional: jugá 1–3 partidas solo si todavía tenés ganas. No bloquea la misión de Rocket; si hoy solo querés entrenar, marcá los 90 min y cerrá.",
+  instruction: "Opcional: jugá 1–3 partidas solo si todavía tenés energía y mental estable. No bloquea la misión; si hoy solo querés entrenar, completá los 90 min y cerrá.",
   focus: "aplicación opcional · no obligatorio",
   trainingRole: "Opcional",
-  roleReason: "Ranked ya no es obligación. Primero entrenamiento limpio; competir solo cuando haya energía y mental estable.",
+  roleReason: "Ranked/1v1/2v2 no es obligación. Primero entrenamiento limpio; competir solo cuando aporte, no por ansiedad.",
   accent: "#94a3b8",
 });
 
@@ -604,75 +606,108 @@ export function getSpeedflipDarStats(history = []) {
   return { sessions, lastFive, avgClean, avgTouches, cleanestSide, trend, status, sessionsLeft };
 }
 
-export const ROCKET_LEAGUE_DAILY_FOCUSES = Object.freeze([
+export const ROCKET_LEAGUE_ROADMAP_START_DATE = "2026-05-25";
+
+export const ROCKET_LEAGUE_DAILY_MAINTENANCE_FUNDAMENTALS = Object.freeze([
+  "Recoveries básicas",
+  "Caer con ruedas",
+  "Boost management",
+  "No double commit",
+  "Anti-tilt",
+  "Replay review corto",
+]);
+
+export const ROCKET_LEAGUE_FORBIDDEN_MAIN_FOCUS = Object.freeze([
+  "Zap Dash",
+  "Mens Flip",
+  "Musty Flick avanzado",
+  "Air dribble avanzado",
+  "Speedflip diario",
+]);
+
+export const ROCKET_LEAGUE_ROADMAP_CYCLES = Object.freeze([
   Object.freeze({
-    dayIndex: 0,
-    id: "powershots",
-    label: "Lunes · Powershots + precisión",
-    short: "Powershots",
-    goal: "pegar fuerte, limpio y con intención; no regalar tiros suaves en Platino",
-    planBaseId: "daily-powershots",
+    cycleIndex: 0,
+    startWeek: 1,
+    endWeek: 2,
+    weekRange: "Semanas 1–2",
+    id: "shots-rotation",
+    label: "Semanas 1–2 · Shots simples + rotación 2v2",
+    short: "Shots + 2v2",
+    title: "Shots simples + rotación básica en 2v2",
+    primaryFocus: "shots simples + rotación básica en 2v2",
+    goal: "dejar de regalar tiros suaves, pegar con intención y rotar sin double commit",
+    dailyMainBlock: "30 min de tiros simples, powershots y clears útiles",
+    controlledApplication: "20 min de aplicación controlada: shot selection + rotación 2v2 sin perseguir la pelota",
+    planBaseId: "cycle-shots-rotation",
     accent: "#fbbf24",
+    masteryGate: "Avanzar cuando los tiros ganables salen fuertes y la rotación básica ya no depende de ranked.",
+    optionalRankedGuidance: "Ranked/2v2 solo si el mental está estable; objetivo: aplicar rotación, no farmear partidas.",
+    speedflipRule: "Speedflip bloqueado como foco principal. Nada de práctica diaria.",
   }),
   Object.freeze({
-    dayIndex: 1,
-    id: "recoveries",
-    label: "Martes · Recoveries + wavedash",
-    short: "Recoveries",
-    goal: "caer con ruedas, mantener momentum y volver rápido sin gastar boost de más",
-    planBaseId: "daily-recoveries",
-    accent: "#34d399",
-  }),
-  Object.freeze({
-    dayIndex: 2,
-    id: "dribbling",
-    label: "Miércoles · Dribbling + primer toque",
-    short: "Dribbling",
-    goal: "controlar posesión, primer toque útil y no entregar la pelota por ansiedad",
-    planBaseId: "daily-dribbling",
+    cycleIndex: 1,
+    startWeek: 3,
+    endWeek: 4,
+    weekRange: "Semanas 3–4",
+    id: "ground-dribble",
+    label: "Semanas 3–4 · Ground dribble básico",
+    short: "Ground dribble",
+    title: "Ground dribble básico",
+    primaryFocus: "ground dribble básico",
+    goal: "mantener posesión, controlar primer toque y no entregar la pelota por ansiedad",
+    dailyMainBlock: "30 min de dribble en suelo, balance y microtoques",
+    controlledApplication: "20 min de aplicación controlada: primer toque útil, cuts simples y flick básico solo si la pelota ya está estable",
+    planBaseId: "cycle-ground-dribble",
     accent: "#fb7185",
+    masteryGate: "Avanzar cuando el balón se sostiene con calma y el primer toque deja una jugada útil.",
+    optionalRankedGuidance: "Ranked opcional; si jugás, medí posesión y decisiones, no clips.",
+    speedflipRule: "Speedflip sigue fuera del foco principal. Máximo mantenimiento corto 2–3 veces/semana si no desplaza el ciclo.",
   }),
   Object.freeze({
-    dayIndex: 3,
-    id: "defense",
-    label: "Jueves · Shadow defense + saves",
-    short: "Defensa",
-    goal: "defender sin regalar centro, salvar hacia esquina y salir vivo",
-    planBaseId: "daily-defense",
-    accent: "#60a5fa",
-  }),
-  Object.freeze({
-    dayIndex: 4,
-    id: "aerials",
-    label: "Viernes · Aéreos básicos + reads",
-    short: "Aéreos básicos",
-    goal: "llegar a balones simples, leer rebotes y caer listo para la siguiente jugada",
-    planBaseId: "daily-aerials",
+    cycleIndex: 2,
+    startWeek: 5,
+    endWeek: 6,
+    weekRange: "Semanas 5–6",
+    id: "aerial-control",
+    label: "Semanas 5–6 · Aerial control direccional",
+    short: "Aerial control",
+    title: "Aerial control direccional",
+    primaryFocus: "aerial control direccional",
+    goal: "volar con dirección, estabilizar el carro y caer listo para la siguiente jugada",
+    dailyMainBlock: "30 min de rings/aerial control direccional sin freestyle",
+    controlledApplication: "20 min de aplicación controlada: rebotes simples, backboard básico y recoveries al caer",
+    planBaseId: "cycle-aerial-control",
     accent: "#38bdf8",
+    masteryGate: "Avanzar cuando los aéreos simples se sienten dirigidos y las caídas no matan el momentum.",
+    optionalRankedGuidance: "Ranked opcional; aplicá solo aéreos simples que sí llegarías a tocar limpio.",
+    speedflipRule: "Speedflip no es foco todavía. Si se toca, 5–10 min máximo y no más de 2–3 veces/semana.",
   }),
   Object.freeze({
-    dayIndex: 5,
-    id: "kickoffs",
-    label: "Sábado · Kickoffs + 1v1 decision making",
-    short: "Kickoffs",
-    goal: "salidas consistentes, 50s, paciencia y decisiones de 1v1 sin ranked obligatorio",
-    planBaseId: "daily-kickoffs",
+    cycleIndex: 3,
+    startWeek: 7,
+    endWeek: null,
+    weekRange: "Semana 7+",
+    id: "speedflip-clean",
+    label: "Semana 7+ · Speedflip limpio",
+    short: "Speedflip limpio",
+    title: "Speedflip limpio",
+    primaryFocus: "speedflip limpio",
+    goal: "hacer un kickoff usable, recto y repetible sin raspar dos veces ni perder control",
+    dailyMainBlock: "30 min de speedflip limpio con velocidad controlada, cancel correcto y aterrizaje recto",
+    controlledApplication: "20 min de aplicación controlada: kickoff, primer 50 y salida con boost management",
+    planBaseId: "cycle-speedflip-clean",
     accent: "#a78bfa",
-  }),
-  Object.freeze({
-    dayIndex: 6,
-    id: "review",
-    label: "Domingo · Review suave + mecánica débil",
-    short: "Review",
-    goal: "bajar carga, repetir lo que peor salió y cerrar la semana sin quemarte",
-    planBaseId: "daily-review",
-    accent: "#86efac",
+    masteryGate: "Mantener hasta que el patrón esté limpio antes de intentar variantes flashy.",
+    optionalRankedGuidance: "Ranked/1v1 opcional solo para probar kickoffs; si aparece tilt, cortar ranked inmediatamente.",
+    speedflipRule: "Ahora sí puede ser foco principal. Antes de esta etapa no debe tratarse como rutina diaria.",
   }),
 ]);
 
-// Backward-compatible export name: the UI still imports this symbol,
-// but v31.4 uses a daily fundamentals focus instead of flashy advanced rotations.
-export const ROCKET_LEAGUE_WEEKLY_FOCUSES = ROCKET_LEAGUE_DAILY_FOCUSES;
+// Backward-compatible export names: the rest of the app still imports these symbols,
+// but Rocket League now runs on two-week roadmap cycles instead of daily mechanic rotation.
+export const ROCKET_LEAGUE_DAILY_FOCUSES = ROCKET_LEAGUE_ROADMAP_CYCLES;
+export const ROCKET_LEAGUE_WEEKLY_FOCUSES = ROCKET_LEAGUE_ROADMAP_CYCLES;
 
 export function parseRocketLeagueDateKey(dateKey = getRocketLeagueDateKey()) {
   const [y, m, d] = String(dateKey).split("-").map(Number);
@@ -688,56 +723,97 @@ export function getRocketLeagueWeekIndex(dateKey = getRocketLeagueDateKey()) {
   return Math.floor(monday.getTime() / (7 * 24 * 60 * 60 * 1000));
 }
 
+export function getRocketLeagueRoadmapProgress(dateKey = getRocketLeagueDateKey()) {
+  const current = parseRocketLeagueDateKey(dateKey);
+  const start = parseRocketLeagueDateKey(ROCKET_LEAGUE_ROADMAP_START_DATE);
+  const diffDays = Math.max(0, Math.floor((current.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)));
+  const weekNumber = Math.floor(diffDays / 7) + 1;
+  const cycleIndex = weekNumber <= 2 ? 0 : weekNumber <= 4 ? 1 : weekNumber <= 6 ? 2 : 3;
+  const cycle = ROCKET_LEAGUE_ROADMAP_CYCLES[cycleIndex] || ROCKET_LEAGUE_ROADMAP_CYCLES[0];
+  const weekInCycle = cycleIndex === 3 ? Math.max(1, weekNumber - 6) : Math.max(1, weekNumber - cycle.startWeek + 1);
+  const cycleStartWeek = cycle.startWeek || 1;
+  const cycleDay = Math.max(1, diffDays - ((cycleStartWeek - 1) * 7) + 1);
+  const nextCycleWeek = cycleIndex < 3
+    ? (cycle.endWeek || weekNumber) + 1
+    : 7 + (Math.floor(Math.max(0, weekNumber - 7) / 2) + 1) * 2;
+  const nextCycleDate = new Date(start);
+  nextCycleDate.setDate(start.getDate() + (nextCycleWeek - 1) * 7);
+  nextCycleDate.setHours(0, 0, 0, 0);
+  const daysUntilNextCycle = Math.max(0, Math.ceil((nextCycleDate.getTime() - current.getTime()) / (24 * 60 * 60 * 1000)));
+
+  return Object.freeze({
+    cycle,
+    cycleIndex,
+    weekNumber,
+    weekInCycle,
+    cycleDay,
+    nextCycleWeek,
+    nextCycleDateKey: getRocketLeagueDateKey(nextCycleDate),
+    daysUntilNextCycle,
+    roadmapStartDate: ROCKET_LEAGUE_ROADMAP_START_DATE,
+  });
+}
+
 export function getRocketLeagueDailyFocus(dateKey = getRocketLeagueDateKey()) {
-  const d = parseRocketLeagueDateKey(dateKey);
-  const mondayBasedDay = (d.getDay() + 6) % 7;
-  return ROCKET_LEAGUE_DAILY_FOCUSES.find(f => f.dayIndex === mondayBasedDay) || ROCKET_LEAGUE_DAILY_FOCUSES[0];
+  return getRocketLeagueWeeklyFocus(dateKey);
 }
 
 export function getRocketLeagueWeeklyFocus(dateKey = getRocketLeagueDateKey()) {
-  return getRocketLeagueDailyFocus(dateKey);
+  const progress = getRocketLeagueRoadmapProgress(dateKey);
+  return Object.freeze({
+    ...progress.cycle,
+    cycleIndex: progress.cycleIndex,
+    weekNumber: progress.weekNumber,
+    weekInCycle: progress.weekInCycle,
+    cycleDay: progress.cycleDay,
+    daysUntilNextCycle: progress.daysUntilNextCycle,
+    nextCycleDateKey: progress.nextCycleDateKey,
+  });
 }
 
 export function getRocketLeagueFocusRole(dateKey = getRocketLeagueDateKey()) {
-  const focus = getRocketLeagueDailyFocus(dateKey);
-  if (focus.id === "review") {
-    return { type: "review", label: "Review suave", detail: "bajar carga, repetir el punto débil y preparar la siguiente semana" };
-  }
-  return { type: "focus", label: "Fundamento del día", detail: "90 min de entrenamiento: warmup, bloque fuerte, descanso, aplicación y cierre" };
+  const focus = getRocketLeagueWeeklyFocus(dateKey);
+  return {
+    type: "cycle",
+    label: "Foco del ciclo",
+    detail: `${focus.weekRange}: ${focus.primaryFocus}. Máximo 1 mecánica nueva a la vez.`,
+  };
 }
 
 export function getSecondsUntilNextRocketWeeklyFocus(now = Date.now()) {
-  const d = new Date(now);
-  const next = new Date(d);
-  next.setHours(24, 0, 0, 0);
+  const dateKey = getRocketLeagueDateKey(new Date(now));
+  const progress = getRocketLeagueRoadmapProgress(dateKey);
+  const [y, m, d] = progress.nextCycleDateKey.split("-").map(Number);
+  const next = new Date(y, m - 1, d, 0, 0, 0, 0);
   return Math.max(0, Math.floor((next.getTime() - now) / 1000));
 }
 
 export function inferRocketLeaguePrimaryFocus(id = "") {
   const key = String(id).toLowerCase();
-  if (key.includes("power") || key.includes("shot")) return "powershots";
-  if (key.includes("recovery") || key.includes("recoveries") || key.includes("wave")) return "recoveries";
-  if (key.includes("dribble") || key.includes("first-touch") || key.includes("flick")) return "dribbling";
-  if (key.includes("save") || key.includes("shadow") || key.includes("defense") || key.includes("boost")) return "defense";
-  if (key.includes("aerial") || key.includes("rings") || key.includes("rebound") || key.includes("backboard")) return "aerials";
-  if (key.includes("kickoff") || key.includes("one-v-one") || key.includes("decision") || key.includes("speedflip")) return "kickoffs";
-  if (key.includes("review")) return "review";
-  return "powershots";
+  if (key.includes("shot") || key.includes("rotation")) return "shots-rotation";
+  if (key.includes("ground") || key.includes("dribble")) return "ground-dribble";
+  if (key.includes("aerial") || key.includes("rings")) return "aerial-control";
+  if (key.includes("speedflip")) return "speedflip-clean";
+  return "shots-rotation";
 }
 
 export const makeRlPlan = (id, title, focus, variableBlocks, meta = {}) => {
   const blocks = [RL_FREEPLAY_SUBTASK, ...variableBlocks, RL_ONE_V_ONE_SUBTASK];
   const timedMinutes = blocks.reduce((sum, task) => sum + Math.max(0, Number(task.minutes) || 0), 0);
   return Object.freeze({
-    id: `${id}-90m-fundamentals-v31-4`,
+    id: `${id}-90m-2week-roadmap-v32`,
     baseId: id,
     title,
     focus,
     primaryFocus: meta.primaryFocus || inferRocketLeaguePrimaryFocus(id),
     primaryMechanicLabel: meta.primaryMechanicLabel || null,
-    supportLabel: meta.supportLabel || "90 min: 10 warmup + 30 foco + 10 descanso + 25 aplicación + 10 ajuste + 5 cierre.",
-    masteryNote: meta.masteryNote || "Hoy se entrena un fundamento útil para Platino/Diamond bajo. Ranked queda opcional.",
-    balance: "90 min entrenamiento · ranked opcional",
+    supportLabel: meta.supportLabel || "90 min: 10 freeplay + 30 foco + 10 descanso + 20 aplicación + 10 mantenimiento + 5 replay + 5 cierre.",
+    masteryNote: meta.masteryNote || "Máximo 1 mecánica nueva a la vez. Mejor 80% sólido que 30% flashy.",
+    cycle: meta.cycle || null,
+    maintenanceFundamentals: Object.freeze(meta.maintenanceFundamentals || ROCKET_LEAGUE_DAILY_MAINTENANCE_FUNDAMENTALS),
+    forbiddenMainFocus: Object.freeze(meta.forbiddenMainFocus || ROCKET_LEAGUE_FORBIDDEN_MAIN_FOCUS),
+    optionalRankedGuidance: meta.optionalRankedGuidance || "Ranked / 1v1 / 2v2 es opcional, no obligatorio.",
+    balance: "90 min entrenamiento · ranked opcional · ciclos de 2 semanas",
     minutes: timedMinutes,
     subtasks: Object.freeze(blocks),
   });
@@ -746,211 +822,190 @@ export const makeRlPlan = (id, title, focus, variableBlocks, meta = {}) => {
 const makeMainMechanicTask = (id, title, focus, instruction, minutes = 30, accent = "#fb7185") => withRlTrainingRole(
   makeRlMechanicSubtask(id, title, focus, instruction, minutes, accent),
   RL_TRAINING_ROLES.MAIN,
-  "Bloque principal. Esta es la mecánica/fundamento que toca mejorar hoy; no lo mezcles con clips ni metas extra."
+  "Bloque principal del ciclo. No mezclar con otra mecánica nueva ni convertirlo en práctica de clips."
 );
 
-const makeApplicationTask = (task, reason = "Aplicación conectada del foco principal; no es una segunda mecánica a masterizar.", role = RL_TRAINING_ROLES.SUPPORT) => withRlTrainingRole(
+const makeApplicationTask = (task, reason = "Aplicación controlada del foco principal; no es una segunda mecánica a masterizar.", role = RL_TRAINING_ROLES.SUPPORT) => withRlTrainingRole(
   task,
   role,
   reason
 );
 
-const makeMentalCloseTask = (id, instruction = "5 min: anotá qué salió mejor, qué falló y qué vas a repetir mañana. Si hubo tilt, cerrá sin ranked.") => withRlTrainingRole(
+const makeMaintenanceTask = (id, instruction, accent = "#34d399") => withRlTrainingRole(
+  makeRlMechanicSubtask(
+    id,
+    "Fundamentos de mantenimiento · 10 min",
+    "recoveries, ruedas, boost, no double commit y anti-tilt",
+    instruction,
+    10,
+    accent
+  ),
+  "Mantenimiento diario",
+  "No es mecánica nueva: mantiene la base mínima que no se puede perder."
+);
+
+const makeReplayReviewTask = (id, instruction = "5 min: revisá una jugada o anotá mentalmente un error repetido. Buscar patrón, no culparse.") => withRlTrainingRole(
+  makeRlMentalSubtask(id, "Replay / mental note", instruction, 5),
+  RL_TRAINING_ROLES.REVIEW,
+  "Review corto para convertir la sesión en aprendizaje medible."
+);
+
+const makeMentalCloseTask = (id, instruction = "5 min: anotá qué salió mejor, qué falló y qué se repite mañana. Si hubo tilt, cerrá sin ranked.") => withRlTrainingRole(
   makeRlMentalSubtask(id, "Cierre técnico", instruction, 5),
   RL_TRAINING_ROLES.REVIEW,
-  "Cierre corto para que el entrenamiento se convierta en aprendizaje real."
+  "Cierre corto para terminar con intención y no seguir por ansiedad."
+);
+
+const buildCyclePlan = (cycle, variableBlocks, meta = {}) => makeRlPlan(
+  cycle.planBaseId,
+  cycle.label,
+  cycle.goal,
+  variableBlocks,
+  {
+    cycle,
+    primaryFocus: cycle.id,
+    primaryMechanicLabel: cycle.short,
+    supportLabel: `${cycle.weekRange}: ${cycle.dailyMainBlock}. ${cycle.controlledApplication}`,
+    masteryNote: `${cycle.masteryGate} Mejor dominar al 80% que tocar cinco mecánicas al 30%.`,
+    optionalRankedGuidance: cycle.optionalRankedGuidance,
+    ...meta,
+  }
 );
 
 export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan("daily-powershots", "Lunes · Powershots + precisión", "Tiros fuertes, clears y puntería útil", [
+  buildCyclePlan(ROCKET_LEAGUE_ROADMAP_CYCLES[0], [
     makeMainMechanicTask(
-      "main-powershots-30",
-      "Powershots · 30 min",
-      "pegar fuerte después del bote y tirar con intención",
-      "Freeplay/training pack: esperá el bote, golpeá con potencia y apuntá. Si el tiro sale suave, repetí. Meta: menos tiros regalados y más clears útiles.",
+      "main-simple-shots-30",
+      "Shots simples + clears útiles · 30 min",
+      "tiros ganables, powershots y dirección",
+      "30 min: tiros de suelo, powershots y clears hacia zona útil. Repetí cualquier tiro suave. La meta no es clip: es contacto fuerte, dirección y recuperación inmediata.",
       30,
       "#fbbf24"
     ),
-    makeRlBreakSubtask("break-powershots-10", 10),
+    makeRlBreakSubtask("break-cycle-shots-10", 10),
     makeApplicationTask(
-      makeRlPackSubtask("apply-ground-shots-25", ROCKET_LEAGUE_PACKS.groundShots, 25, "Aplicación: tiros de suelo consistentes. No busqués clip; buscá contacto sólido y dirección.", "#fbbf24"),
-      "Sigue siendo powershots: transformar potencia en tiros ganables."
+      makeRlMechanicSubtask(
+        "apply-2v2-rotation-20",
+        "Aplicación controlada: rotación 2v2 · 20 min",
+        "shot selection + no double commit",
+        "20 min: simulá jugadas de 2v2 en freeplay/training. Después de cada tiro: recovery, pad pequeño y rotación atrás. No persigas segunda pelota si tu compañero imaginario ya va.",
+        20,
+        "#fbbf24"
+      ),
+      "La aplicación sigue siendo shots + rotación, no otra mecánica."
     ),
-    makeApplicationTask(
-      makeRlPackSubtask("adjust-shots-miss-10", ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, 10, "Ajuste final: 10 min de tiros que no deberías fallar. Cada fallo se repite con calma.", "#fb923c"),
-      "Microbloque de consistencia para cerrar tiros simples.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeMentalCloseTask("close-powershots-5"),
-  ], {
-    primaryFocus: "powershots",
-    primaryMechanicLabel: "Powershots",
-    supportLabel: "Lunes: potencia + precisión. Esto sube más rápido que mecánicas flashy en Platino.",
-  }),
-
-  makeRlPlan("daily-recoveries", "Martes · Recoveries + wavedash", "Caer bien, wavedash y mantener momentum", [
-    makeMainMechanicTask(
-      "main-recoveries-30",
-      "Recoveries + wavedash · 30 min",
-      "wavedash, powerslide landing y half flip",
-      "30 min: cada salto/tiro termina con ruedas, powerslide si caés torcido y salida hacia pad pequeño. Si quedás muerto, repetí la secuencia.",
-      30,
+    makeMaintenanceTask(
+      "maintenance-shots-10",
+      "10 min: caer con ruedas después de cada tiro, boost management con pads pequeños, no double commit mental y cierre anti-tilt si fallás tres tiros seguidos.",
       "#34d399"
     ),
-    makeRlBreakSubtask("break-recoveries-10", 10),
-    makeApplicationTask(
-      makeRlPackSubtask("apply-recovery-pack-25", ROCKET_LEAGUE_PACKS.recoveryTraining, 25, "Aplicación: recoveries incómodas. La meta no es tocar rápido; es volver útil a la jugada.", "#34d399"),
-      "Aplicación directa: salir vivo de posiciones feas."
-    ),
-    makeApplicationTask(
-      RL_MECHANIC_DRILLS.halfFlipRecovery,
-      "Microbloque conectado: half flip limpio para volver sin gastar boost de más.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeMentalCloseTask("close-recoveries-5"),
-  ], {
-    primaryFocus: "recoveries",
-    primaryMechanicLabel: "Recoveries",
-    supportLabel: "Martes: caer con ruedas, wavedash y momentum. Ser rápido empieza por no quedar muerto.",
-  }),
+    makeReplayReviewTask("review-shots-5", "5 min: detectá si fallaste por mala puntería, poco boost, mala rotación o ansiedad por tirar rápido."),
+    makeMentalCloseTask("close-shots-5", "5 min: escribí un tiro que ya sale fuerte y una rotación que todavía regalás."),
+  ]),
 
-  makeRlPlan("daily-dribbling", "Miércoles · Dribbling + primer toque", "Posesión, control y primer toque útil", [
+  buildCyclePlan(ROCKET_LEAGUE_ROADMAP_CYCLES[1], [
     makeApplicationTask(
-      makeRlWorkshopSubtask("main-dribbling-remastered-30", ROCKET_LEAGUE_WORKSHOP_MAPS.dribblingChallenge1Remastered, 30, "30 min de dribbling. No speedrun: pelota estable, microtoques y paciencia. Si se cae, reiniciá sin tiltearte.", "#fb7185"),
-      "Bloque principal: control en suelo y posesión.",
+      makeRlWorkshopSubtask(
+        "main-ground-dribble-30",
+        ROCKET_LEAGUE_WORKSHOP_MAPS.dribblingChallenge1Remastered,
+        30,
+        "30 min de ground dribble básico. Pelota estable, microtoques y paciencia. Si se cae, reiniciá sin tilt; no speedrun.",
+        "#fb7185"
+      ),
+      "Bloque principal del ciclo: posesión en suelo y control fino.",
       RL_TRAINING_ROLES.MAIN
     ),
-    makeRlBreakSubtask("break-dribbling-10", 10),
+    makeRlBreakSubtask("break-cycle-dribble-10", 10),
     makeApplicationTask(
+      makeRlMechanicSubtask(
+        "apply-ground-dribble-control-20",
+        "Aplicación controlada: primer toque + cuts · 20 min",
+        "primer toque útil, drift cuts simples y flick básico solo si hay control",
+        "20 min: primer toque hacia espacio, cut simple y salida con posesión. Flick básico solo si la pelota ya está estable; si no, seguir dribbleando.",
+        20,
+        "#fb7185"
+      ),
+      "La aplicación sigue siendo ground dribble, no flicks avanzados."
+    ),
+    makeMaintenanceTask(
+      "maintenance-dribble-10",
+      "10 min: recoveries después de perder la pelota, caer con ruedas, boost management sin boost grande, no double commit y reset mental si empezás a forzar flicks.",
+      "#34d399"
+    ),
+    makeReplayReviewTask("review-dribble-5", "5 min: anotá si perdiste posesión por primer toque largo, mala velocidad o ansiedad por flickear."),
+    makeMentalCloseTask("close-dribble-5", "5 min: objetivo de mañana: un dribble más estable, no una mecánica nueva."),
+  ]),
+
+  buildCyclePlan(ROCKET_LEAGUE_ROADMAP_CYCLES[2], [
+    makeApplicationTask(
+      makeRlWorkshopSubtask(
+        "main-aerial-control-30",
+        ROCKET_LEAGUE_WORKSHOP_MAPS.iceRings,
+        30,
+        "30 min de aerial control direccional. Usá air roll solo para corregir; objetivo: ruta limpia, dirección estable y menos choques.",
+        "#38bdf8"
+      ),
+      "Bloque principal del ciclo: control aéreo direccional, no air dribble avanzado.",
+      RL_TRAINING_ROLES.MAIN
+    ),
+    makeRlBreakSubtask("break-cycle-aerial-10", 10),
+    makeApplicationTask(
+      makeRlPackSubtask(
+        "apply-aerial-reads-20",
+        ROCKET_LEAGUE_PACKS.basicRebounds,
+        20,
+        "20 min: rebotes simples, llegar con dirección y caer útil. Si no llegás cómodo, priorizá lectura y recovery antes que tocar por tocar.",
+        "#38bdf8"
+      ),
+      "Aplicación real del control aéreo: balones simples, rebotes y caída limpia."
+    ),
+    makeMaintenanceTask(
+      "maintenance-aerial-10",
+      "10 min: recoveries al caer de aéreos, ruedas hacia la salida, boost management, no double commit aéreo y anti-tilt si fallás lecturas fáciles.",
+      "#34d399"
+    ),
+    makeReplayReviewTask("review-aerial-5", "5 min: anotá si el fallo fue despegue tarde, mala dirección, exceso de air roll o caída muerta."),
+    makeMentalCloseTask("close-aerial-5", "5 min: cerrar con control. Nada de air dribble avanzado como foco."),
+  ]),
+
+  buildCyclePlan(ROCKET_LEAGUE_ROADMAP_CYCLES[3], [
+    withRlTrainingRole(
       {
-        ...RL_MECHANIC_DRILLS.firstTouchControl,
-        id: "apply-first-touch-25",
-        minutes: 25,
-        instruction: "25 min: cada balón debe tener intención. Primer toque hacia espacio, pared, tiro o control; si te aleja de la jugada, repetí."
+        ...RL_MECHANIC_DRILLS.speedflipBothSides,
+        id: "main-speedflip-clean-30",
+        title: "Speedflip limpio · 30 min",
+        minutes: 30,
+        instruction: "30 min: empezá a 75% de velocidad. Patrón limpio, cancel sostenido, aterrizaje recto y sin raspar dos veces. Subí velocidad solo si 8/10 intentos salen limpios.",
+        speedflipDar: true,
       },
-      "Aplicación: el primer toque decide si atacás o regalás posesión."
+      RL_TRAINING_ROLES.MAIN,
+      "Semana 7+: ahora sí es foco principal. Antes de esta etapa no debe aparecer como rutina diaria."
     ),
+    makeRlBreakSubtask("break-cycle-speedflip-10", 10),
     makeApplicationTask(
-      RL_MECHANIC_DRILLS.basicFlicks,
-      "Microbloque de salida: flick simple solo cuando la pelota ya está controlada.",
-      RL_TRAINING_ROLES.VARIETY
+      makeRlMechanicSubtask(
+        "apply-speedflip-kickoff-20",
+        "Aplicación controlada: kickoff + primer 50 · 20 min",
+        "speedflip usable, kickoff recto y salida con boost management",
+        "20 min: 5 intentos limpios, luego simulá kickoff + primer 50. Si raspás dos veces o salís torcido, bajá velocidad y repetí patrón sin spamear.",
+        20,
+        "#a78bfa"
+      ),
+      "Aplicación directa del speedflip al kickoff real, sin musty ni freestyle."
     ),
-    makeMentalCloseTask("close-dribbling-5"),
-  ], {
-    primaryFocus: "dribbling",
-    primaryMechanicLabel: "Dribbling",
-    supportLabel: "Miércoles: posesión real. Controlar antes de tirar, no pegar por pegar.",
-  }),
-
-  makeRlPlan("daily-defense", "Jueves · Shadow defense + saves", "Defensa paciente, saves y clears hacia esquina", [
-    makeApplicationTask(
-      makeRlPackSubtask("main-shadow-defense-30", ROCKET_LEAGUE_PACKS.shadowDefense, 30, "30 min de shadow: cubrí net, no te tires de más y esperá el toque malo del rival. Save hacia esquina, no al centro.", "#60a5fa"),
-      "Bloque principal: defensa real, no mecánica de clip.",
-      RL_TRAINING_ROLES.MAIN
+    makeMaintenanceTask(
+      "maintenance-speedflip-10",
+      "10 min: recoveries post-kickoff, caer con ruedas, pads pequeños, no double commit después del 50 y anti-tilt si el cancel se rompe.",
+      "#34d399"
     ),
-    makeRlBreakSubtask("break-defense-10", 10),
-    makeApplicationTask(
-      makeRlPackSubtask("apply-hard-saves-25", ROCKET_LEAGUE_PACKS.hardSaves, 25, "Aplicación: saves incómodos y clears con intención. Repetí cada despeje al centro.", "#60a5fa"),
-      "Aplicación directa: salvar y salir, no solo tocar el balón."
-    ),
-    makeApplicationTask(
-      RL_MECHANIC_DRILLS.lowBoostDefense,
-      "Microbloque: defender con poco boost usando pads pequeños y paciencia.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeMentalCloseTask("close-defense-5"),
-  ], {
-    primaryFocus: "defense",
-    primaryMechanicLabel: "Defensa",
-    supportLabel: "Jueves: si te meten menos goles tontos, subís más rápido.",
-  }),
-
-  makeRlPlan("daily-aerials", "Viernes · Aéreos básicos + reads", "Aerial simple, rebotes y backboard reads sin freestyle", [
-    makeApplicationTask(
-      makeRlWorkshopSubtask("main-ice-rings-30", ROCKET_LEAGUE_WORKSHOP_MAPS.iceRings, 30, "30 min de control aéreo básico. Air roll solo para corregir; menos choques > más velocidad.", "#38bdf8"),
-      "Bloque principal: control aéreo básico y estabilidad.",
-      RL_TRAINING_ROLES.MAIN
-    ),
-    makeRlBreakSubtask("break-aerials-10", 10),
-    makeApplicationTask(
-      makeRlPackSubtask("apply-basic-rebounds-25", ROCKET_LEAGUE_PACKS.basicRebounds, 25, "Aplicación: leer rebotes simples, llegar a tiempo y caer listo para la siguiente jugada.", "#38bdf8"),
-      "Aplicación del control aéreo a balones reales."
-    ),
-    makeApplicationTask(
-      makeRlPackSubtask("adjust-backboard-10", ROCKET_LEAGUE_PACKS.backboardReads, 10, "Microbloque: backboard básico. Si no llegás cómodo, priorizá lectura y recovery.", "#22d3ee"),
-      "Variación corta para reads, no air dribble ni freestyle.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeMentalCloseTask("close-aerials-5"),
-  ], {
-    primaryFocus: "aerials",
-    primaryMechanicLabel: "Aéreos básicos",
-    supportLabel: "Viernes: aéreos simples que sí aparecen en ranked, no clips avanzados.",
-  }),
-
-  makeRlPlan("daily-kickoffs", "Sábado · Kickoffs + 1v1 decision making", "Kickoffs consistentes, 50s y decisiones sin ranked obligatorio", [
-    makeMainMechanicTask(
-      "main-kickoffs-30",
-      "Kickoffs básicos + 50s · 30 min",
-      "salida consistente, diagonal/front flip útil y primer 50",
-      "30 min: front flip/diagonal kickoff limpio, llegar centrado y jugar el 50. No conviertas todo en speedflip; primero consistencia.",
-      30,
-      "#a78bfa"
-    ),
-    makeRlBreakSubtask("break-kickoffs-10", 10),
-    makeApplicationTask(
-      makeRlPackSubtask("apply-speedflip-maintenance-10", ROCKET_LEAGUE_PACKS.speedflipMusty, 10, "Mantenimiento opcional dentro del día: máximo 10 min. Si raspás dos veces, bajá a 75% y no sigás spameando.", "#fbbf24"),
-      "Speedflip queda como mantenimiento corto, no como obsesión diaria.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeApplicationTask(
-      {
-        ...RL_MECHANIC_DRILLS.shadowPatience,
-        id: "apply-1v1-decisions-25",
-        title: "1v1 decision making sin ranked · 25 min",
-        minutes: 25,
-        instruction: "25 min en freeplay/custom o casual mental: kickoff, primer 50, shadow y cuándo desafiar. No es cola ranked obligatoria."
-      },
-      "Aplicación de 1v1 sin ranked: paciencia, shadow y cuándo desafiar.",
-      RL_TRAINING_ROLES.SUPPORT
-    ),
-    makeMentalCloseTask("close-kickoffs-5", "5 min: anotá si perdiste kickoffs por timing, dirección o ansiedad. Ranked queda opcional."),
-  ], {
-    primaryFocus: "kickoffs",
-    primaryMechanicLabel: "Kickoffs",
-    supportLabel: "Sábado: kickoffs y decisiones. Speedflip solo 10 min si está limpio; ranked opcional.",
-  }),
-
-  makeRlPlan("daily-review", "Domingo · Review suave + mecánica débil", "Repetir lo que peor salió y cerrar sin quemarte", [
-    makeMainMechanicTask(
-      "main-weekly-weakness-30",
-      "Mecánica débil de la semana · 30 min",
-      "repetir el fundamento que más falló",
-      "Elegí una: powershots, recoveries, dribbling, defensa, aéreos o kickoffs. 30 min suave con calidad, no cantidad.",
-      30,
-      "#86efac"
-    ),
-    makeRlBreakSubtask("break-review-10", 10, "Descanso real: domingo es para absorber, no para quemarte."),
-    makeApplicationTask(
-      makeRlPackSubtask("apply-plat-diamond-25", ROCKET_LEAGUE_PACKS.platDiamond, 25, "Aplicación general Plat–Diamond: solo repetir lo que conecta con el punto débil elegido.", "#86efac"),
-      "Aplicación general de baja carga para cerrar la semana."
-    ),
-    makeApplicationTask(
-      RL_MECHANIC_DRILLS.firstTouchControl,
-      "Microbloque universal: primer toque útil para llevar el review a partida.",
-      RL_TRAINING_ROLES.VARIETY
-    ),
-    makeMentalCloseTask("close-review-5", "5 min: escribí la mecánica que mejoró, la que queda débil y el foco del lunes."),
-  ], {
-    primaryFocus: "review",
-    primaryMechanicLabel: "Review",
-    supportLabel: "Domingo: calidad, repaso y cierre. No es día para aprender una mecánica nueva.",
-  }),
+    makeReplayReviewTask("review-speedflip-5", "5 min: anotá si el error fue cancel corto, primer diagonal, aterrizaje torcido o doble toque al suelo."),
+    makeMentalCloseTask("close-speedflip-5", "5 min: cerrar con calidad. Si no está limpio, no metas ranked para probarlo por ansiedad."),
+  ]),
 ]);
 
 export function getRocketLeaguePlanForDate(dateKey = getRocketLeagueDateKey()) {
-  const dailyFocus = getRocketLeagueDailyFocus(dateKey);
-  return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.baseId === dailyFocus.planBaseId) || ROCKET_LEAGUE_TRAINING_PLANS[0];
+  const cycle = getRocketLeagueWeeklyFocus(dateKey);
+  return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.baseId === cycle.planBaseId) || ROCKET_LEAGUE_TRAINING_PLANS[0];
 }
 
 export function getRocketLeaguePlanById(planId) {
