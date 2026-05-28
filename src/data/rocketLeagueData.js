@@ -611,12 +611,12 @@ export const ROCKET_LEAGUE_TWO_WEEK_CYCLES = Object.freeze([
     cycleIndex: 0,
     weekRange: "Semanas 1–2",
     id: "shots-rotation",
-    label: "Semanas 1–2 · Shots simples + rotación básica 2v2",
-    short: "Shots + rotación",
-    goal: "convertir tiros ganables, clears y rotación simple en hábitos antes de meter mecánicas flashy",
+    label: "Semanas 1–2 · Shots simples + powershots + rotación básica 2v2",
+    short: "Shots + powershots",
+    goal: "convertir tiros ganables, powershots, clears y rotación simple en hábitos antes de meter mecánicas flashy",
     planBaseId: "cycle-shots-rotation",
     accent: "#fbbf24",
-    newMechanicRule: "Ninguna mecánica avanzada nueva. Solo consistencia de tiro + decisiones básicas.",
+    newMechanicRule: "Ninguna mecánica avanzada nueva. Air roll solo sirve para cuadrar el carro antes del impacto; no se entrena como mecánica separada.",
   }),
   Object.freeze({
     cycleIndex: 1,
@@ -780,16 +780,16 @@ const makeReplayNoteTask = (id, instruction = "5 min: revisá mentalmente 1 erro
 );
 
 export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan("cycle-shots-rotation", "Ciclo 1–2 · Shots simples + rotación básica 2v2", "Consistencia de tiros, clears y decisiones simples", [
+  makeRlPlan("cycle-shots-rotation", "Ciclo 1–2 · Shots simples + powershots + rotación básica 2v2", "Consistencia de tiros, powershots, clears y decisiones simples", [
     makeApplicationTask(
-      makeRlPackSubtask("main-powershots-pack-30", ROCKET_LEAGUE_PACKS.powershots, 30, "Training Pack: pegá después del bote, apuntá y priorizá potencia limpia. Si el tiro sale suave, repetí.", "#fbbf24"),
-      "Foco principal del ciclo: shots simples. Esto rankea más ahora que aprender otra mecánica flashy.",
+      makeRlPackSubtask("main-powershots-pack-30", ROCKET_LEAGUE_PACKS.powershots, 30, "Training Pack: pegá después del bote, apuntá y priorizá potencia limpia. Usá air roll básico solo para cuadrar el carro antes del impacto; si empezás a girar por girar, repetí.", "#fbbf24"),
+      "Foco principal del ciclo: shots simples + powershots. El air roll aquí es ajuste de ángulo, no una mecánica nueva.",
       RL_TRAINING_ROLES.MAIN
     ),
     makeRlBreakSubtask("break-shots-10", 10),
     makeApplicationTask(
-      makeRlPackSubtask("apply-ground-shots-20", ROCKET_LEAGUE_PACKS.groundShots, 20, "Aplicación controlada: tiros de suelo consistentes. Medí cuántos van a portería con fuerza real.", "#fbbf24"),
-      "Mismo foco, otro contexto: potencia + precisión sin cambiar de mecánica."
+      makeRlPackSubtask("apply-air-roll-shot-angle-20", ROCKET_LEAGUE_PACKS.airRollShots, 20, "Aplicación controlada: ajustá el ángulo del carro con air roll básico antes del contacto. Meta: pegar recto, fuerte y con intención; no air roll estético.", "#e879f9"),
+      "Mismo foco, otro contexto: powershots con ajuste de carro. No cuenta como aprender air roll completo."
     ),
     makeApplicationTask(
       {
@@ -805,9 +805,9 @@ export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
     makeMentalCloseTask("close-shots-5", "5 min: cerrá con 3 tiros simples perfectos o una nota clara de qué repetir mañana."),
   ], {
     primaryFocus: "shots-rotation",
-    primaryMechanicLabel: "Shots simples",
-    supportLabel: "Semanas 1–2: no aprender más mecánicas. Shots simples + rotación básica 2v2 hasta que sean confiables.",
-    masteryNote: "Mejor meter tiros simples al 80% que tener speedflip, air dribble y musty al 30%.",
+    primaryMechanicLabel: "Shots + powershots",
+    supportLabel: "Semanas 1–2: shots simples, powershots y rotación básica 2v2. Air roll solo para ajustar el carro antes del tiro.",
+    masteryNote: "Mejor meter tiros/powershots al 80%. El air roll del ciclo 1 solo alinea el carro; no es otra mecánica a masterizar.",
   }),
 
   makeRlPlan("cycle-ground-dribble", "Ciclo 3–4 · Ground dribble básico", "Carry simple, primer toque útil y posesión", [

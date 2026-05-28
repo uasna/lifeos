@@ -563,7 +563,7 @@ ${line}` : line));
               Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].map(pack => (
+              {[ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].map(pack => (
                 <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
                   <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>
