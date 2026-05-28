@@ -5324,6 +5324,97 @@ function StatsView() {
 }
 
 
+const FOCUS_TIMER_STORAGE_KEY = "lifeos:focus-session-timers:v1";
+const FOCUS_TIMER_CALC_BOOTSTRAP = Object.freeze({
+  dateKey: "2026-05-28",
+  questId: 1,
+  elapsedSeconds: 20 * 60,
+  id: "calc-2026-05-28-20m",
+});
+
+function safeFocusTimerDateKey() {
+  try { return getLifeOSDateKey(); } catch { return new Date().toISOString().slice(0, 10); }
+}
+
+function focusTimerRecordKey(questId, dateKey = safeFocusTimerDateKey()) {
+  return `${dateKey}::${String(questId || "none")}`;
+}
+
+function normalizeFocusTimerStore(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { records:{}, bootstraps:{} };
+  return {
+    records: raw.records && typeof raw.records === "object" && !Array.isArray(raw.records) ? raw.records : {},
+    bootstraps: raw.bootstraps && typeof raw.bootstraps === "object" && !Array.isArray(raw.bootstraps) ? raw.bootstraps : {},
+  };
+}
+
+function readFocusTimerStore() {
+  if (typeof window === "undefined" || !window.localStorage) return { records:{}, bootstraps:{} };
+  try {
+    return normalizeFocusTimerStore(JSON.parse(window.localStorage.getItem(FOCUS_TIMER_STORAGE_KEY) || "{}"));
+  } catch {
+    return { records:{}, bootstraps:{} };
+  }
+}
+
+function writeFocusTimerStore(store) {
+  if (typeof window === "undefined" || !window.localStorage) return false;
+  try {
+    window.localStorage.setItem(FOCUS_TIMER_STORAGE_KEY, JSON.stringify(normalizeFocusTimerStore(store)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getFocusTimerBootstrapSeconds(questId, dateKey) {
+  if (String(dateKey) === FOCUS_TIMER_CALC_BOOTSTRAP.dateKey && Number(questId) === FOCUS_TIMER_CALC_BOOTSTRAP.questId) {
+    return FOCUS_TIMER_CALC_BOOTSTRAP.elapsedSeconds;
+  }
+  return 0;
+}
+
+function getStoredFocusTimerElapsed(questId, dateKey = safeFocusTimerDateKey()) {
+  const key = focusTimerRecordKey(questId, dateKey);
+  const store = readFocusTimerStore();
+  const record = store.records[key] || {};
+  let elapsed = Math.max(0, Math.floor(Number(record.elapsedSeconds) || 0));
+
+  const bootstrapSeconds = getFocusTimerBootstrapSeconds(questId, dateKey);
+  const bootstrapKey = `${key}::${FOCUS_TIMER_CALC_BOOTSTRAP.id}`;
+  if (bootstrapSeconds > elapsed && !store.bootstraps[bootstrapKey]) {
+    elapsed = bootstrapSeconds;
+    store.records[key] = {
+      ...record,
+      dateKey,
+      questId,
+      elapsedSeconds: elapsed,
+      updatedAt: new Date().toISOString(),
+      bootstrap: FOCUS_TIMER_CALC_BOOTSTRAP.id,
+    };
+    store.bootstraps[bootstrapKey] = true;
+    writeFocusTimerStore(store);
+  }
+
+  return elapsed;
+}
+
+function saveFocusTimerElapsed(questId, elapsedSeconds, dateKey = safeFocusTimerDateKey()) {
+  if (!questId) return false;
+  const key = focusTimerRecordKey(questId, dateKey);
+  const store = readFocusTimerStore();
+  const current = store.records[key] || {};
+  store.records[key] = {
+    ...current,
+    dateKey,
+    questId,
+    elapsedSeconds: Math.max(0, Math.floor(Number(elapsedSeconds) || 0)),
+    updatedAt: new Date().toISOString(),
+  };
+  return writeFocusTimerStore(store);
+}
+
+
 function FocusSessionView() {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
@@ -5332,41 +5423,91 @@ function FocusSessionView() {
   const firstOpen = activeQuests.find(q => !completedSet.has(q.id)) || activeQuests[0];
   const [selectedId, setSelectedId] = useState(() => firstOpen?.id || activeQuests[0]?.id || 1);
   const selectedQuest = useMemo(() => activeQuests.find(q => q.id === selectedId) || firstOpen || activeQuests[0], [activeQuests, selectedId, firstOpen]);
-  const targetSeconds = useMemo(() => Math.max(60, parseQuestDurationMinutes(selectedQuest, 30) * 60), [selectedQuest]);
-  const [elapsed, setElapsed] = useState(0);
+  const targetSeconds = useMemo(() => isCalculusQuest(selectedQuest) ? 90 * 60 : Math.max(60, parseQuestDurationMinutes(selectedQuest, 30) * 60), [selectedQuest]);
+  const [focusDateKey, setFocusDateKey] = useState(() => safeFocusTimerDateKey());
+  const [elapsed, setElapsed] = useState(() => getStoredFocusTimerElapsed(selectedId, safeFocusTimerDateKey()));
   const [running, setRunning] = useState(false);
+  const [tickNow, setTickNow] = useState(Date.now());
+  const startedAtRef = useRef(null);
+  const elapsedRef = useRef(elapsed);
+  const savePulseRef = useRef(0);
   const soundedRef = useRef(false);
+
+  const syncFocusTimerElapsed = useCallback((options = {}) => {
+    if (!selectedQuest) return elapsedRef.current;
+    const now = Date.now();
+    const liveElapsed = running && startedAtRef.current
+      ? Math.max(0, Math.floor((now - startedAtRef.current) / 1000))
+      : Math.max(0, Math.floor(Number(elapsedRef.current) || 0));
+    elapsedRef.current = liveElapsed;
+    setElapsed(liveElapsed);
+    setTickNow(now);
+
+    const shouldPersist = options.force || Math.abs(now - savePulseRef.current) >= 3000;
+    if (shouldPersist) {
+      savePulseRef.current = now;
+      saveFocusTimerElapsed(selectedQuest.id, liveElapsed, focusDateKey);
+    }
+
+    if (liveElapsed >= targetSeconds && !soundedRef.current) {
+      soundedRef.current = true;
+      unlockLifeOSAudio();
+      playLifeOSSound("timer");
+      uiDispatch(AC.toastAdd(Date.now(), "Tiempo objetivo alcanzado", selectedQuest?.title || "Sesión"));
+    }
+
+    return liveElapsed;
+  }, [selectedQuest, running, targetSeconds, focusDateKey, selectedQuest?.title, uiDispatch]);
 
   useEffect(() => {
     if (!selectedQuest) return;
-    setElapsed(0);
+    const nextDateKey = safeFocusTimerDateKey();
+    const savedElapsed = getStoredFocusTimerElapsed(selectedQuest.id, nextDateKey);
+    elapsedRef.current = savedElapsed;
+    startedAtRef.current = null;
+    savePulseRef.current = 0;
+    setFocusDateKey(nextDateKey);
+    setElapsed(savedElapsed);
     setRunning(false);
-    soundedRef.current = false;
-  }, [selectedQuest?.id]);
+    soundedRef.current = savedElapsed >= targetSeconds;
+  }, [selectedQuest?.id, targetSeconds]);
 
   useEffect(() => {
     if (!running) return undefined;
-    const timer = setInterval(() => {
-      setElapsed(prev => {
-        const next = prev + 1;
-        if (next >= targetSeconds && !soundedRef.current) {
-          soundedRef.current = true;
-          unlockLifeOSAudio();
-          playLifeOSSound("timer");
-          uiDispatch(AC.toastAdd(Date.now(), "Tiempo objetivo alcanzado", selectedQuest?.title || "Sesión"));
-        }
-        return next;
-      });
-    }, 1000);
+    const timer = setInterval(() => syncFocusTimerElapsed(), 1000);
     return () => clearInterval(timer);
-  }, [running, targetSeconds, selectedQuest?.title, uiDispatch]);
+  }, [running, syncFocusTimerElapsed]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const syncOnReturn = () => syncFocusTimerElapsed({ force:true });
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", syncOnReturn);
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", syncOnReturn);
+      window.addEventListener("beforeunload", syncOnReturn);
+    }
+    return () => {
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", syncOnReturn);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", syncOnReturn);
+        window.removeEventListener("beforeunload", syncOnReturn);
+      }
+    };
+  }, [running, syncFocusTimerElapsed]);
+
+  useEffect(() => () => {
+    if (selectedQuest) syncFocusTimerElapsed({ force:true });
+  }, [selectedQuest?.id, syncFocusTimerElapsed]);
 
   const pct = Math.min(100, (elapsed / Math.max(targetSeconds, 1)) * 100);
   const isDone = selectedQuest ? completedSet.has(selectedQuest.id) : false;
 
   const completeQuest = useCallback(() => {
     if (!selectedQuest) return;
+    syncFocusTimerElapsed({ force:true });
+    startedAtRef.current = null;
     if (selectedQuest.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
+      setRunning(false);
       unlockLifeOSAudio();
       playLifeOSSound("menu");
       uiDispatch(AC.setView("rocketLeague"));
@@ -5385,7 +5526,37 @@ function FocusSessionView() {
     uiDispatch(AC.toastAdd(id, `${deltaXp > 0 ? "+" : ""}${deltaXp} XP`, wasCompleted ? `Desmarcado · ${selectedQuest.title}` : `Completado · ${selectedQuest.title}`));
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2900);
     setRunning(false);
-  }, [selectedQuest, completedSet, persistent.xp.total, pDispatch, uiDispatch]);
+  }, [selectedQuest, completedSet, persistent.xp.total, pDispatch, uiDispatch, syncFocusTimerElapsed]);
+
+  const toggleFocusTimer = useCallback(() => {
+    if (!selectedQuest) return;
+    unlockLifeOSAudio();
+    playLifeOSSound("menu");
+    if (running) {
+      const liveElapsed = syncFocusTimerElapsed({ force:true });
+      elapsedRef.current = liveElapsed;
+      startedAtRef.current = null;
+      setRunning(false);
+      return;
+    }
+    pDispatch(AC.questStart(selectedQuest.id));
+    const baseElapsed = Math.max(0, Math.floor(Number(elapsedRef.current) || 0));
+    startedAtRef.current = Date.now() - baseElapsed * 1000;
+    savePulseRef.current = 0;
+    setTickNow(Date.now());
+    setRunning(true);
+  }, [selectedQuest, running, pDispatch, syncFocusTimerElapsed]);
+
+  const resetFocusTimer = useCallback(() => {
+    if (!selectedQuest) return;
+    startedAtRef.current = null;
+    elapsedRef.current = 0;
+    savePulseRef.current = Date.now();
+    setRunning(false);
+    setElapsed(0);
+    soundedRef.current = false;
+    saveFocusTimerElapsed(selectedQuest.id, 0, focusDateKey);
+  }, [selectedQuest, focusDateKey]);
 
   const nextOpen = activeQuests.find(q => !completedSet.has(q.id) && q.id !== selectedQuest?.id);
 
@@ -5410,10 +5581,10 @@ function FocusSessionView() {
         <ProgresoBar pct={pct} gradient={elapsed >= targetSeconds ? "linear-gradient(90deg,#fbbf24,#f97316)" : "linear-gradient(90deg,#7c3aed,#06b6d4)"} height={8}/>
 
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:18 }}>
-          <button onClick={() => { unlockLifeOSAudio(); playLifeOSSound("menu"); if (!running && selectedQuest) pDispatch(AC.questStart(selectedQuest.id)); setRunning(v => !v); }} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+          <button onClick={toggleFocusTimer} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.08)", color:"#22d3ee", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
             {running ? <Pause size={16}/> : <Play size={16}/>} {running ? "Pausar" : "Iniciar"}
           </button>
-          <button onClick={() => { setRunning(false); setElapsed(0); soundedRef.current = false; }} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:T_COLOR.muted, borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer" }}>
+          <button onClick={resetFocusTimer} style={{ border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.035)", color:T_COLOR.muted, borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:"pointer" }}>
             Reiniciar
           </button>
           <button onClick={completeQuest} disabled={!selectedQuest} style={{ border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.08)", color:isDone ? "#94a3b8" : "#34d399", borderRadius:12, padding:"11px 15px", fontWeight:900, cursor:selectedQuest ? "pointer" : "not-allowed", display:"flex", alignItems:"center", gap:8 }}>
