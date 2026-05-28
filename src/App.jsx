@@ -1,5 +1,5 @@
-import LifeOSPremiumUI from "./runtime/LifeOSPremiumUI.jsx";
+import LifeOS from "./runtime/LifeOS";
 
 export default function App() {
-  return <LifeOSPremiumUI />;
+  return <LifeOS />;
 }
