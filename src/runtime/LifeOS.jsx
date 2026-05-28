@@ -3724,15 +3724,34 @@ function RocketLeagueView() {
 
   const [activeSubtaskId, setActiveSubtaskId] = useState(null);
   const [tickNow, setTickNow] = useState(Date.now());
+  const [localElapsedBySubtask, setLocalElapsedBySubtask] = useState(() => ({ ...elapsedBySubtask }));
   const activeTimerRef = useRef({ id: null, startedAt: null });
   const targetSoundedRef = useRef(new Set());
 
+  const mergeElapsedMaps = useCallback((base = {}, incoming = {}) => {
+    const next = { ...(base || {}) };
+    Object.entries(incoming || {}).forEach(([key, value]) => {
+      next[key] = Math.max(
+        Math.max(0, Math.floor(Number(next[key]) || 0)),
+        Math.max(0, Math.floor(Number(value) || 0))
+      );
+    });
+    return next;
+  }, []);
+
   const commitActiveTimer = useCallback(() => {
     const { id, startedAt } = activeTimerRef.current;
-    if (!id || !startedAt) return;
-    const delta = Math.floor((Date.now() - startedAt) / 1000);
-    if (delta > 0) pDispatch(AC.rlTimerCommit(id, delta));
+    if (!id || !startedAt) return 0;
+    const delta = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
     activeTimerRef.current = { id: null, startedAt: null };
+    if (delta > 0) {
+      setLocalElapsedBySubtask(prev => ({
+        ...(prev || {}),
+        [id]: Math.max(0, Math.floor(Number(prev?.[id]) || 0)) + delta,
+      }));
+      pDispatch(AC.rlTimerCommit(id, delta));
+    }
+    return delta;
   }, [pDispatch]);
 
   useEffect(() => {
@@ -3744,8 +3763,13 @@ function RocketLeagueView() {
   }, [current.dateKey, current.planId, dateKey, plan.id, pDispatch, commitActiveTimer]);
 
   useEffect(() => {
+    setLocalElapsedBySubtask({ ...(elapsedBySubtask || {}) });
     targetSoundedRef.current = new Set();
   }, [current.dateKey, current.planId]);
+
+  useEffect(() => {
+    setLocalElapsedBySubtask(prev => mergeElapsedMaps(prev, elapsedBySubtask));
+  }, [elapsedBySubtask, mergeElapsedMaps]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -3762,13 +3786,13 @@ function RocketLeagueView() {
   useEffect(() => () => commitActiveTimer(), [commitActiveTimer]);
 
   const getElapsedSeconds = useCallback((subtaskId) => {
-    const persisted = Math.max(0, Math.floor(Number(elapsedBySubtask[subtaskId]) || 0));
+    const persisted = Math.max(0, Math.floor(Number(localElapsedBySubtask?.[subtaskId]) || 0));
     const active = activeTimerRef.current;
     if (active.id === subtaskId && active.startedAt) {
       return persisted + Math.max(0, Math.floor((tickNow - active.startedAt) / 1000));
     }
     return persisted;
-  }, [elapsedBySubtask, tickNow]);
+  }, [localElapsedBySubtask, tickNow]);
 
   const getMatchCount = useCallback((subtaskId) => {
     return Math.max(0, Math.floor(Number(matchCountBySubtask[subtaskId]) || 0));
@@ -3811,6 +3835,7 @@ function RocketLeagueView() {
     unlockLifeOSAudio();
     if (activeTimerRef.current.id === subtaskId) {
       commitActiveTimer();
+      setTickNow(Date.now());
       setActiveSubtaskId(null);
       return;
     }
@@ -3828,8 +3853,17 @@ function RocketLeagueView() {
       setActiveSubtaskId(null);
     }
     pDispatch(AC.rlSubtaskToggle(subtaskId));
-    if (!wasDone) playLifeOSSound("complete");
-  }, [commitActiveTimer, completedSet, pDispatch]);
+    if (!wasDone) {
+      const targetSeconds = getRocketLeagueSubtaskTargetSeconds(current.planId, subtaskId);
+      if (targetSeconds > 0) {
+        setLocalElapsedBySubtask(prev => ({
+          ...(prev || {}),
+          [subtaskId]: Math.max(Math.max(0, Math.floor(Number(prev?.[subtaskId]) || 0)), targetSeconds),
+        }));
+      }
+      playLifeOSSound("complete");
+    }
+  }, [commitActiveTimer, completedSet, current.planId, pDispatch]);
 
   const updateMatchProgress = useCallback((task, delta) => {
     unlockLifeOSAudio();
