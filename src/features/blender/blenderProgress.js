@@ -49,3 +49,27 @@ export function writeOptionalString(key, value) {
     return false;
   }
 }
+
+const BLENDER_LIBRARY_KEY = "lifeos:blender-academy:library:v1";
+
+export function readBlenderLibrary() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(BLENDER_LIBRARY_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeBlenderLibrary(value) {
+  if (typeof window === "undefined") return false;
+  try {
+    const safeValue = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    window.localStorage.setItem(BLENDER_LIBRARY_KEY, JSON.stringify(safeValue));
+    return true;
+  } catch {
+    return false;
+  }
+}
