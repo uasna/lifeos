@@ -11,6 +11,8 @@ export const BLENDER_PROFILE = Object.freeze({
   session: "60 min base · +30 min solo con activación manual",
 });
 
+export const BLENDER_PIPELINE_START_DATE = "2026-05-29";
+
 export const BLENDER_PIPELINE_PHASES = Object.freeze([
   "Idea",
   "Blockout",
@@ -45,13 +47,13 @@ export const BLENDER_CREATOR_PROJECTS = Object.freeze([
     id: "anime-base-character",
     title: "Personaje anime base",
     type: "Personaje",
-    phase: "Blockout",
-    status: "blockout",
+    phase: "Idea",
+    status: "idea",
     goal: "Crear un personaje humano estilizado reutilizable",
-    todayObjective: "Terminar silueta principal y sacar preview WIP",
-    deliverable: "Captura frontal y 3/4 del personaje",
-    nextAction: "Ajustar proporciones grandes antes de agregar detalles",
-    difficulty: "Media",
+    todayObjective: "Definir la silueta base y arrancar el primer blockout WIP",
+    deliverable: "Concepto visual simple + primera captura WIP",
+    nextAction: "Definir proporciones grandes antes de agregar detalles",
+    difficulty: "Fácil/Media",
     portfolioValue: "Base reutilizable para renders y animaciones",
     accent: "#22d3ee",
   }),
@@ -142,12 +144,12 @@ export const BLENDER_CREATOR_PROJECTS = Object.freeze([
 ]);
 
 export const BLENDER_CREATOR_LIBRARY = Object.freeze([
-  Object.freeze({ id: "characters", label: "Characters", count: 1, status: "Base anime en progreso", cta: "Ver piezas" }),
-  Object.freeze({ id: "creatures", label: "Creatures", count: 0, status: "Próxima criatura WIP", cta: "Agregar a biblioteca" }),
-  Object.freeze({ id: "environments", label: "Environments", count: 1, status: "Escena inicial", cta: "Ver piezas" }),
-  Object.freeze({ id: "props", label: "Props de apoyo", count: 3, status: "Objetos narrativos simples", cta: "Agregar prop" }),
-  Object.freeze({ id: "materials", label: "Materials", count: 4, status: "Toon/low-poly base", cta: "Ver materiales" }),
-  Object.freeze({ id: "cameras", label: "Cameras", count: 1, status: "Cámara hero 3/4", cta: "Guardar cámara" }),
+  Object.freeze({ id: "characters", label: "Characters", count: 0, status: "Base anime pendiente", cta: "Crear base" }),
+  Object.freeze({ id: "creatures", label: "Creatures", count: 0, status: "Sin criatura todavía", cta: "Agregar criatura" }),
+  Object.freeze({ id: "environments", label: "Environments", count: 0, status: "Sin escenario todavía", cta: "Crear escena" }),
+  Object.freeze({ id: "props", label: "Props de apoyo", count: 0, status: "Biblioteca vacía", cta: "Agregar prop" }),
+  Object.freeze({ id: "materials", label: "Materials", count: 0, status: "Paleta inicial pendiente", cta: "Crear material" }),
+  Object.freeze({ id: "cameras", label: "Cameras", count: 0, status: "Sin cámara guardada", cta: "Guardar cámara" }),
   Object.freeze({ id: "renders", label: "Renders", count: 0, status: "Esperando preview final", cta: "Agregar render" }),
   Object.freeze({ id: "animations", label: "Animations", count: 0, status: "Loop corto pendiente", cta: "Agregar clip" }),
 ]);
@@ -355,22 +357,22 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "anime-character-blockout",
     0,
     "anime-base-character",
-    "Lunes · Personaje anime base",
-    "Terminar la silueta del cuerpo y sacar preview WIP",
-    sessionBlocks("#22d3ee", "Ajustá proporciones principales del personaje: cabeza, torso, piernas y pelo simple. No detalles finos; primero que la silueta se lea.", "Captura frontal y 3/4 del personaje base."),
+    "Día 1 · Arranque del personaje anime base",
+    "Definir la silueta base y arrancar el primer blockout WIP",
+    sessionBlocks("#22d3ee", "Definí proporciones principales del personaje: cabeza, torso, piernas y pelo simple. No detalles finos; primero que la silueta exista y se lea.", "Concepto visual simple + captura WIP del primer blockout."),
     "#22d3ee",
     {
-      why: "La silueta define si el personaje se siente anime/low-poly antes de invertir tiempo en detalles.",
-      deliverable: "1 captura frontal + 1 captura 3/4",
-      nextAction: "Ajustar proporciones grandes antes de agregar detalles",
-      checklist: Object.freeze(["Ajustar proporciones principales", "Bloquear cabeza/cuerpo/piernas", "Agregar pelo simple", "Guardar versión v02", "Sacar preview"]),
+      why: "La primera sesión existe para dejar el pipeline arrancado: idea clara, formas grandes y una captura que demuestre avance real.",
+      deliverable: "1 captura WIP del personaje base",
+      nextAction: "Definir proporciones grandes antes de agregar detalles",
+      checklist: Object.freeze(["Elegir silueta simple", "Bloquear cabeza/cuerpo/piernas", "Marcar pelo básico", "Guardar versión v01", "Sacar preview WIP"]),
     }
   ),
   makeBlenderPlan(
     "anime-character-materials",
     1,
     "anime-character-pose",
-    "Martes · Personaje con materiales",
+    "Día 2 · Personaje con materiales",
     "Aplicar materiales planos, pose simple y cámara limpia",
     sessionBlocks("#a78bfa", "Separá pelo, ropa y cuerpo con materiales planos. Ajustá una pose simple y colocá cámara 3/4 sin perseguir perfección.", "Render WIP del personaje con pose y materiales."),
     "#a78bfa",
@@ -385,7 +387,7 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "fantasy-creature-shape",
     2,
     "fantasy-creature",
-    "Miércoles · Criatura fantasy",
+    "Día 3 · Criatura fantasy",
     "Bloquear cuerpo, cabeza y rasgos principales",
     sessionBlocks("#34d399", "Construí una criatura reconocible con formas grandes. Cuerpo, cabeza, patas/alas/orejas primero; materiales después.", "Modelo WIP reconocible con silueta clara."),
     "#34d399",
@@ -400,7 +402,7 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "fantasy-scene-lighting",
     3,
     "cinematic-fantasy-scene",
-    "Jueves · Escena fantasy cinematográfica",
+    "Día 4 · Escena fantasy cinematográfica",
     "Armar ambiente, luz principal y profundidad visual",
     sessionBlocks("#fbbf24", "Construí una escena con frente, medio y fondo. Sumá una luz principal y atmósfera ligera; que cuente algo sin explicación larga.", "Render preview con composición narrativa."),
     "#fbbf24",
@@ -415,7 +417,7 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "urban-scene-camera",
     4,
     "cinematic-urban-scene",
-    "Viernes · Calle nocturna low-poly",
+    "Día 5 · Calle nocturna low-poly",
     "Configurar luces, cámara y atmósfera nocturna",
     sessionBlocks("#fb7185", "Ajustá una calle low-poly con luces de contraste, cámara baja/3/4 y elementos simples que guíen la mirada.", "Render preview urbano con composición clara."),
     "#fb7185",
@@ -430,7 +432,7 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "camera-short-loop",
     5,
     "camera-short-animation",
-    "Sábado · Animación corta de cámara",
+    "Día 6 · Animación corta de cámara",
     "Animar cámara o movimiento simple sin complicar el rig",
     sessionBlocks("#60a5fa", "Definí inicio y final del movimiento. Animá una cámara, objeto o gesto simple de 5–10 segundos. No abras un tutorial nuevo durante el bloque.", "Viewport preview del movimiento principal."),
     "#60a5fa",
@@ -445,7 +447,7 @@ export const BLENDER_WEEKLY_PLANS = Object.freeze([
     "portfolio-render-close",
     6,
     "portfolio-render-pass",
-    "Domingo · Render para portafolio",
+    "Día 7 · Render para portafolio",
     "Pulir cámara, luz, composición y guardar render final",
     sessionBlocks("#c084fc", "Elegí una pieza WIP de la semana y cerrala para preview/render. Solo cámara, luz, color y encuadre; no rehacer el modelo.", "Imagen lista para carpeta Portfolio/Renders."),
     "#c084fc",
@@ -468,6 +470,10 @@ export function getBlenderDateKey(date = new Date()) {
 
 export function getBlenderPlanForDate(date = new Date()) {
   const d = new Date(date);
-  const mondayBasedDay = (d.getDay() + 6) % 7;
-  return BLENDER_WEEKLY_PLANS.find(plan => plan.dayIndex === mondayBasedDay) || BLENDER_WEEKLY_PLANS[0];
+  const start = new Date(`${BLENDER_PIPELINE_START_DATE}T00:00:00`);
+  const current = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const daysSinceStart = Math.max(0, Math.floor((current - startDay) / 86400000));
+  const planIndex = daysSinceStart % BLENDER_WEEKLY_PLANS.length;
+  return BLENDER_WEEKLY_PLANS[planIndex] || BLENDER_WEEKLY_PLANS[0];
 }
