@@ -1,47 +1,287 @@
-// Blender beginner training data + pure planning helpers.
+// Blender Creator Pipeline data + pure planning helpers.
 // Dependency-free module: no React, no browser APIs.
 
 export const BLENDER_SESSION_MINUTES = 60;
-export const BLENDER_OPTIONAL_EXTENSION_MINUTES = 30;
 export const BLENDER_PARENT_QUEST_ID = 5;
 
 export const BLENDER_PROFILE = Object.freeze({
-  level: "Principiante principiante",
-  hardware: "MSI Thin GF63 12UCX + teclado externo sin numpad",
-  goal: "aprender fundamentos reales de Blender sin depender del teclado numérico",
-  session: "2:40–3:40 PM · 60 min base · +30 min solo si activás misión extra",
+  level: "Principiante con intentos",
+  hardware: "MSI Thin GF63 12UCX · sin teclado numérico",
+  goal: "crear personajes, criaturas, escenarios, renders y animaciones anime low-poly",
+  session: "60 min base · +30 min solo con activación manual",
 });
+
+export const BLENDER_PIPELINE_PHASES = Object.freeze([
+  "Idea",
+  "Blockout",
+  "Modelado limpio",
+  "Materiales",
+  "Luces",
+  "Cámara",
+  "Render",
+  "Animación",
+  "Portafolio",
+]);
+
+export const BLENDER_EXTRA_GATE_REASONS = Object.freeze([
+  {
+    id: "almost-finished",
+    label: "Ya casi acabo el proyecto",
+    title: "Extra activado: cerrar versión publicable",
+    action: "cerrar la pieza sin rediseñar todo",
+    deliverable: "preview/render rápido guardado",
+  },
+  {
+    id: "inspired-clear",
+    label: "Estoy inspirado y sé qué hacer",
+    title: "Extra activado: aprovechar claridad creativa",
+    action: "ejecutar una acción concreta ya decidida",
+    deliverable: "avance visible antes de cortar",
+  },
+]);
+
+export const BLENDER_CREATOR_PROJECTS = Object.freeze([
+  Object.freeze({
+    id: "anime-base-character",
+    title: "Personaje anime base",
+    type: "Personaje",
+    phase: "Blockout",
+    status: "blockout",
+    goal: "Crear un personaje humano estilizado reutilizable",
+    todayObjective: "Terminar silueta principal y sacar preview WIP",
+    deliverable: "Captura frontal y 3/4 del personaje",
+    nextAction: "Ajustar proporciones grandes antes de agregar detalles",
+    difficulty: "Media",
+    portfolioValue: "Base reutilizable para renders y animaciones",
+    accent: "#22d3ee",
+  }),
+  Object.freeze({
+    id: "anime-character-pose",
+    title: "Personaje anime · pose y materiales",
+    type: "Personaje",
+    phase: "Materiales",
+    status: "materiales",
+    goal: "Convertir el personaje base en una pieza presentable",
+    todayObjective: "Aplicar materiales planos, pose simple y cámara limpia",
+    deliverable: "Render WIP del personaje con pose básica",
+    nextAction: "Separar pelo/ropa/cuerpo con colores simples",
+    difficulty: "Media",
+    portfolioValue: "Primer render de personaje para portafolio inicial",
+    accent: "#a78bfa",
+  }),
+  Object.freeze({
+    id: "fantasy-creature",
+    title: "Criatura fantasy estilizada",
+    type: "Criatura",
+    phase: "Modelado limpio",
+    status: "modelado",
+    goal: "Crear una criatura simple para escenas narrativas",
+    todayObjective: "Bloquear cuerpo, cabeza y rasgos principales",
+    deliverable: "Modelo WIP reconocible con silueta clara",
+    nextAction: "Definir silueta antes de materiales",
+    difficulty: "Media",
+    portfolioValue: "Acompañante/personaje secundario para escenas fantasy",
+    accent: "#34d399",
+  }),
+  Object.freeze({
+    id: "cinematic-fantasy-scene",
+    title: "Escena fantasy cinematográfica",
+    type: "Escenario",
+    phase: "Luces",
+    status: "luces",
+    goal: "Construir una escena que cuente algo con formas simples",
+    todayObjective: "Armar ambiente, luz principal y profundidad visual",
+    deliverable: "Render preview con lectura cinematográfica",
+    nextAction: "Colocar 3 planos de profundidad: frente, medio y fondo",
+    difficulty: "Media",
+    portfolioValue: "Render narrativo para redes/portafolio",
+    accent: "#fbbf24",
+  }),
+  Object.freeze({
+    id: "cinematic-urban-scene",
+    title: "Calle nocturna low-poly",
+    type: "Escenario",
+    phase: "Cámara",
+    status: "camara",
+    goal: "Construir una escena urbana cinematográfica",
+    todayObjective: "Configurar luces, cámara y atmósfera nocturna",
+    deliverable: "Render preview con composición clara",
+    nextAction: "Ajustar luz principal y encuadre",
+    difficulty: "Media",
+    portfolioValue: "Render estilizado para redes/portafolio",
+    accent: "#fb7185",
+  }),
+  Object.freeze({
+    id: "camera-short-animation",
+    title: "Animación corta de cámara",
+    type: "Animación",
+    phase: "Animación",
+    status: "animacion",
+    goal: "Crear un clip corto de 5 a 10 segundos",
+    todayObjective: "Animar cámara o movimiento simple sin complicar el rig",
+    deliverable: "Viewport preview del movimiento principal",
+    nextAction: "Definir inicio, final y un solo movimiento claro",
+    difficulty: "Difícil",
+    portfolioValue: "Primer loop/short 3D publicable",
+    accent: "#60a5fa",
+  }),
+  Object.freeze({
+    id: "portfolio-render-pass",
+    title: "Render para portafolio",
+    type: "Render",
+    phase: "Portafolio",
+    status: "portafolio",
+    goal: "Cerrar una pieza simple con presentación cuidada",
+    todayObjective: "Pulir cámara, luz, composición y guardar render final",
+    deliverable: "Imagen lista para carpeta Portfolio/Renders",
+    nextAction: "Ajustar encuadre y cortar antes de sobretrabajar detalles",
+    difficulty: "Media",
+    portfolioValue: "Pieza terminada para mostrar progreso real",
+    accent: "#c084fc",
+  }),
+]);
+
+export const BLENDER_CREATOR_LIBRARY = Object.freeze([
+  Object.freeze({ id: "characters", label: "Characters", count: 1, status: "Base anime en progreso", cta: "Ver piezas" }),
+  Object.freeze({ id: "creatures", label: "Creatures", count: 0, status: "Próxima criatura WIP", cta: "Agregar a biblioteca" }),
+  Object.freeze({ id: "environments", label: "Environments", count: 1, status: "Escena inicial", cta: "Ver piezas" }),
+  Object.freeze({ id: "props", label: "Props de apoyo", count: 3, status: "Objetos narrativos simples", cta: "Agregar prop" }),
+  Object.freeze({ id: "materials", label: "Materials", count: 4, status: "Toon/low-poly base", cta: "Ver materiales" }),
+  Object.freeze({ id: "cameras", label: "Cameras", count: 1, status: "Cámara hero 3/4", cta: "Guardar cámara" }),
+  Object.freeze({ id: "renders", label: "Renders", count: 0, status: "Esperando preview final", cta: "Agregar render" }),
+  Object.freeze({ id: "animations", label: "Animations", count: 0, status: "Loop corto pendiente", cta: "Agregar clip" }),
+]);
+
+export const BLENDER_CREATOR_TRACKS = Object.freeze([
+  Object.freeze({
+    id: "characters",
+    title: "Personajes anime low-poly",
+    status: "Activo",
+    microSkills: Object.freeze(["silueta", "pelo simple", "ropa básica"]),
+    unlock: "personaje base reusable",
+    relation: "base para renders, poses y clips",
+    accent: "#22d3ee",
+  }),
+  Object.freeze({
+    id: "creatures",
+    title: "Criaturas/animales estilizados",
+    status: "Siguiente",
+    microSkills: Object.freeze(["formas grandes", "rasgos claros", "poses simples"]),
+    unlock: "mascota o criatura fantasy",
+    relation: "apoya escenas narrativas",
+    accent: "#34d399",
+  }),
+  Object.freeze({
+    id: "fantasy-scenes",
+    title: "Escenarios fantasy",
+    status: "En cola",
+    microSkills: Object.freeze(["ruinas", "bosques", "atmósfera"]),
+    unlock: "escena con storytelling",
+    relation: "mundo para personajes y criaturas",
+    accent: "#fbbf24",
+  }),
+  Object.freeze({
+    id: "urban-scenes",
+    title: "Escenarios urbanos",
+    status: "En cola",
+    microSkills: Object.freeze(["calles", "neón", "profundidad"]),
+    unlock: "calle nocturna low-poly",
+    relation: "renders para redes",
+    accent: "#fb7185",
+  }),
+  Object.freeze({
+    id: "camera",
+    title: "Cámara cinematográfica",
+    status: "Transversal",
+    microSkills: Object.freeze(["3/4", "focal", "movimiento simple"]),
+    unlock: "encuadres publicables",
+    relation: "eleva modelos simples",
+    accent: "#60a5fa",
+  }),
+  Object.freeze({
+    id: "lighting",
+    title: "Iluminación toon/low-poly",
+    status: "Transversal",
+    microSkills: Object.freeze(["key light", "rim", "sombra limpia"]),
+    unlock: "look anime legible",
+    relation: "mejora cada render",
+    accent: "#a78bfa",
+  }),
+  Object.freeze({
+    id: "materials",
+    title: "Materiales simples",
+    status: "Base",
+    microSkills: Object.freeze(["paleta", "roughness", "toon"]),
+    unlock: "biblioteca de materiales",
+    relation: "calidad sin polígonos extra",
+    accent: "#c084fc",
+  }),
+  Object.freeze({
+    id: "shorts",
+    title: "Animaciones cortas",
+    status: "Meta 30 días",
+    microSkills: Object.freeze(["keyframes", "timing", "loop"]),
+    unlock: "clip de 5–10 segundos",
+    relation: "pieza publicable/monetizable",
+    accent: "#38bdf8",
+  }),
+  Object.freeze({
+    id: "portfolio",
+    title: "Renders para portafolio",
+    status: "Meta semanal",
+    microSkills: Object.freeze(["composición", "preview", "export"]),
+    unlock: "render terminado",
+    relation: "evidencia visible de progreso",
+    accent: "#86efac",
+  }),
+  Object.freeze({
+    id: "props",
+    title: "Props narrativos de apoyo",
+    status: "Soporte",
+    microSkills: Object.freeze(["muebles", "objetos", "decoración"]),
+    unlock: "biblioteca reutilizable",
+    relation: "rellena mundos sin dominar la ruta",
+    accent: "#f97316",
+  }),
+]);
 
 export const BLENDER_NO_NUMPAD_GUIDE = Object.freeze([
   {
-    title: "Vista sin teclado numérico",
-    body: "Usá el gizmo de navegación, el menú View/Viewport y el pie de vistas. La ruta asume que ni tu laptop ni tu teclado externo tienen numpad.",
+    title: "La ruta no depende del numpad",
+    body: "Usá el gizmo de navegación, el menú View/Viewport y el pie de vistas. El objetivo es producir piezas visibles, no memorizar vistas numéricas.",
+  },
+  {
+    title: "Vistas alternativas",
+    body: "Usá View → Viewpoint para frontal/lateral/superior, el gizmo del viewport para orientar cámara y el atajo de favoritos si te resulta más natural.",
   },
   {
     title: "Emulate Numpad opcional",
-    body: "En Preferences → Input podés activar Emulate Numpad para que la fila de números funcione como numpad. Úsalo solo si no te estorba en Edit Mode.",
+    body: "Preferences → Input → Emulate Numpad puede servir, pero activalo solo si no te estorba con números normales o Edit Mode.",
   },
   {
-    title: "Regla de principiante",
-    body: "Primero orbitar, mover, escalar, rotar, guardar y deshacer. Nada de addons ni atajos raros hasta que esto sea natural.",
+    title: "No frenar por hardware",
+    body: "Si una guía usa numpad, traducila a menú/gizmo. La falta de numpad no bloquea modelado, cámara, luces ni renders.",
   },
 ]);
 
 export const BLENDER_BEGINNER_RULES = Object.freeze([
-  "Un ejercicio terminado vale más que 20 tutoriales guardados.",
-  "No buscar renders perfectos: buscar entender una herramienta por día.",
-  "Nombrar objetos y guardar versiones: v01, v02, v03.",
-  "Si te perdés en la vista, no reinicies: usá el gizmo/menú View y volvé a una vista simple.",
-  "Máximo 1 concepto nuevo por sesión; el resto es repetición.",
+  "Cada sesión debe dejar algo visible.",
+  "No abrir Blender sin proyecto activo.",
+  "No pasar más de 20 min buscando tutoriales.",
+  "Si algo se complica, simplificar.",
+  "Si falta tiempo, usar referencias, base meshes o assets gratuitos.",
+  "El objetivo es terminar piezas, no perfeccionarlas.",
+  "Guardar versión y preview al cierre.",
+  "Cada semana debe producir un render, preview o clip.",
+  "Los props existen para apoyar escenas, no como objetivo comercial principal.",
+  "Todo debe acercar a portafolio o animaciones cortas.",
 ]);
 
 export const BLENDER_SKILL_LADDER = Object.freeze([
-  { level: "Nivel 0", title: "Moverse en Blender", items: ["orbitar", "pan", "zoom", "gizmo", "guardar archivo"] },
-  { level: "Nivel 1", title: "Transformaciones", items: ["mover", "rotar", "escalar", "duplicar", "aplicar escala"] },
-  { level: "Nivel 2", title: "Objetos básicos", items: ["cubo", "cilindro", "esfera", "bevel simple", "shade smooth"] },
-  { level: "Nivel 3", title: "Edit Mode básico", items: ["vértices", "aristas", "caras", "extrude", "loop cut"] },
-  { level: "Nivel 4", title: "Materiales y luz", items: ["material base", "color", "roughness", "luz", "cámara"] },
-  { level: "Nivel 5", title: "Mini proyecto", items: ["modelar", "material", "luz", "cámara", "render simple"] },
+  { level: "Base", title: "Viewport sin numpad", items: Object.freeze(["gizmo", "View menu", "orbit/pan/zoom", "guardar archivo"]) },
+  { level: "Producción", title: "Formas grandes", items: Object.freeze(["blockout", "silueta", "proporción", "simplificar"]) },
+  { level: "Presentación", title: "Look visible", items: Object.freeze(["material", "luz", "cámara", "preview"]) },
+  { level: "Portafolio", title: "Cerrar piezas", items: Object.freeze(["render", "loop", "biblioteca", "publicar"]) },
 ]);
 
 export const makeBlenderTask = (id, title, minutes, role, instruction, deliverable, focus = [], accent = "#34d399") => Object.freeze({
@@ -55,89 +295,167 @@ export const makeBlenderTask = (id, title, minutes, role, instruction, deliverab
   accent,
 });
 
-export const makeBlenderPlan = (id, dayIndex, title, goal, tasks, accent = "#34d399") => Object.freeze({
+export const makeBlenderPlan = (id, dayIndex, projectId, title, goal, tasks, accent = "#34d399", meta = {}) => Object.freeze({
   id,
   dayIndex,
+  projectId,
   title,
   goal,
   minutes: tasks.reduce((sum, task) => sum + (Number(task.minutes) || 0), 0),
   tasks: Object.freeze(tasks),
   accent,
+  ...meta,
 });
 
-export const BLENDER_EXTENSION_REASONS = Object.freeze([
-  Object.freeze({
-    id: "near-finish",
-    label: "Ya casi acabo el proyecto",
-    body: "Activá 30 min extra solo para cerrar una pieza que ya tiene forma: guardar versión, preview, render rápido o último ajuste importante.",
-  }),
-  Object.freeze({
-    id: "inspired-clear",
-    label: "Estoy inspirado y sé qué hacer",
-    body: "Activá 30 min extra cuando ya tenés una acción clara y no vas a perder el bloque buscando tutoriales o probando sin rumbo.",
-  }),
+const sessionBlocks = (projectAccent, mainInstruction, mainDeliverable) => Object.freeze([
+  makeBlenderTask(
+    "session-start",
+    "Arranque",
+    5,
+    "Preparar escena",
+    "Abrí el proyecto activo, revisá la próxima acción exacta y no busqués tutoriales todavía.",
+    "Proyecto abierto y dirección clara antes de tocar detalles.",
+    ["foco", "sin tutoriales"],
+    "#22d3ee"
+  ),
+  makeBlenderTask(
+    "main-production",
+    "Producción principal",
+    40,
+    "Pieza visible",
+    mainInstruction,
+    mainDeliverable,
+    ["formas grandes", "entregable real"],
+    projectAccent
+  ),
+  makeBlenderTask(
+    "visual-close",
+    "Cierre visual",
+    10,
+    "Preview",
+    "Guardá versión, sacá captura o render preview y compará con el inicio de la sesión.",
+    "Versión guardada + preview visible.",
+    ["guardar", "preview"],
+    "#a78bfa"
+  ),
+  makeBlenderTask(
+    "lifeos-log",
+    "Log LifeOS",
+    5,
+    "Registro",
+    "Anotá qué hiciste, qué quedó visible, qué te trabó y la próxima acción exacta.",
+    "Registro listo para retomar sin perderte.",
+    ["log", "próximo paso"],
+    "#fbbf24"
+  ),
 ]);
 
-export const BLENDER_EXTENSION_TASK = makeBlenderTask(
-  "optional-extension-production",
-  "Misión extra opcional",
-  BLENDER_OPTIONAL_EXTENSION_MINUTES,
-  "Extra activado",
-  "Usá este bloque solo para producción concreta: terminar una forma, mejorar cámara/luz, sacar preview/render o dejar listo el próximo paso. Nada de tutoriales largos.",
-  "Avance visible guardado: captura, render preview, versión .blend o checklist del cierre.",
-  ["opcional", "producción", "cierre"],
-  "#fbbf24"
-);
-
 export const BLENDER_WEEKLY_PLANS = Object.freeze([
-  makeBlenderPlan("navigation-basics", 0, "Lunes · Navegación + objetos básicos", "sentirte cómodo moviéndote sin teclado numérico", [
-    makeBlenderTask("setup-no-numpad", "Setup sin numpad", 10, "Base", "Abrí Blender, revisá gizmo/menú View y probá cambiar vista sin numpad. Activá Emulate Numpad solo si te resulta cómodo.", "Podés volver a una vista clara sin perderte.", ["gizmo", "View", "orientación"], "#22d3ee"),
-    makeBlenderTask("primitive-tour", "Tour de primitivas", 20, "Ejercicio principal", "Agregá cubo, esfera, cilindro y cono. Movelos, rotalos y escalalos con calma.", "Escena con 4 objetos separados y nombrados.", ["Add Mesh", "Move", "Scale", "Rotate"], "#34d399"),
-    makeBlenderTask("save-versions", "Guardar v01/v02", 10, "Hábito", "Guardá el archivo como practica_lunes_v01.blend, duplicá algo y guardá v02.", "Dos versiones guardadas.", ["guardar", "organización"], "#a78bfa"),
-    makeBlenderTask("mini-scene", "Mini escena simple", 20, "Aplicación", "Con esas primitivas armá una mesa, torre o robot muy básico. No detalles; solo silueta.", "Un objeto reconocible hecho con primitivas.", ["composición", "formas"], "#fbbf24"),
-  ], "#22d3ee"),
-
-  makeBlenderPlan("transform-control", 1, "Martes · Transformaciones limpias", "dominar mover, rotar y escalar sin deformar todo", [
-    makeBlenderTask("warm-transform", "Warmup de transformación", 10, "Base", "Mové 5 cubos en ejes distintos, rotá 3 y escalá 3. Usá gizmos si los atajos te confunden.", "Objetos ordenados, no encimados.", ["Move", "Rotate", "Scale"], "#34d399"),
-    makeBlenderTask("stack-blocks", "Construcción con bloques", 25, "Ejercicio principal", "Construí una casita low poly solo con cubos. Cada pieza debe tener tamaño intencional.", "Casa simple con paredes, techo y puerta.", ["proporción", "bloques"], "#fbbf24"),
-    makeBlenderTask("origin-check", "Orden y nombres", 10, "Hábito", "Nombrá objetos: pared_frente, techo, puerta. Agrupá visualmente y guardá versión.", "Outliner entendible.", ["outliner", "nombres"], "#a78bfa"),
-    makeBlenderTask("camera-preview", "Vista de cámara básica", 15, "Aplicación", "Colocá cámara mirando la casita usando gizmo/menú View. No busqués render perfecto.", "Cámara apuntando al modelo.", ["cámara", "encuadre"], "#60a5fa"),
-  ], "#34d399"),
-
-  makeBlenderPlan("edit-mode-intro", 2, "Miércoles · Edit Mode desde cero", "entender vértices, aristas y caras sin apurarte", [
-    makeBlenderTask("selection-modes", "Vertex/Edge/Face", 15, "Base", "Entrá a Edit Mode y practicá seleccionar vértices, aristas y caras. Sin numpad: seguí usando gizmo/menú View para orientarte.", "Sabés qué estás seleccionando.", ["Edit Mode", "selección"], "#60a5fa"),
-    makeBlenderTask("extrude-basic", "Extrude básico", 25, "Ejercicio principal", "Partí de un cubo y extruí caras para crear una silla simple. Si se deforma, deshacé y repetí más lento.", "Silla low poly con asiento, respaldo y patas.", ["extrude", "caras"], "#fb7185"),
-    makeBlenderTask("loop-cut-intro", "Loop cut suave", 10, "Técnica", "Probá un loop cut en un cubo separado. Solo entender qué hace, no usarlo en todo.", "Un cubo de prueba con cortes limpios.", ["loop cut"], "#fbbf24"),
-    makeBlenderTask("clean-save", "Guardar y nota", 10, "Cierre", "Guardá v02 y escribí en una nota qué herramienta entendiste y cuál se sintió confusa.", "Archivo guardado + nota corta.", ["feedback"], "#a78bfa"),
-  ], "#60a5fa"),
-
-  makeBlenderPlan("materials-light", 3, "Jueves · Materiales + luz", "hacer que un modelo simple se vea presentable", [
-    makeBlenderTask("material-basics", "Materiales básicos", 20, "Ejercicio principal", "Aplicá 3 materiales simples: color base, roughness medio y nombres claros. Nada de texturas todavía.", "Modelo con 3 materiales nombrados.", ["material", "color"], "#a78bfa"),
-    makeBlenderTask("lighting-one", "Una luz bien puesta", 15, "Técnica", "Agregá una luz y movela hasta que se entienda la forma. Probá intensidad, no mil luces.", "Escena iluminada de forma legible.", ["luz", "intensidad"], "#fbbf24"),
-    makeBlenderTask("camera-frame", "Encuadre simple", 15, "Aplicación", "Ajustá cámara para que el objeto entre completo. Usá View/Camera desde menú si no tenés numpad.", "Cámara con encuadre limpio.", ["cámara", "composición"], "#60a5fa"),
-    makeBlenderTask("viewport-render", "Captura o render rápido", 10, "Cierre", "Sacá un render/captura rápido para ver progreso. No lo compares con renders pro.", "Imagen simple guardada.", ["render", "progreso"], "#34d399"),
-  ], "#a78bfa"),
-
-  makeBlenderPlan("low-poly-prop", 4, "Viernes · Prop low poly", "crear un objeto pequeño terminado", [
-    makeBlenderTask("choose-prop", "Elegir objeto", 5, "Base", "Elegí un objeto fácil: taza, mesa, silla, caja, monitor, espada simple o lápiz.", "Objeto elegido y escrito.", ["decisión"], "#fbbf24"),
-    makeBlenderTask("blockout", "Blockout", 25, "Ejercicio principal", "Armá la forma general con primitivas. Primero silueta, después detalles.", "Blockout reconocible.", ["blockout", "formas"], "#fb7185"),
-    makeBlenderTask("simple-detail", "Detalles simples", 15, "Aplicación", "Agregá 2–3 detalles máximo. Si empieza a romperse, volvé a formas grandes.", "Objeto con pocos detalles limpios.", ["detalle", "control"], "#34d399"),
-    makeBlenderTask("material-pass", "Material pass", 15, "Cierre", "Poné colores simples, cámara y guardá versión final del día.", "Modelo con materiales y cámara.", ["material", "guardado"], "#a78bfa"),
-  ], "#fb7185"),
-
-  makeBlenderPlan("mini-project", 5, "Sábado · Mini proyecto guiado", "unir navegación, modelado básico, materiales y cámara", [
-    makeBlenderTask("plan-mini", "Plan de 5 líneas", 10, "Base", "Escribí qué harás: objeto, piezas principales, colores, cámara y límite de detalles.", "Plan corto antes de modelar.", ["plan", "límite"], "#fbbf24"),
-    makeBlenderTask("build-mini", "Construcción principal", 30, "Ejercicio principal", "Modelá el mini proyecto con herramientas que ya usaste. Nada de tutorial nuevo durante este bloque.", "Mini escena/modelo completo en forma básica.", ["modelado", "consistencia"], "#34d399"),
-    makeBlenderTask("present-mini", "Presentación básica", 15, "Aplicación", "Agregá material, luz y cámara. Buscá que se entienda, no perfección.", "Vista presentable del mini proyecto.", ["luz", "cámara"], "#60a5fa"),
-    makeBlenderTask("export-note", "Cierre de aprendizaje", 5, "Cierre", "Anotá qué herramienta te costó más y qué repetirás el lunes.", "Nota de progreso.", ["reflexión"], "#a78bfa"),
-  ], "#34d399"),
-
-  makeBlenderPlan("review-cleanup", 6, "Domingo · Repaso suave", "repetir sin cansarte y ordenar archivos", [
-    makeBlenderTask("open-old", "Abrir proyecto viejo", 10, "Base", "Abrí un archivo de la semana y miralo sin editar 2 minutos. Detectá qué está desordenado.", "Lista mental de mejoras.", ["review"], "#86efac"),
-    makeBlenderTask("fix-one-thing", "Arreglar una cosa", 25, "Ejercicio principal", "Solo una mejora: proporción, material, cámara, nombres o luz. No rehacer todo.", "Una mejora clara aplicada.", ["mejora", "control"], "#34d399"),
-    makeBlenderTask("shortcut-practice", "Práctica sin numpad", 15, "Técnica", "Movete por vistas con gizmo/menú/pie y repetí navegación hasta que no te pierdas.", "Más confianza sin numpad.", ["navegación", "gizmo"], "#22d3ee"),
-    makeBlenderTask("weekly-note", "Nota semanal", 10, "Cierre", "Escribí: mejor ejercicio, peor herramienta, próximo mini proyecto.", "Nota semanal guardada.", ["planificación"], "#a78bfa"),
-  ], "#86efac"),
+  makeBlenderPlan(
+    "anime-character-blockout",
+    0,
+    "anime-base-character",
+    "Lunes · Personaje anime base",
+    "Terminar la silueta del cuerpo y sacar preview WIP",
+    sessionBlocks("#22d3ee", "Ajustá proporciones principales del personaje: cabeza, torso, piernas y pelo simple. No detalles finos; primero que la silueta se lea.", "Captura frontal y 3/4 del personaje base."),
+    "#22d3ee",
+    {
+      why: "La silueta define si el personaje se siente anime/low-poly antes de invertir tiempo en detalles.",
+      deliverable: "1 captura frontal + 1 captura 3/4",
+      nextAction: "Ajustar proporciones grandes antes de agregar detalles",
+      checklist: Object.freeze(["Ajustar proporciones principales", "Bloquear cabeza/cuerpo/piernas", "Agregar pelo simple", "Guardar versión v02", "Sacar preview"]),
+    }
+  ),
+  makeBlenderPlan(
+    "anime-character-materials",
+    1,
+    "anime-character-pose",
+    "Martes · Personaje con materiales",
+    "Aplicar materiales planos, pose simple y cámara limpia",
+    sessionBlocks("#a78bfa", "Separá pelo, ropa y cuerpo con materiales planos. Ajustá una pose simple y colocá cámara 3/4 sin perseguir perfección.", "Render WIP del personaje con pose y materiales."),
+    "#a78bfa",
+    {
+      why: "Un modelo simple gana valor visual cuando color, pose y cámara comunican intención.",
+      deliverable: "Render WIP del personaje con pose básica",
+      nextAction: "Separar pelo/ropa/cuerpo con colores simples",
+      checklist: Object.freeze(["Asignar materiales planos", "Separar pelo/ropa/cuerpo", "Crear pose simple", "Colocar cámara 3/4", "Guardar preview"]),
+    }
+  ),
+  makeBlenderPlan(
+    "fantasy-creature-shape",
+    2,
+    "fantasy-creature",
+    "Miércoles · Criatura fantasy",
+    "Bloquear cuerpo, cabeza y rasgos principales",
+    sessionBlocks("#34d399", "Construí una criatura reconocible con formas grandes. Cuerpo, cabeza, patas/alas/orejas primero; materiales después.", "Modelo WIP reconocible con silueta clara."),
+    "#34d399",
+    {
+      why: "Las criaturas funcionan cuando la silueta se entiende incluso antes del color.",
+      deliverable: "Modelo WIP reconocible",
+      nextAction: "Definir silueta antes de materiales",
+      checklist: Object.freeze(["Elegir animal/criatura base", "Bloquear cuerpo y cabeza", "Agregar 2 rasgos distintivos", "Nombrar piezas", "Sacar preview"]),
+    }
+  ),
+  makeBlenderPlan(
+    "fantasy-scene-lighting",
+    3,
+    "cinematic-fantasy-scene",
+    "Jueves · Escena fantasy cinematográfica",
+    "Armar ambiente, luz principal y profundidad visual",
+    sessionBlocks("#fbbf24", "Construí una escena con frente, medio y fondo. Sumá una luz principal y atmósfera ligera; que cuente algo sin explicación larga.", "Render preview con composición narrativa."),
+    "#fbbf24",
+    {
+      why: "Una escena simple puede verse cinematográfica si tiene profundidad, luz y foco narrativo.",
+      deliverable: "Render preview con profundidad visual",
+      nextAction: "Colocar 3 planos de profundidad: frente, medio y fondo",
+      checklist: Object.freeze(["Definir punto focal", "Colocar 3 planos de profundidad", "Agregar 3–5 props simples", "Poner luz principal", "Sacar preview"]),
+    }
+  ),
+  makeBlenderPlan(
+    "urban-scene-camera",
+    4,
+    "cinematic-urban-scene",
+    "Viernes · Calle nocturna low-poly",
+    "Configurar luces, cámara y atmósfera nocturna",
+    sessionBlocks("#fb7185", "Ajustá una calle low-poly con luces de contraste, cámara baja/3/4 y elementos simples que guíen la mirada.", "Render preview urbano con composición clara."),
+    "#fb7185",
+    {
+      why: "La cámara y la luz hacen que una calle simple parezca una escena con historia.",
+      deliverable: "Render preview de calle nocturna",
+      nextAction: "Ajustar luz principal y encuadre",
+      checklist: Object.freeze(["Ubicar cámara", "Ajustar luz principal", "Crear contraste de color", "Agregar profundidad", "Guardar render preview"]),
+    }
+  ),
+  makeBlenderPlan(
+    "camera-short-loop",
+    5,
+    "camera-short-animation",
+    "Sábado · Animación corta de cámara",
+    "Animar cámara o movimiento simple sin complicar el rig",
+    sessionBlocks("#60a5fa", "Definí inicio y final del movimiento. Animá una cámara, objeto o gesto simple de 5–10 segundos. No abras un tutorial nuevo durante el bloque.", "Viewport preview del movimiento principal."),
+    "#60a5fa",
+    {
+      why: "El primer clip no necesita rig avanzado; necesita timing claro y una acción visible.",
+      deliverable: "Preview de animación de 5–10 segundos",
+      nextAction: "Definir inicio, final y un solo movimiento claro",
+      checklist: Object.freeze(["Definir inicio/final", "Poner keyframes básicos", "Revisar timing", "Guardar preview", "Anotar mejora próxima"]),
+    }
+  ),
+  makeBlenderPlan(
+    "portfolio-render-close",
+    6,
+    "portfolio-render-pass",
+    "Domingo · Render para portafolio",
+    "Pulir cámara, luz, composición y guardar render final",
+    sessionBlocks("#c084fc", "Elegí una pieza WIP de la semana y cerrala para preview/render. Solo cámara, luz, color y encuadre; no rehacer el modelo.", "Imagen lista para carpeta Portfolio/Renders."),
+    "#c084fc",
+    {
+      why: "Cerrar piezas crea evidencia de progreso y evita acumular proyectos eternos.",
+      deliverable: "Render final o preview fuerte para portafolio",
+      nextAction: "Ajustar encuadre y cortar antes de sobretrabajar detalles",
+      checklist: Object.freeze(["Elegir WIP de la semana", "Ajustar cámara", "Ajustar luz", "Guardar render", "Mover a carpeta Portfolio/Renders"]),
+    }
+  ),
 ]);
 
 export function getBlenderDateKey(date = new Date()) {
