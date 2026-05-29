@@ -80,11 +80,8 @@ import {
 } from "../data/calculusData.js";
 import {
   BLENDER_SESSION_MINUTES,
-  BLENDER_OPTIONAL_EXTENSION_MINUTES,
   BLENDER_PARENT_QUEST_ID,
   BLENDER_PROFILE,
-  BLENDER_EXTENSION_REASONS,
-  BLENDER_EXTENSION_TASK,
   BLENDER_NO_NUMPAD_GUIDE,
   BLENDER_BEGINNER_RULES,
   BLENDER_SKILL_LADDER,
@@ -288,7 +285,7 @@ const QUESTS = Object.freeze([
   {
     id:5,
     title:"Blender / 3D",
-    sub:"2:40–3:40 PM · 60 min base · +30 opcional solo si activás misión extra",
+    sub:"2:40–3:40 PM · ejercicios principiante de Blender",
     xp:12,
     icon:Dumbbell,
     diff:"MEDIO",
@@ -1389,7 +1386,7 @@ function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getSchedu
     blenderQuest?.title || "Blender",
     "CREATIVE",
     BLENDER_SESSION_MINUTES,
-    "2:40–3:40 PM · Blender principiante: 60 min base, práctica sin numpad; +30 extra solo si activás misión",
+    "2:40–3:40 PM · Blender principiante: ejercicio del día, tareas y práctica sin numpad",
     T(14, 40),
     scheduleDateKey,
     ["Principiante", "Ejercicio del día", "Sin numpad"]
@@ -4312,7 +4309,6 @@ function BlenderView() {
   );
   const questDone = Boolean(blenderQuest && (persistent.quests.completedIds || []).includes(blenderQuest.id));
   const storageKey = `lifeos:blender:${todayKey}:completedTasks`;
-  const extensionStorageKey = `lifeos:blender:${todayKey}:extensionReason`;
   const [completedTaskIds, setCompletedTaskIds] = useState(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -4321,50 +4317,22 @@ function BlenderView() {
       return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
     } catch { return []; }
   });
-  const [extensionReasonId, setExtensionReasonId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    try { return window.localStorage.getItem(extensionStorageKey) || ""; } catch { return ""; }
-  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try { window.localStorage.setItem(storageKey, JSON.stringify(completedTaskIds)); } catch {}
   }, [storageKey, completedTaskIds]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (extensionReasonId) window.localStorage.setItem(extensionStorageKey, extensionReasonId);
-      else window.localStorage.removeItem(extensionStorageKey);
-    } catch {}
-  }, [extensionStorageKey, extensionReasonId]);
-
-  const selectedExtensionReason = useMemo(
-    () => BLENDER_EXTENSION_REASONS.find(reason => reason.id === extensionReasonId) || null,
-    [extensionReasonId]
-  );
-  const visibleTasks = useMemo(
-    () => selectedExtensionReason ? [...plan.tasks, BLENDER_EXTENSION_TASK] : plan.tasks,
-    [plan.tasks, selectedExtensionReason]
-  );
-  const visibleTaskIds = useMemo(() => new Set(visibleTasks.map(task => task.id)), [visibleTasks]);
   const completedSet = useMemo(() => new Set(completedTaskIds), [completedTaskIds]);
-  const visibleCompletedTaskIds = useMemo(
-    () => completedTaskIds.filter(id => visibleTaskIds.has(id)),
-    [completedTaskIds, visibleTaskIds]
-  );
-  const totalMinutes = plan.minutes + (selectedExtensionReason ? BLENDER_OPTIONAL_EXTENSION_MINUTES : 0);
   const completedMinutes = useMemo(
-    () => visibleTasks.filter(t => completedSet.has(t.id)).reduce((sum, t) => sum + (Number(t.minutes) || 0), 0),
-    [visibleTasks, completedSet]
+    () => plan.tasks.filter(t => completedSet.has(t.id)).reduce((sum, t) => sum + (Number(t.minutes) || 0), 0),
+    [plan.tasks, completedSet]
   );
-  const pct = Math.round((visibleCompletedTaskIds.length / Math.max(visibleTasks.length, 1)) * 100);
-
-  const setExtensionReason = useCallback((reasonId) => {
-    unlockLifeOSAudio();
-    setExtensionReasonId(current => current === reasonId ? "" : reasonId);
-    playLifeOSSound("menu");
-  }, []);
+  const pct = Math.round((completedTaskIds.length / Math.max(plan.tasks.length, 1)) * 100);
+  const nextTask = useMemo(
+    () => plan.tasks.find(task => !completedSet.has(task.id)) || plan.tasks[plan.tasks.length - 1],
+    [plan.tasks, completedSet]
+  );
 
   const toggleTask = useCallback((taskId) => {
     unlockLifeOSAudio();
@@ -4389,138 +4357,212 @@ function BlenderView() {
     }
   }, [blenderQuest, questDone, persistent.xp.total, pDispatch, uiDispatch]);
 
+  const shellStyle = {
+    animation:"sldIn .3s ease",
+    display:"grid",
+    gap:22,
+  };
+  const surfaceStyle = {
+    border:"1px solid rgba(255,255,255,.075)",
+    background:"linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.022))",
+    borderRadius:24,
+    boxShadow:"0 18px 50px rgba(0,0,0,.18)",
+  };
+  const mutedCapsStyle = {
+    fontSize:10,
+    color:T_COLOR.muted,
+    fontWeight:900,
+    letterSpacing:1.15,
+    textTransform:"uppercase",
+  };
+  const chipStyle = {
+    display:"inline-flex",
+    alignItems:"center",
+    gap:6,
+    border:"1px solid rgba(255,255,255,.08)",
+    background:"rgba(255,255,255,.04)",
+    color:T_COLOR.subtext,
+    borderRadius:999,
+    padding:"7px 10px",
+    fontSize:11,
+    fontWeight:850,
+    lineHeight:1,
+  };
+  const summaryStyle = {
+    cursor:"pointer",
+    listStyle:"none",
+    color:T_COLOR.text,
+    fontWeight:900,
+    fontSize:13,
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"space-between",
+    gap:10,
+  };
+
   return (
-    <div style={{ animation:"sldIn .3s ease" }}>
-      <div style={S.ptitle}>Blender Creator Pipeline</div>
-      <div style={S.psub}>Ruta principiante · 2:40–3:40 PM · 60 min base + 30 min solo si activás misión extra · sin depender del numpad</div>
+    <div style={shellStyle}>
+      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ ...mutedCapsStyle, color:plan.accent }}>Blender Creator Pipeline</div>
+          <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:950, color:T_COLOR.text, letterSpacing:-.8, marginTop:5 }}>
+            {plan.title.replace(" · ", " / ")}
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          <span style={chipStyle}><Layers size={13}/> Principiante</span>
+          <span style={chipStyle}><Timer size={13}/> {plan.minutes} min</span>
+          <span style={chipStyle}><Target size={13}/> Sin numpad</span>
+        </div>
+      </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1.35fr .65fr", gap:16, marginBottom:18 }} className="mob-layout-grid">
-        <div className="g" style={{ padding:22, borderColor:"rgba(52,211,153,.18)", background:"linear-gradient(135deg,rgba(52,211,153,.08),rgba(255,255,255,.025))" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1.28fr .72fr", gap:18 }} className="mob-layout-grid">
+        <div style={{ ...surfaceStyle, padding:28, position:"relative", overflow:"hidden", borderColor:`${plan.accent}30`, background:`radial-gradient(circle at 82% 18%,${plan.accent}18,transparent 34%),linear-gradient(135deg,rgba(15,23,42,.68),rgba(2,6,23,.40))` }}>
+          <div style={{ position:"absolute", inset:"auto -90px -130px auto", width:260, height:260, borderRadius:"38% 62% 54% 46%", background:`${plan.accent}16`, filter:"blur(8px)", transform:"rotate(-18deg)" }}/>
+
+          <div style={{ position:"relative", display:"grid", gridTemplateColumns:"1fr auto", gap:24, alignItems:"start" }} className="mob-layout-grid">
             <div>
-              <div style={{ fontSize:11, color:plan.accent, fontWeight:900, letterSpacing:1.2, textTransform:"uppercase" }}>Plan de hoy</div>
-              <div style={{ fontFamily:T_FONT.display, fontSize:26, fontWeight:900, color:T_COLOR.text, marginTop:4 }}>{plan.title}</div>
-              <div style={{ color:T_COLOR.subtext, lineHeight:1.65, marginTop:8, maxWidth:760 }}>{plan.goal}</div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:900, color:plan.accent }}>{completedMinutes}/{totalMinutes}</div>
-              <div style={{ fontSize:11, color:T_COLOR.muted, fontWeight:800, textTransform:"uppercase" }}>min completados</div>
-            </div>
-          </div>
-          <div style={{ height:9, borderRadius:999, background:"rgba(255,255,255,.07)", overflow:"hidden", marginTop:18 }}>
-            <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${plan.accent}88,${plan.accent})`, transition:"width .25s ease" }}/>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginTop:14, flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, color:T_COLOR.muted }}>{visibleCompletedTaskIds.length}/{visibleTasks.length} tareas · {pct}% del bloque · extra {selectedExtensionReason ? "activo" : "bloqueado"}</div>
-            <button onClick={toggleBlenderQuest} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.25)" : "rgba(52,211,153,.32)"}`, background:questDone ? "rgba(148,163,184,.08)" : "rgba(52,211,153,.10)", color:questDone ? "#94a3b8" : "#34d399", borderRadius:12, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
-              {questDone ? "Bloque marcado" : "Marcar Blender completado"}
-            </button>
-          </div>
-        </div>
+              <div style={{ ...mutedCapsStyle, color:plan.accent }}>Misión de hoy</div>
+              <h2 style={{ margin:"8px 0 0", fontFamily:T_FONT.display, color:T_COLOR.text, fontSize:30, lineHeight:1.05, letterSpacing:-.45 }}>
+                {plan.goal}
+              </h2>
 
-        <div className="g" style={{ padding:22 }}>
-          <div style={S.stitle}>Perfil del bloque</div>
-          {[BLENDER_PROFILE.level, BLENDER_PROFILE.hardware, BLENDER_PROFILE.session].map((item, idx) => (
-            <div key={idx} style={{ display:"flex", gap:8, alignItems:"flex-start", marginTop:10, color:T_COLOR.subtext, fontSize:13, lineHeight:1.5 }}>
-              <CheckCircle2 size={15} color="#34d399" style={{ flexShrink:0, marginTop:2 }}/>
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="g" style={{ padding:22, marginBottom:18, borderColor:selectedExtensionReason ? "rgba(251,191,36,.30)" : "rgba(255,255,255,.07)", background:selectedExtensionReason ? "rgba(251,191,36,.08)" : "rgba(255,255,255,.03)" }}>
-        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
-          <div>
-            <div style={{ fontSize:11, color:selectedExtensionReason ? "#fbbf24" : T_COLOR.muted, fontWeight:900, letterSpacing:1.1, textTransform:"uppercase" }}>Compuerta de misión extra</div>
-            <div style={{ color:T_COLOR.text, fontWeight:900, marginTop:5 }}>+{BLENDER_OPTIONAL_EXTENSION_MINUTES} min opcionales</div>
-            <div style={{ color:T_COLOR.subtext, fontSize:13, lineHeight:1.6, marginTop:6, maxWidth:760 }}>
-              La misión extra no se activa sola. Elegí una razón válida solo si tenés energía y una acción concreta; si no, el bloque termina en 60 min.
-            </div>
-          </div>
-          <button onClick={() => setExtensionReasonId("")} style={{ border:"1px solid rgba(255,255,255,.10)", background:"rgba(255,255,255,.04)", color:selectedExtensionReason ? T_COLOR.subtext : "#34d399", borderRadius:12, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>
-            {selectedExtensionReason ? "Desactivar extra" : "Extra desactivado"}
-          </button>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, marginTop:14 }} className="mob-layout-grid">
-          {BLENDER_EXTENSION_REASONS.map(reason => {
-            const on = extensionReasonId === reason.id;
-            return (
-              <button key={reason.id} onClick={() => setExtensionReason(reason.id)} style={{ textAlign:"left", border:on ? "1px solid rgba(251,191,36,.45)" : "1px solid rgba(255,255,255,.08)", background:on ? "rgba(251,191,36,.14)" : "rgba(255,255,255,.035)", color:on ? "#fde68a" : T_COLOR.subtext, borderRadius:14, padding:14, cursor:"pointer" }}>
-                <div style={{ fontWeight:900, color:on ? "#fbbf24" : T_COLOR.text }}>{reason.label}</div>
-                <div style={{ fontSize:12, lineHeight:1.55, marginTop:6 }}>{reason.body}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:14, marginBottom:18 }} className="mob-layout-grid">
-        {visibleTasks.map(task => {
-          const done = completedSet.has(task.id);
-          return (
-            <div key={task.id} className="g" style={{ padding:18, borderColor:done ? `${task.accent}55` : "rgba(255,255,255,.07)", background:done ? `${task.accent}12` : "rgba(255,255,255,.03)" }}>
-              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
-                <div>
-                  <div style={{ fontSize:10, color:task.accent, fontWeight:900, letterSpacing:1.1, textTransform:"uppercase" }}>{task.role} · {task.minutes} min</div>
-                  <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:900, color:T_COLOR.text, marginTop:5 }}>{task.title}</div>
-                </div>
-                <button onClick={() => toggleTask(task.id)} style={{ border:`1px solid ${done ? task.accent : "rgba(255,255,255,.12)"}`, background:done ? `${task.accent}22` : "rgba(255,255,255,.04)", color:done ? task.accent : T_COLOR.subtext, borderRadius:10, padding:"8px 10px", fontWeight:900, cursor:"pointer" }}>
-                  {done ? <CheckCircle2 size={17}/> : <Circle size={17}/>} 
-                </button>
-              </div>
-              <div style={{ marginTop:12, color:T_COLOR.subtext, fontSize:13, lineHeight:1.6 }}>{task.instruction}</div>
-              <div style={{ marginTop:12, padding:"10px 12px", borderRadius:12, background:"rgba(0,0,0,.18)", border:"1px solid rgba(255,255,255,.06)", color:T_COLOR.text, fontSize:12, lineHeight:1.5 }}>
-                <b>Entrega:</b> {task.deliverable}
-              </div>
-              {task.focus?.length > 0 && (
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:10 }}>
-                  {task.focus.map(f => <span key={f} style={{ fontSize:10, fontWeight:800, color:task.accent, border:`1px solid ${task.accent}33`, background:`${task.accent}11`, borderRadius:999, padding:"4px 8px" }}>{f}</span>)}
+              {nextTask && (
+                <div style={{ marginTop:22, display:"grid", gap:8 }}>
+                  <div style={{ ...mutedCapsStyle }}>Siguiente acción</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                    <span style={{ width:10, height:10, borderRadius:999, background:nextTask.accent, boxShadow:`0 0 0 5px ${nextTask.accent}18` }}/>
+                    <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:17 }}>{nextTask.title}</span>
+                    <span style={{ color:T_COLOR.muted, fontWeight:850, fontSize:12 }}>· {nextTask.minutes} min</span>
+                  </div>
                 </div>
               )}
+            </div>
+
+            <div style={{ minWidth:142, textAlign:"right" }}>
+              <div style={{ fontFamily:T_FONT.display, fontSize:44, fontWeight:950, color:plan.accent, lineHeight:1 }}>
+                {completedMinutes}<span style={{ color:T_COLOR.muted, fontSize:22 }}>/{plan.minutes}</span>
+              </div>
+              <div style={{ ...mutedCapsStyle, marginTop:6 }}>min completados</div>
+            </div>
+          </div>
+
+          <div style={{ position:"relative", marginTop:26 }}>
+            <div style={{ height:10, borderRadius:999, background:"rgba(255,255,255,.07)", overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${plan.accent}88,${plan.accent})`, transition:"width .25s ease", borderRadius:999 }}/>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:14, flexWrap:"wrap" }}>
+              <div style={{ color:T_COLOR.muted, fontSize:12, fontWeight:800 }}>{completedTaskIds.length}/{plan.tasks.length} pasos · {pct}%</div>
+              <button onClick={toggleBlenderQuest} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.26)" : `${plan.accent}55`}`, background:questDone ? "rgba(148,163,184,.08)" : `${plan.accent}18`, color:questDone ? "#94a3b8" : plan.accent, borderRadius:14, padding:"12px 16px", fontWeight:950, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 }}>
+                {questDone ? <CheckCircle2 size={16}/> : <Circle size={16}/>} {questDone ? "Bloque marcado" : "Marcar completado"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ ...surfaceStyle, padding:24, display:"grid", alignContent:"space-between", gap:22 }}>
+          <div>
+            <div style={{ ...mutedCapsStyle }}>Focus</div>
+            <div style={{ fontFamily:T_FONT.display, color:T_COLOR.text, fontWeight:950, fontSize:22, marginTop:8 }}>Crear, no estudiar</div>
+            <p style={{ color:T_COLOR.muted, fontSize:13, lineHeight:1.65, margin:"10px 0 0" }}>
+              La vista principal solo muestra lo necesario para empezar. Las instrucciones quedan bajo demanda.
+            </p>
+          </div>
+          <div style={{ display:"grid", gap:10 }}>
+            {[BLENDER_PROFILE.level, BLENDER_PROFILE.hardware, BLENDER_PROFILE.session].map((item, idx) => (
+              <div key={idx} style={{ display:"flex", alignItems:"center", gap:9, color:T_COLOR.subtext, fontSize:12, fontWeight:800 }}>
+                <CheckCircle2 size={14} color={plan.accent}/>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:16 }} className="mob-layout-grid">
+        {plan.tasks.map((task, index) => {
+          const done = completedSet.has(task.id);
+          return (
+            <div key={task.id} style={{ ...surfaceStyle, padding:20, minHeight:188, borderColor:done ? `${task.accent}55` : "rgba(255,255,255,.075)", background:done ? `${task.accent}12` : "rgba(255,255,255,.026)", display:"flex", flexDirection:"column", gap:16 }}>
+              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
+                <div style={{ display:"grid", gap:7 }}>
+                  <div style={{ ...mutedCapsStyle, color:task.accent }}>{String(index + 1).padStart(2,"0")} · {task.minutes} min</div>
+                  <div style={{ color:T_COLOR.text, fontFamily:T_FONT.display, fontWeight:950, fontSize:19, lineHeight:1.05 }}>{task.title}</div>
+                </div>
+                <button onClick={() => toggleTask(task.id)} aria-label={done ? `Desmarcar ${task.title}` : `Completar ${task.title}`} style={{ flexShrink:0, width:38, height:38, border:`1px solid ${done ? task.accent : "rgba(255,255,255,.12)"}`, background:done ? `${task.accent}22` : "rgba(255,255,255,.045)", color:done ? task.accent : T_COLOR.subtext, borderRadius:14, fontWeight:950, cursor:"pointer", display:"grid", placeItems:"center" }}>
+                  {done ? <CheckCircle2 size={18}/> : <Circle size={18}/>} 
+                </button>
+              </div>
+
+              <div style={{ marginTop:"auto", display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
+                <span style={{ ...chipStyle, color:task.accent, borderColor:`${task.accent}30`, background:`${task.accent}10` }}>{task.role}</span>
+                {task.focus?.slice(0, 2).map(f => <span key={f} style={chipStyle}>{f}</span>)}
+              </div>
+
+              <details style={{ borderTop:"1px solid rgba(255,255,255,.07)", paddingTop:13 }}>
+                <summary style={summaryStyle}>
+                  <span>Ver instrucción</span>
+                  <ChevronRight size={14} color={T_COLOR.muted}/>
+                </summary>
+                <div style={{ marginTop:13, display:"grid", gap:10 }}>
+                  <p style={{ margin:0, color:T_COLOR.subtext, fontSize:12, lineHeight:1.65 }}>{task.instruction}</p>
+                  <div style={{ border:"1px solid rgba(255,255,255,.065)", background:"rgba(0,0,0,.16)", borderRadius:14, padding:"11px 12px", color:T_COLOR.text, fontSize:12, lineHeight:1.55 }}>
+                    <b>Entrega:</b> {task.deliverable}
+                  </div>
+                </div>
+              </details>
             </div>
           );
         })}
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }} className="mob-layout-grid">
-        <div className="g" style={{ padding:22 }}>
-          <div style={S.stitle}>Sin teclado numérico</div>
-          <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.7, marginBottom:12 }}>
-            LifeOS no te va a enseñar como si tuvieras numpad. La ruta usa alternativas para laptop y teclado compacto.
-          </div>
-          {BLENDER_NO_NUMPAD_GUIDE.map((item, idx) => (
-            <div key={idx} style={{ padding:"11px 0", borderTop:idx ? "1px solid rgba(255,255,255,.06)" : "0" }}>
-              <div style={{ color:T_COLOR.text, fontWeight:900, fontSize:13 }}>{item.title}</div>
-              <div style={{ color:T_COLOR.subtext, fontSize:12, lineHeight:1.6, marginTop:4 }}>{item.body}</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }} className="mob-layout-grid">
+        <details style={{ ...surfaceStyle, padding:22 }}>
+          <summary style={summaryStyle}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:9 }}><Lightbulb size={16} color={plan.accent}/> Ayuda opcional</span>
+            <span style={{ color:T_COLOR.muted, fontSize:11, fontWeight:800 }}>abrir solo si te trabás</span>
+          </summary>
+          <div style={{ display:"grid", gap:16, marginTop:18 }}>
+            <div>
+              <div style={{ ...mutedCapsStyle, marginBottom:10 }}>Sin teclado numérico</div>
+              {BLENDER_NO_NUMPAD_GUIDE.map((item, idx) => (
+                <div key={idx} style={{ padding:"12px 0", borderTop:idx ? "1px solid rgba(255,255,255,.06)" : "0" }}>
+                  <div style={{ color:T_COLOR.text, fontWeight:950, fontSize:13 }}>{item.title}</div>
+                  <div style={{ color:T_COLOR.subtext, fontSize:12, lineHeight:1.65, marginTop:4 }}>{item.body}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        <div className="g" style={{ padding:22 }}>
-          <div style={S.stitle}>Reglas de principiante</div>
-          {BLENDER_BEGINNER_RULES.map((rule, idx) => (
-            <div key={idx} style={{ display:"flex", gap:9, alignItems:"flex-start", color:T_COLOR.subtext, fontSize:12, lineHeight:1.55, marginTop:10 }}>
-              <span style={{ color:"#34d399", fontWeight:900 }}>{idx + 1}.</span>
-              <span>{rule}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="g" style={{ padding:22, marginTop:16 }}>
-        <div style={S.stitle}>Escalera de habilidades</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginTop:12 }} className="mob-layout-grid">
-          {BLENDER_SKILL_LADDER.map(step => (
-            <div key={step.level} style={{ border:"1px solid rgba(255,255,255,.07)", background:"rgba(255,255,255,.03)", borderRadius:14, padding:14 }}>
-              <div style={{ fontSize:10, color:"#34d399", fontWeight:900, letterSpacing:1, textTransform:"uppercase" }}>{step.level}</div>
-              <div style={{ color:T_COLOR.text, fontWeight:900, marginTop:4 }}>{step.title}</div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:10 }}>
-                {step.items.map(item => <span key={item} style={{ fontSize:10, color:T_COLOR.subtext, border:"1px solid rgba(255,255,255,.08)", borderRadius:999, padding:"4px 7px" }}>{item}</span>)}
+            <div>
+              <div style={{ ...mutedCapsStyle, marginBottom:10 }}>Reglas rápidas</div>
+              <div style={{ display:"grid", gap:8 }}>
+                {BLENDER_BEGINNER_RULES.map((rule, idx) => (
+                  <div key={idx} style={{ display:"grid", gridTemplateColumns:"22px 1fr", gap:8, alignItems:"start", color:T_COLOR.subtext, fontSize:12, lineHeight:1.55 }}>
+                    <span style={{ color:plan.accent, fontWeight:950 }}>{idx + 1}.</span>
+                    <span>{rule}</span>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        </details>
+
+        <details style={{ ...surfaceStyle, padding:22 }}>
+          <summary style={summaryStyle}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:9 }}><Sparkles size={16} color={plan.accent}/> Escalera de habilidades</span>
+            <span style={{ color:T_COLOR.muted, fontSize:11, fontWeight:800 }}>ver ruta</span>
+          </summary>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:12, marginTop:18 }} className="mob-layout-grid">
+            {BLENDER_SKILL_LADDER.map(step => (
+              <div key={step.level} style={{ border:"1px solid rgba(255,255,255,.07)", background:"rgba(255,255,255,.03)", borderRadius:16, padding:14 }}>
+                <div style={{ ...mutedCapsStyle, color:plan.accent }}>{step.level}</div>
+                <div style={{ color:T_COLOR.text, fontWeight:950, marginTop:5 }}>{step.title}</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:11 }}>
+                  {step.items.map(item => <span key={item} style={{ fontSize:10, color:T_COLOR.subtext, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.025)", borderRadius:999, padding:"5px 8px" }}>{item}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       </div>
     </div>
   );
