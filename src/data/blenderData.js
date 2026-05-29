@@ -2,19 +2,20 @@
 // Dependency-free module: no React, no browser APIs.
 
 export const BLENDER_SESSION_MINUTES = 60;
+export const BLENDER_OPTIONAL_EXTENSION_MINUTES = 30;
 export const BLENDER_PARENT_QUEST_ID = 5;
 
 export const BLENDER_PROFILE = Object.freeze({
   level: "Principiante principiante",
-  hardware: "Laptop/teclado sin numpad",
+  hardware: "MSI Thin GF63 12UCX + teclado externo sin numpad",
   goal: "aprender fundamentos reales de Blender sin depender del teclado numérico",
-  session: "2:40–3:40 PM · 1 hora fija",
+  session: "2:40–3:40 PM · 60 min base · +30 min solo si activás misión extra",
 });
 
 export const BLENDER_NO_NUMPAD_GUIDE = Object.freeze([
   {
     title: "Vista sin teclado numérico",
-    body: "Usá el gizmo de navegación, el menú View/Viewport y el pie de vistas. No dependás del numpad para aprender.",
+    body: "Usá el gizmo de navegación, el menú View/Viewport y el pie de vistas. La ruta asume que ni tu laptop ni tu teclado externo tienen numpad.",
   },
   {
     title: "Emulate Numpad opcional",
@@ -63,6 +64,30 @@ export const makeBlenderPlan = (id, dayIndex, title, goal, tasks, accent = "#34d
   tasks: Object.freeze(tasks),
   accent,
 });
+
+export const BLENDER_EXTENSION_REASONS = Object.freeze([
+  Object.freeze({
+    id: "near-finish",
+    label: "Ya casi acabo el proyecto",
+    body: "Activá 30 min extra solo para cerrar una pieza que ya tiene forma: guardar versión, preview, render rápido o último ajuste importante.",
+  }),
+  Object.freeze({
+    id: "inspired-clear",
+    label: "Estoy inspirado y sé qué hacer",
+    body: "Activá 30 min extra cuando ya tenés una acción clara y no vas a perder el bloque buscando tutoriales o probando sin rumbo.",
+  }),
+]);
+
+export const BLENDER_EXTENSION_TASK = makeBlenderTask(
+  "optional-extension-production",
+  "Misión extra opcional",
+  BLENDER_OPTIONAL_EXTENSION_MINUTES,
+  "Extra activado",
+  "Usá este bloque solo para producción concreta: terminar una forma, mejorar cámara/luz, sacar preview/render o dejar listo el próximo paso. Nada de tutoriales largos.",
+  "Avance visible guardado: captura, render preview, versión .blend o checklist del cierre.",
+  ["opcional", "producción", "cierre"],
+  "#fbbf24"
+);
 
 export const BLENDER_WEEKLY_PLANS = Object.freeze([
   makeBlenderPlan("navigation-basics", 0, "Lunes · Navegación + objetos básicos", "sentirte cómodo moviéndote sin teclado numérico", [

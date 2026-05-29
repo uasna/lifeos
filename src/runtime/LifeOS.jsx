@@ -80,8 +80,11 @@ import {
 } from "../data/calculusData.js";
 import {
   BLENDER_SESSION_MINUTES,
+  BLENDER_OPTIONAL_EXTENSION_MINUTES,
   BLENDER_PARENT_QUEST_ID,
   BLENDER_PROFILE,
+  BLENDER_EXTENSION_REASONS,
+  BLENDER_EXTENSION_TASK,
   BLENDER_NO_NUMPAD_GUIDE,
   BLENDER_BEGINNER_RULES,
   BLENDER_SKILL_LADDER,
@@ -285,7 +288,7 @@ const QUESTS = Object.freeze([
   {
     id:5,
     title:"Blender / 3D",
-    sub:"2:40–3:40 PM · ejercicios principiante de Blender",
+    sub:"2:40–3:40 PM · 60 min base · +30 opcional solo si activás misión extra",
     xp:12,
     icon:Dumbbell,
     diff:"MEDIO",
@@ -1386,7 +1389,7 @@ function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getSchedu
     blenderQuest?.title || "Blender",
     "CREATIVE",
     BLENDER_SESSION_MINUTES,
-    "2:40–3:40 PM · Blender principiante: ejercicio del día, tareas y práctica sin numpad",
+    "2:40–3:40 PM · Blender principiante: 60 min base, práctica sin numpad; +30 extra solo si activás misión",
     T(14, 40),
     scheduleDateKey,
     ["Principiante", "Ejercicio del día", "Sin numpad"]
@@ -4309,6 +4312,7 @@ function BlenderView() {
   );
   const questDone = Boolean(blenderQuest && (persistent.quests.completedIds || []).includes(blenderQuest.id));
   const storageKey = `lifeos:blender:${todayKey}:completedTasks`;
+  const extensionStorageKey = `lifeos:blender:${todayKey}:extensionReason`;
   const [completedTaskIds, setCompletedTaskIds] = useState(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -4317,18 +4321,50 @@ function BlenderView() {
       return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
     } catch { return []; }
   });
+  const [extensionReasonId, setExtensionReasonId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try { return window.localStorage.getItem(extensionStorageKey) || ""; } catch { return ""; }
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try { window.localStorage.setItem(storageKey, JSON.stringify(completedTaskIds)); } catch {}
   }, [storageKey, completedTaskIds]);
 
-  const completedSet = useMemo(() => new Set(completedTaskIds), [completedTaskIds]);
-  const completedMinutes = useMemo(
-    () => plan.tasks.filter(t => completedSet.has(t.id)).reduce((sum, t) => sum + (Number(t.minutes) || 0), 0),
-    [plan.tasks, completedSet]
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (extensionReasonId) window.localStorage.setItem(extensionStorageKey, extensionReasonId);
+      else window.localStorage.removeItem(extensionStorageKey);
+    } catch {}
+  }, [extensionStorageKey, extensionReasonId]);
+
+  const selectedExtensionReason = useMemo(
+    () => BLENDER_EXTENSION_REASONS.find(reason => reason.id === extensionReasonId) || null,
+    [extensionReasonId]
   );
-  const pct = Math.round((completedTaskIds.length / Math.max(plan.tasks.length, 1)) * 100);
+  const visibleTasks = useMemo(
+    () => selectedExtensionReason ? [...plan.tasks, BLENDER_EXTENSION_TASK] : plan.tasks,
+    [plan.tasks, selectedExtensionReason]
+  );
+  const visibleTaskIds = useMemo(() => new Set(visibleTasks.map(task => task.id)), [visibleTasks]);
+  const completedSet = useMemo(() => new Set(completedTaskIds), [completedTaskIds]);
+  const visibleCompletedTaskIds = useMemo(
+    () => completedTaskIds.filter(id => visibleTaskIds.has(id)),
+    [completedTaskIds, visibleTaskIds]
+  );
+  const totalMinutes = plan.minutes + (selectedExtensionReason ? BLENDER_OPTIONAL_EXTENSION_MINUTES : 0);
+  const completedMinutes = useMemo(
+    () => visibleTasks.filter(t => completedSet.has(t.id)).reduce((sum, t) => sum + (Number(t.minutes) || 0), 0),
+    [visibleTasks, completedSet]
+  );
+  const pct = Math.round((visibleCompletedTaskIds.length / Math.max(visibleTasks.length, 1)) * 100);
+
+  const setExtensionReason = useCallback((reasonId) => {
+    unlockLifeOSAudio();
+    setExtensionReasonId(current => current === reasonId ? "" : reasonId);
+    playLifeOSSound("menu");
+  }, []);
 
   const toggleTask = useCallback((taskId) => {
     unlockLifeOSAudio();
@@ -4355,8 +4391,8 @@ function BlenderView() {
 
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
-      <div style={S.ptitle}>Blender Trainer</div>
-      <div style={S.psub}>Ruta principiante principiante · 2:40–3:40 PM · optimizada para laptop/teclado sin numpad</div>
+      <div style={S.ptitle}>Blender Creator Pipeline</div>
+      <div style={S.psub}>Ruta principiante · 2:40–3:40 PM · 60 min base + 30 min solo si activás misión extra · sin depender del numpad</div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1.35fr .65fr", gap:16, marginBottom:18 }} className="mob-layout-grid">
         <div className="g" style={{ padding:22, borderColor:"rgba(52,211,153,.18)", background:"linear-gradient(135deg,rgba(52,211,153,.08),rgba(255,255,255,.025))" }}>
@@ -4367,7 +4403,7 @@ function BlenderView() {
               <div style={{ color:T_COLOR.subtext, lineHeight:1.65, marginTop:8, maxWidth:760 }}>{plan.goal}</div>
             </div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:900, color:plan.accent }}>{completedMinutes}/{plan.minutes}</div>
+              <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:900, color:plan.accent }}>{completedMinutes}/{totalMinutes}</div>
               <div style={{ fontSize:11, color:T_COLOR.muted, fontWeight:800, textTransform:"uppercase" }}>min completados</div>
             </div>
           </div>
@@ -4375,7 +4411,7 @@ function BlenderView() {
             <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${plan.accent}88,${plan.accent})`, transition:"width .25s ease" }}/>
           </div>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginTop:14, flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, color:T_COLOR.muted }}>{completedTaskIds.length}/{plan.tasks.length} tareas · {pct}% del bloque</div>
+            <div style={{ fontSize:12, color:T_COLOR.muted }}>{visibleCompletedTaskIds.length}/{visibleTasks.length} tareas · {pct}% del bloque · extra {selectedExtensionReason ? "activo" : "bloqueado"}</div>
             <button onClick={toggleBlenderQuest} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.25)" : "rgba(52,211,153,.32)"}`, background:questDone ? "rgba(148,163,184,.08)" : "rgba(52,211,153,.10)", color:questDone ? "#94a3b8" : "#34d399", borderRadius:12, padding:"10px 14px", fontWeight:900, cursor:"pointer" }}>
               {questDone ? "Bloque marcado" : "Marcar Blender completado"}
             </button>
@@ -4393,8 +4429,34 @@ function BlenderView() {
         </div>
       </div>
 
+      <div className="g" style={{ padding:22, marginBottom:18, borderColor:selectedExtensionReason ? "rgba(251,191,36,.30)" : "rgba(255,255,255,.07)", background:selectedExtensionReason ? "rgba(251,191,36,.08)" : "rgba(255,255,255,.03)" }}>
+        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontSize:11, color:selectedExtensionReason ? "#fbbf24" : T_COLOR.muted, fontWeight:900, letterSpacing:1.1, textTransform:"uppercase" }}>Compuerta de misión extra</div>
+            <div style={{ color:T_COLOR.text, fontWeight:900, marginTop:5 }}>+{BLENDER_OPTIONAL_EXTENSION_MINUTES} min opcionales</div>
+            <div style={{ color:T_COLOR.subtext, fontSize:13, lineHeight:1.6, marginTop:6, maxWidth:760 }}>
+              La misión extra no se activa sola. Elegí una razón válida solo si tenés energía y una acción concreta; si no, el bloque termina en 60 min.
+            </div>
+          </div>
+          <button onClick={() => setExtensionReasonId("")} style={{ border:"1px solid rgba(255,255,255,.10)", background:"rgba(255,255,255,.04)", color:selectedExtensionReason ? T_COLOR.subtext : "#34d399", borderRadius:12, padding:"9px 12px", fontWeight:900, cursor:"pointer" }}>
+            {selectedExtensionReason ? "Desactivar extra" : "Extra desactivado"}
+          </button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, marginTop:14 }} className="mob-layout-grid">
+          {BLENDER_EXTENSION_REASONS.map(reason => {
+            const on = extensionReasonId === reason.id;
+            return (
+              <button key={reason.id} onClick={() => setExtensionReason(reason.id)} style={{ textAlign:"left", border:on ? "1px solid rgba(251,191,36,.45)" : "1px solid rgba(255,255,255,.08)", background:on ? "rgba(251,191,36,.14)" : "rgba(255,255,255,.035)", color:on ? "#fde68a" : T_COLOR.subtext, borderRadius:14, padding:14, cursor:"pointer" }}>
+                <div style={{ fontWeight:900, color:on ? "#fbbf24" : T_COLOR.text }}>{reason.label}</div>
+                <div style={{ fontSize:12, lineHeight:1.55, marginTop:6 }}>{reason.body}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:14, marginBottom:18 }} className="mob-layout-grid">
-        {plan.tasks.map(task => {
+        {visibleTasks.map(task => {
           const done = completedSet.has(task.id);
           return (
             <div key={task.id} className="g" style={{ padding:18, borderColor:done ? `${task.accent}55` : "rgba(255,255,255,.07)", background:done ? `${task.accent}12` : "rgba(255,255,255,.03)" }}>
