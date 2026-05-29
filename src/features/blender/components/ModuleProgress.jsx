@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { LessonCard } from "./LessonCard.jsx";
 
 export function ModuleProgress({ course, module }) {
@@ -12,7 +12,7 @@ export function ModuleProgress({ course, module }) {
           <p style={bodyStyle}>{module.objective}</p>
         </div>
         <span style={{ border:`1px solid ${course.accent}40`, background:`${course.accent}12`, color:course.accent, borderRadius:999, padding:"8px 11px", fontSize:11, fontWeight:900, display:"inline-flex", alignItems:"center", gap:6 }}>
-          {module.lessons.length} lecciones <ChevronRight size={14}/>
+          {module.lessons.length} lecciones cargadas en este módulo
         </span>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:12, marginTop:18 }} className="mob-layout-grid">

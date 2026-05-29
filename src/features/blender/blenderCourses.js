@@ -140,21 +140,24 @@ export const BLENDER_COURSES = Object.freeze([
             60,
             "Crear un archivo base usable, navegar el viewport sin numpad y guardar evidencia del setup.",
             [
-              "Abrir Blender y crear un archivo nuevo limpio.",
-              "Probar orbit, pan, zoom, gizmo y menú View sin usar numpad.",
-              "Crear una carpeta Blender_Academy con subcarpetas para cursos, previews y biblioteca.",
-              "Guardar el archivo como curso00_archivo_base_v01.blend.",
-              "Tomar una captura del viewport y anotar 3 atajos o controles usados.",
+              "Abrir Blender y crear un archivo nuevo limpio. No empieces modelando todavía.",
+              "Probar orbit, pan y zoom con mouse/trackpad; después mover un cubo con el gizmo sin usar numpad.",
+              "Abrir el menú View y ubicar las vistas Front, Right, Top y Camera para no depender de las teclas numéricas.",
+              "Crear la carpeta Blender_Academy con subcarpetas: 00_Setup, Previews, Biblioteca y Exports.",
+              "Guardar el archivo como curso00_archivo_base_v01.blend dentro de 00_Setup.",
+              "Tomar una captura del viewport y escribir 3 controles que sí te funcionaron en tu laptop.",
+              "Cerrar la lección anotando una próxima acción exacta para la siguiente sesión.",
             ],
-            "Archivo base guardado + captura del viewport + nota de atajos usados.",
+            "Archivo base guardado + captura del viewport + nota de 3 controles usados sin numpad.",
             [
               "Puedo orbitar, mover y hacer zoom sin numpad.",
+              "Sé dónde cambiar vistas desde el menú View sin usar teclado numérico.",
               "El archivo base está guardado con nombre claro.",
-              "Existe una carpeta para previews o capturas.",
+              "Existe una carpeta para previews, biblioteca y exports.",
               "Tengo una captura del viewport.",
               "Anoté la próxima acción exacta.",
             ],
-            "Abrir el archivo base y crear el primer objeto simple con primitivas."
+            "Abrir el archivo base y crear el primer objeto simple con primitivas sin cambiar de curso todavía."
           ),
           lesson(
             "lesson-0-2-workspace-routine",
@@ -196,7 +199,14 @@ export const BLENDER_COURSES = Object.freeze([
             "Lección 1 · Crear un objeto simple con primitivas",
             60,
             "Crear un objeto limpio usando cubo, escala, rotación y material plano.",
-            ["Abrir archivo base.", "Crear forma principal.", "Ajustar proporciones.", "Asignar material básico.", "Guardar versión.", "Sacar preview."],
+            [
+              "Abrir el archivo base del Curso 0 y guardarlo como una versión nueva antes de tocar nada.",
+              "Crear una forma principal con una primitiva simple: cubo, cilindro o plano.",
+              "Usar escala, mover y rotar para lograr una silueta clara sin agregar detalles pequeños.",
+              "Asignar un material plano con color legible.",
+              "Guardar versión con nombre claro dentro del curso correspondiente.",
+              "Sacar preview del objeto desde una vista clara y anotar qué mejorarías después.",
+            ],
             "Objeto simple guardado + preview.",
             ["La silueta se entiende.", "El objeto está limpio.", "Tiene material básico.", "Está guardado con nombre claro.", "Hay preview."],
             "Crear una caja estilizada con proporción y material plano."

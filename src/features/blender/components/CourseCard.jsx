@@ -44,7 +44,7 @@ export function CourseCard({ course }) {
       <p style={{ margin:0, color:"#a7b0c2", fontSize:12, lineHeight:1.6 }}>{course.subtitle}</p>
       <div style={{ marginTop:"auto", display:"flex", gap:8, flexWrap:"wrap" }}>
         <span style={chipStyle}>{course.estimatedSessions} sesiones</span>
-        <span style={chipStyle}>{lessonCount} lecciones</span>
+        <span style={chipStyle}>{lessonCount} lecciones cargadas en este curso</span>
       </div>
       <div style={{ color:course.accent, fontSize:12, fontWeight:850, lineHeight:1.45 }}>{course.goal}</div>
     </article>
