@@ -42,6 +42,8 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
     [selectedExtraReason]
   );
   const checklistPct = Math.round((completedChecklistItems.length / Math.max(lesson.checklist.length, 1)) * 100);
+  const lessonCompleted = questDone || checklistPct === 100;
+  const completedLessonIds = useMemo(() => lessonCompleted ? [lesson.id] : [], [lesson.id, lessonCompleted]);
 
   const toggleChecklist = useCallback((item) => {
     unlockLifeOSAudio();
@@ -184,7 +186,7 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
         </div>
       </section>
 
-      <ModuleProgress course={course} module={module}/>
+      <ModuleProgress course={course} module={module} activeLessonId={lesson.id} completedLessonIds={completedLessonIds}/>
       <BlenderLibraryPanel accent={course.accent}/>
       <BlenderRulesPanel accent={course.accent}/>
     </div>

@@ -2,7 +2,7 @@ import React from "react";
 import { BookOpen } from "lucide-react";
 import { LessonCard } from "./LessonCard.jsx";
 
-export function ModuleProgress({ course, module }) {
+export function ModuleProgress({ course, module, activeLessonId, completedLessonIds = [] }) {
   return (
     <section style={{ ...surfaceStyle, padding:22 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
@@ -16,7 +16,16 @@ export function ModuleProgress({ course, module }) {
         </span>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:12, marginTop:18 }} className="mob-layout-grid">
-        {module.lessons.map(item => <LessonCard key={item.id} lesson={item} accent={course.accent} compact />)}
+        {module.lessons.map(item => (
+          <LessonCard
+            key={item.id}
+            lesson={item}
+            accent={course.accent}
+            compact
+            active={item.id === activeLessonId}
+            completed={completedLessonIds.includes(item.id)}
+          />
+        ))}
       </div>
     </section>
   );
