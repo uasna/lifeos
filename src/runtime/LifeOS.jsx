@@ -3810,6 +3810,20 @@ function RocketLeagueView() {
   const focusRole = useMemo(() => getRocketLeagueFocusRole(dateKey), [dateKey]);
   const nextWeeklyFocusSeconds = useMemo(() => getSecondsUntilNextRocketWeeklyFocus(tickNow), [tickNow]);
 
+  const fireRocketTimerCue = useCallback((task) => {
+    unlockLifeOSAudio();
+    playLifeOSSound("timer");
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => playLifeOSSound("timer"), 180);
+    }
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      try { navigator.vibrate([140, 60, 140]); } catch {}
+    }
+    const id = Date.now();
+    uiDispatch(AC.toastAdd(id, `${task.title}: tiempo objetivo`, `${task.minutes} min completados`));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3000);
+  }, [uiDispatch]);
+
   useEffect(() => {
     if (!activeSubtaskId) return;
     const activeTask = plan.subtasks.find(task => task.id === activeSubtaskId);
@@ -3819,14 +3833,9 @@ function RocketLeagueView() {
     const soundKey = `${current.dateKey}:${current.planId}:${activeSubtaskId}`;
     if (elapsed >= targetSeconds && !targetSoundedRef.current.has(soundKey)) {
       targetSoundedRef.current.add(soundKey);
-      unlockLifeOSAudio();
-      playLifeOSSound("timer");
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([140, 60, 140]);
-      const id = Date.now();
-      uiDispatch(AC.toastAdd(id, `${activeTask.title}: tiempo objetivo`, `${activeTask.minutes} min completados`));
-      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
+      fireRocketTimerCue(activeTask);
     }
-  }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, uiDispatch]);
+  }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, fireRocketTimerCue]);
 
   const progressPct = Math.min(100, Math.round((doneCount / Math.max(requiredRocketTasks.length, 1)) * 100));
   const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
@@ -5453,6 +5462,10 @@ function FocusSessionView() {
       soundedRef.current = true;
       unlockLifeOSAudio();
       playLifeOSSound("timer");
+      if (typeof window !== "undefined") window.setTimeout(() => playLifeOSSound("timer"), 180);
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try { navigator.vibrate([140, 60, 140]); } catch {}
+      }
       uiDispatch(AC.toastAdd(Date.now(), "Tiempo objetivo alcanzado", selectedQuest?.title || "Sesión"));
     }
 
@@ -7077,6 +7090,25 @@ export default function LifeOS() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Audio unlock bridge ───────────────────────────────────────
+  // Mobile/desktop browsers block WebAudio until a real user gesture.
+  // Keep the context unlocked after the first tap/click/key so timer cues can fire later.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const unlock = () => { unlockLifeOSAudio(); };
+    const opts = { passive: true };
+    window.addEventListener("pointerdown", unlock, opts);
+    window.addEventListener("touchstart", unlock, opts);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("click", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("click", unlock);
+    };
+  }, []);
+
   // ── Stable context values ─────────────────────────────────────
   const dataCtxValue = useMemo(() => ({
     persistent, pDispatch,
@@ -7206,7 +7238,7 @@ export default function LifeOS() {
           <aside className="sb">
             <div className="sb-logo">
               <div className="sb-icon"><Zap size={17} color="white"/></div>
-              <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v31.5</div></div>
+              <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v31.11</div></div>
             </div>
 
             <nav style={{ flex:1, overflow:"auto", paddingRight:2 }}>

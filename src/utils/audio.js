@@ -1,6 +1,6 @@
 // ============================================================
-// LifeOS v29 · Audio utility layer
-// Browser-safe helpers. No React and no app state coupling.
+// LifeOS v31.11 · Audio utility layer
+// Browser-safe helpers with explicit user-gesture unlock.
 // ============================================================
 
 export const DEFAULT_SOUND_PREFS = Object.freeze({
@@ -31,6 +31,12 @@ export function persistAudioPrefs(sound) {
 }
 
 let lifeOSAudioCtx = null;
+let lifeOSAudioUnlocked = false;
+let lastSoundAt = 0;
+
+function clampVolume(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0.75));
+}
 
 export function getLifeOSAudioContext() {
   if (typeof window === "undefined") return null;
@@ -40,28 +46,66 @@ export function getLifeOSAudioContext() {
   return lifeOSAudioCtx;
 }
 
-export function unlockLifeOSAudio() {
-  const ctx = getLifeOSAudioContext();
-  if (ctx?.state === "suspended") ctx.resume().catch(() => {});
+function primeLifeOSAudio(ctx) {
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime || 0;
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(440, now);
+    gain.gain.setValueAtTime(0.00001, now);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.03);
+  } catch {}
 }
 
-export function playLifeOSSound(kind = "complete") {
-  const prefs = getStoredAudioPrefs();
-  if (!prefs.enabled) return;
-  if (kind === "menu" && prefs.menu === false) return;
-  if (kind === "timer" && prefs.timer === false) return;
-  if (kind === "mission" && prefs.mission === false) return;
-  if ((kind === "complete" || !["menu", "timer", "mission"].includes(kind)) && prefs.complete === false) return;
-
+export function unlockLifeOSAudio() {
   const ctx = getLifeOSAudioContext();
-  if (!ctx) return;
-  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  if (!ctx) return false;
+
+  const markReady = () => {
+    lifeOSAudioUnlocked = true;
+    primeLifeOSAudio(ctx);
+    return true;
+  };
+
+  if (ctx.state === "running") return markReady();
+
+  try {
+    const resume = ctx.resume?.();
+    if (resume && typeof resume.then === "function") {
+      resume.then(markReady).catch(() => {});
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isLifeOSAudioUnlocked() {
+  const ctx = lifeOSAudioCtx;
+  return Boolean(lifeOSAudioUnlocked && ctx && ctx.state === "running");
+}
+
+function soundAllowed(kind, prefs) {
+  if (!prefs.enabled) return false;
+  if (kind === "menu" && prefs.menu === false) return false;
+  if (kind === "timer" && prefs.timer === false) return false;
+  if (kind === "mission" && prefs.mission === false) return false;
+  if ((kind === "complete" || !["menu", "timer", "mission"].includes(kind)) && prefs.complete === false) return false;
+  return true;
+}
+
+function emitLifeOSSound(ctx, kind, volume) {
+  if (!ctx || ctx.state !== "running") return false;
 
   const now = ctx.currentTime;
-  const volume = Math.max(0, Math.min(1, Number(prefs.volume) || 0.75));
   const patterns = {
     menu: [440, 554.37],
-    timer: [660, 880],
+    timer: [660, 880, 1174.66],
     complete: [523.25, 659.25, 783.99],
     mission: [392, 523.25, 659.25, 987.77],
   };
@@ -70,14 +114,54 @@ export function playLifeOSSound(kind = "complete") {
   notes.forEach((freq, index) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    const start = now + index * (kind === "timer" ? 0.11 : 0.09);
+    const peak = kind === "timer" ? 0.065 : kind === "mission" ? 0.055 : 0.04;
+
     osc.type = kind === "timer" ? "triangle" : "sine";
-    osc.frequency.setValueAtTime(freq, now + index * 0.09);
-    gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-    gain.gain.exponentialRampToValueAtTime((kind === "mission" ? 0.055 : 0.04) * volume, now + index * 0.09 + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.12);
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak * volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + (kind === "timer" ? 0.18 : 0.12));
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.start(now + index * 0.09);
-    osc.stop(now + index * 0.09 + 0.14);
+    osc.start(start);
+    osc.stop(start + (kind === "timer" ? 0.21 : 0.14));
   });
+
+  if ((kind === "timer" || kind === "mission") && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    try { navigator.vibrate(kind === "timer" ? [70, 40, 70] : 80); } catch {}
+  }
+
+  lastSoundAt = Date.now();
+  return true;
+}
+
+export function playLifeOSSound(kind = "complete") {
+  const prefs = getStoredAudioPrefs();
+  if (!soundAllowed(kind, prefs)) return false;
+
+  const ctx = getLifeOSAudioContext();
+  if (!ctx) return false;
+
+  const volume = clampVolume(prefs.volume);
+  const now = Date.now();
+  if (kind !== "menu" && now - lastSoundAt < 220) return false;
+
+  if (ctx.state === "running") {
+    lifeOSAudioUnlocked = true;
+    return emitLifeOSSound(ctx, kind, volume);
+  }
+
+  try {
+    const resume = ctx.resume?.();
+    if (resume && typeof resume.then === "function") {
+      resume.then(() => {
+        lifeOSAudioUnlocked = true;
+        emitLifeOSSound(ctx, kind, volume);
+      }).catch(() => {});
+      return true;
+    }
+  } catch {}
+
+  return false;
 }
