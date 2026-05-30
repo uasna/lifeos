@@ -8,6 +8,7 @@ export const DEFAULT_SOUND_PREFS = Object.freeze({
   menu: true,
   complete: true,
   timer: true,
+  alarm: true,
   mission: true,
   volume: 0.75,
 });
@@ -94,8 +95,9 @@ function soundAllowed(kind, prefs) {
   if (!prefs.enabled) return false;
   if (kind === "menu" && prefs.menu === false) return false;
   if (kind === "timer" && prefs.timer === false) return false;
+  if (kind === "alarm" && (prefs.alarm === false || prefs.timer === false)) return false;
   if (kind === "mission" && prefs.mission === false) return false;
-  if ((kind === "complete" || !["menu", "timer", "mission"].includes(kind)) && prefs.complete === false) return false;
+  if ((kind === "complete" || !["menu", "timer", "alarm", "mission"].includes(kind)) && prefs.complete === false) return false;
   return true;
 }
 
@@ -106,6 +108,7 @@ function emitLifeOSSound(ctx, kind, volume) {
   const patterns = {
     menu: [440, 554.37],
     timer: [660, 880, 1174.66],
+    alarm: [880, 880, 880, 1174.66, 880, 1174.66],
     complete: [523.25, 659.25, 783.99],
     mission: [392, 523.25, 659.25, 987.77],
   };
@@ -114,22 +117,22 @@ function emitLifeOSSound(ctx, kind, volume) {
   notes.forEach((freq, index) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    const start = now + index * (kind === "timer" ? 0.11 : 0.09);
-    const peak = kind === "timer" ? 0.065 : kind === "mission" ? 0.055 : 0.04;
+    const start = now + index * (kind === "alarm" ? 0.16 : kind === "timer" ? 0.11 : 0.09);
+    const peak = kind === "alarm" ? 0.11 : kind === "timer" ? 0.065 : kind === "mission" ? 0.055 : 0.04;
 
-    osc.type = kind === "timer" ? "triangle" : "sine";
+    osc.type = kind === "alarm" ? "square" : kind === "timer" ? "triangle" : "sine";
     osc.frequency.setValueAtTime(freq, start);
     gain.gain.setValueAtTime(0.0001, start);
     gain.gain.exponentialRampToValueAtTime(peak * volume, start + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + (kind === "timer" ? 0.18 : 0.12));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + (kind === "alarm" ? 0.12 : kind === "timer" ? 0.18 : 0.12));
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(start);
-    osc.stop(start + (kind === "timer" ? 0.21 : 0.14));
+    osc.stop(start + (kind === "alarm" ? 0.14 : kind === "timer" ? 0.21 : 0.14));
   });
 
-  if ((kind === "timer" || kind === "mission") && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-    try { navigator.vibrate(kind === "timer" ? [70, 40, 70] : 80); } catch {}
+  if ((kind === "timer" || kind === "alarm" || kind === "mission") && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    try { navigator.vibrate(kind === "alarm" ? [260, 90, 260, 90, 420] : kind === "timer" ? [70, 40, 70] : 80); } catch {}
   }
 
   lastSoundAt = Date.now();
@@ -145,7 +148,7 @@ export function playLifeOSSound(kind = "complete") {
 
   const volume = clampVolume(prefs.volume);
   const now = Date.now();
-  if (kind !== "menu" && now - lastSoundAt < 220) return false;
+  if (kind !== "menu" && kind !== "alarm" && now - lastSoundAt < 220) return false;
 
   if (ctx.state === "running") {
     lifeOSAudioUnlocked = true;

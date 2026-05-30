@@ -36,14 +36,39 @@ export const ROCKET_LEAGUE_RECOVERY_TIPS = Object.freeze([
 
 export const ROCKET_LEAGUE_PACKS = Object.freeze({
   powershots: {
-    name: "Powershots",
+    name: "Powershots · Yeeza",
     code: "7028-5E10-88EF-E83E",
     focus: "pegar fuerte, limpio y con dirección",
   },
   groundShots: {
-    name: "Ground Shots",
+    name: "Ground Shots · Poquito",
     code: "6EB1-79B2-33B8-681C",
-    focus: "tiros básicos consistentes",
+    focus: "tiros básicos consistentes con volumen alto",
+  },
+  mainShootingPair: {
+    name: "2 mapas principales · Yeeza + Poquito",
+    code: "Yeeza 7028-5E10-88EF-E83E · Poquito 6EB1-79B2-33B8-681C",
+    focus: "15 min powershots + 15 min ground shots; potencia, dirección y tiros ganables",
+  },
+  tenShotsToMaster: {
+    name: "10 Shots to Master",
+    code: "8A9B-4843-7039-8611",
+    focus: "precisión y lectura de tiros ganables",
+  },
+  airRollShotsBismo: {
+    name: "Air Roll Shots",
+    code: "B16C-8FDA-D26C-32FD",
+    focus: "ajuste de ángulo con air roll antes del impacto",
+  },
+  shootingConsistency: {
+    name: "Shooting Consistency",
+    code: "4912-A5C9-9A56-55D",
+    focus: "volumen limpio para pegar consistente sin sobrepensar",
+  },
+  shootingComplementaryRotation: {
+    name: "Mapa complementario · rotación shooting",
+    code: "10 Shots 8A9B-4843-7039-8611 · Air Roll B16C-8FDA-D26C-32FD · Consistency 4912-A5C9-9A56-55D",
+    focus: "elegí 1 complemento del día: precisión, air roll shot o consistencia",
   },
   shotsYouShouldntMiss: {
     name: "Shots You Shouldn't Miss",
@@ -780,16 +805,16 @@ const makeReplayNoteTask = (id, instruction = "5 min: revisá mentalmente 1 erro
 );
 
 export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
-  makeRlPlan("cycle-shots-rotation", "Ciclo 1–2 · Shots simples + powershots + rotación básica 2v2", "Consistencia de tiros, powershots, clears y decisiones simples", [
+  makeRlPlan("cycle-shots-rotation", "Ciclo 1–2 · Shooting diario: 2 principales + 1 complementario", "Yeeza powershots, Poquito ground shots y un complemento rotativo para no aburrirse", [
     makeApplicationTask(
-      makeRlPackSubtask("main-powershots-pack-30", ROCKET_LEAGUE_PACKS.powershots, 30, "Training Pack: pegá después del bote, apuntá y priorizá potencia limpia. Usá air roll básico solo para cuadrar el carro antes del impacto; si empezás a girar por girar, repetí.", "#fbbf24"),
-      "Foco principal del ciclo: shots simples + powershots. El air roll aquí es ajuste de ángulo, no una mecánica nueva.",
+      makeRlPackSubtask("main-powershots-pack-30", ROCKET_LEAGUE_PACKS.mainShootingPair, 30, "Bloque principal dividido: 15 min Powershots de Yeeza + 15 min Ground Shots de Poquito. Mismo objetivo: pegar fuerte, limpio y con dirección; no convertirlo en freestyle.", "#fbbf24"),
+      "Foco principal del ciclo: dos mapas base de shooting. Se mantienen juntos en un bloque de 30 min para que el progreso de hoy no se pierda.",
       RL_TRAINING_ROLES.MAIN
     ),
     makeRlBreakSubtask("break-shots-10", 10),
     makeApplicationTask(
-      makeRlPackSubtask("apply-air-roll-shot-angle-20", ROCKET_LEAGUE_PACKS.airRollShots, 20, "Aplicación controlada: ajustá el ángulo del carro con air roll básico antes del contacto. Meta: pegar recto, fuerte y con intención; no air roll estético.", "#e879f9"),
-      "Mismo foco, otro contexto: powershots con ajuste de carro. No cuenta como aprender air roll completo."
+      makeRlPackSubtask("apply-air-roll-shot-angle-20", ROCKET_LEAGUE_PACKS.shootingComplementaryRotation, 20, "Mapa complementario: elegí solo 1 entre 10 Shots to Master, Air Roll Shots o Shooting Consistency. Sirve para variar sin alargar la rutina ni meter otra mecánica pesada.", "#e879f9"),
+      "Complemento controlado del shooting diario: precisión, ajuste con air roll o consistencia. No es obligación hacer los tres."
     ),
     makeApplicationTask(
       {
@@ -801,13 +826,13 @@ export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
       "Fundamento diario que no cuenta como mecánica nueva.",
       RL_TRAINING_ROLES.SUPPORT
     ),
-    makeReplayNoteTask("replay-note-shots-5", "5 min: anotá si fallaste por timing, mala dirección, poco boost o ansiedad al tirar."),
+    makeReplayNoteTask("replay-note-shots-5", "5 min: anotá qué mapa pegó mejor hoy: Yeeza, Poquito o el complementario."),
     makeMentalCloseTask("close-shots-5", "5 min: cerrá con 3 tiros simples perfectos o una nota clara de qué repetir mañana."),
   ], {
     primaryFocus: "shots-rotation",
-    primaryMechanicLabel: "Shots + powershots",
-    supportLabel: "Semanas 1–2: shots simples, powershots y rotación básica 2v2. Air roll solo para ajustar el carro antes del tiro.",
-    masteryNote: "Mejor meter tiros/powershots al 80%. El air roll del ciclo 1 solo alinea el carro; no es otra mecánica a masterizar.",
+    primaryMechanicLabel: "Shooting: 2 principales + 1 complementario",
+    supportLabel: "Semanas 1–2: Freeplay + 2 mapas principales de shooting + descanso + 1 mapa complementario. Air roll solo ajusta el ángulo antes del tiro.",
+    masteryNote: "Mejor meter tiros/powershots al 80%. El complemento da variedad, pero no convierte el día en cuatro mapas obligatorios.",
   }),
 
   makeRlPlan("cycle-ground-dribble", "Ciclo 3–4 · Ground dribble básico", "Carry simple, primer toque útil y posesión", [
@@ -920,12 +945,26 @@ export function getRocketLeagueSubtaskTargetSeconds(planId, subtaskId) {
   return subtask ? Math.max(0, Math.floor(Number(subtask.minutes) || 0) * 60) : 0;
 }
 
+const ROCKET_LEAGUE_TODAY_PROGRESS_PRESET = Object.freeze({
+  dateKey: "2026-05-29",
+  completedSubtaskIds: ["freeplay", "main-powershots-pack-30"],
+  elapsedBySubtask: Object.freeze({
+    freeplay: 10 * 60 + 25,
+    "main-powershots-pack-30": 33 * 60 + 9,
+    "break-shots-10": 7 * 60 + 52,
+  }),
+});
+
 export function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = getRocketLeaguePlanForDate(dateKey).id) {
+  const preset = dateKey === ROCKET_LEAGUE_TODAY_PROGRESS_PRESET.dateKey
+    ? ROCKET_LEAGUE_TODAY_PROGRESS_PRESET
+    : null;
+
   return {
     dateKey,
     planId,
-    completedSubtaskIds: [],
-    elapsedBySubtask: {},
+    completedSubtaskIds: preset ? [...preset.completedSubtaskIds] : [],
+    elapsedBySubtask: preset ? { ...preset.elapsedBySubtask } : {},
     matchCountBySubtask: {},
     mental: {
       moodBefore: null,

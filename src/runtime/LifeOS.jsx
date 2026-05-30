@@ -707,6 +707,7 @@ function createAppSettingsInitial() {
       menu: true,
       complete: true,
       timer: true,
+      alarm: true,
       mission: true,
       volume: 0.75,
     },
@@ -4037,16 +4038,17 @@ function RocketLeagueView() {
 
   const fireRocketTimerCue = useCallback((task) => {
     unlockLifeOSAudio();
-    playLifeOSSound("timer");
+    playLifeOSSound("alarm");
     if (typeof window !== "undefined") {
-      window.setTimeout(() => playLifeOSSound("timer"), 180);
+      window.setTimeout(() => playLifeOSSound("alarm"), 520);
+      window.setTimeout(() => playLifeOSSound("alarm"), 1040);
     }
     if (typeof navigator !== "undefined" && navigator.vibrate) {
-      try { navigator.vibrate([140, 60, 140]); } catch {}
+      try { navigator.vibrate([300, 100, 300, 100, 520]); } catch {}
     }
     const id = Date.now();
     uiDispatch(AC.toastAdd(id, `${task.title}: tiempo objetivo`, `${task.minutes} min completados`));
-    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3000);
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3600);
   }, [uiDispatch]);
 
   useEffect(() => {
@@ -4419,7 +4421,7 @@ ${line}` : line));
               Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].map(pack => (
+              {[ROCKET_LEAGUE_PACKS.mainShootingPair, ROCKET_LEAGUE_PACKS.shootingComplementaryRotation, ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.tenShotsToMaster, ROCKET_LEAGUE_PACKS.airRollShotsBismo, ROCKET_LEAGUE_PACKS.shootingConsistency, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].filter(Boolean).map(pack => (
                 <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
                   <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>
