@@ -410,13 +410,29 @@ export function getNextBlenderCourse(courses = BLENDER_COURSES) {
   return courses.find(item => item.status === "next") || courses[1] || courses[0];
 }
 
-export function getTodayBlenderLesson(courses = BLENDER_COURSES) {
-  const activeCourse = getActiveBlenderCourse(courses);
-  const activeModule = activeCourse.modules?.[0];
-  const activeLesson = activeModule?.lessons?.[0];
+export function getBlenderLessonEntries(courses = BLENDER_COURSES) {
+  return (courses || []).flatMap((courseItem, courseIndex) =>
+    (courseItem.modules || []).flatMap((moduleItem, moduleIndex) =>
+      (moduleItem.lessons || []).map((lessonItem, lessonIndex) => ({
+        course: courseItem,
+        module: moduleItem,
+        lesson: lessonItem,
+        courseIndex,
+        moduleIndex,
+        lessonIndex,
+      }))
+    )
+  );
+}
+
+export function getTodayBlenderLesson(courses = BLENDER_COURSES, completedLessonIds = []) {
+  const completed = new Set(Array.isArray(completedLessonIds) ? completedLessonIds : []);
+  const entries = getBlenderLessonEntries(courses);
+  const currentEntry = entries.find(entry => !completed.has(entry.lesson.id)) || entries[entries.length - 1];
+
   return {
-    course: activeCourse,
-    module: activeModule,
-    lesson: activeLesson,
+    course: currentEntry?.course || getActiveBlenderCourse(courses),
+    module: currentEntry?.module || getActiveBlenderCourse(courses)?.modules?.[0],
+    lesson: currentEntry?.lesson || getActiveBlenderCourse(courses)?.modules?.[0]?.lessons?.[0],
   };
 }

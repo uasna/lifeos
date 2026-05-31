@@ -9,7 +9,7 @@ import {
   getNextBlenderCourse,
   getTodayBlenderLesson,
 } from "./blenderCourses.js";
-import { createBlenderStorageKeys, readJsonArray, readString, writeJsonArray, writeOptionalString } from "./blenderProgress.js";
+import { createBlenderStorageKeys, readCompletedBlenderLessonIds, readJsonArray, readString, writeCompletedBlenderLessonIds, writeJsonArray, writeOptionalString } from "./blenderProgress.js";
 import { CourseCard } from "./components/CourseCard.jsx";
 import { ModuleProgress } from "./components/ModuleProgress.jsx";
 import { TodayLessonPanel } from "./components/TodayLessonPanel.jsx";
@@ -18,9 +18,11 @@ import { BlenderRulesPanel } from "./components/BlenderRulesPanel.jsx";
 import { unlockLifeOSAudio, playLifeOSSound } from "../../utils/audio.js";
 
 export function BlenderAcademyView({ questDone = false, onToggleSession }) {
-  const { course, module, lesson } = useMemo(() => getTodayBlenderLesson(BLENDER_COURSES), []);
+  const [completedLessonIds, setCompletedLessonIds] = useState(() => readCompletedBlenderLessonIds());
+  const initialLessonId = useMemo(() => getTodayBlenderLesson(BLENDER_COURSES, completedLessonIds).lesson?.id, []);
+  const { course, module, lesson } = useMemo(() => getTodayBlenderLesson(BLENDER_COURSES, completedLessonIds), [completedLessonIds]);
   const nextCourse = useMemo(() => getNextBlenderCourse(BLENDER_COURSES), []);
-  const keys = useMemo(() => createBlenderStorageKeys(new Date()), []);
+  const keys = useMemo(() => createBlenderStorageKeys(new Date(), lesson?.id), [lesson?.id]);
 
   const [completedChecklistItems, setCompletedChecklistItems] = useState(() => readJsonArray(keys.checklist));
   const [selectedExtraReason, setSelectedExtraReason] = useState(() => {
@@ -29,8 +31,16 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
   });
 
   useEffect(() => {
+    setCompletedChecklistItems(readJsonArray(keys.checklist));
+  }, [keys.checklist]);
+
+  useEffect(() => {
     writeJsonArray(keys.checklist, completedChecklistItems);
   }, [keys.checklist, completedChecklistItems]);
+
+  useEffect(() => {
+    writeCompletedBlenderLessonIds(completedLessonIds);
+  }, [completedLessonIds]);
 
   useEffect(() => {
     writeOptionalString(keys.extraGate, selectedExtraReason);
@@ -42,8 +52,18 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
     [selectedExtraReason]
   );
   const checklistPct = Math.round((completedChecklistItems.length / Math.max(lesson.checklist.length, 1)) * 100);
-  const lessonCompleted = questDone || checklistPct === 100;
-  const completedLessonIds = useMemo(() => lessonCompleted ? [lesson.id] : [], [lesson.id, lessonCompleted]);
+  const markLessonCompleted = useCallback((lessonId) => {
+    if (!lessonId) return;
+    setCompletedLessonIds(ids => ids.includes(lessonId) ? ids : [...ids, lessonId]);
+  }, []);
+
+  useEffect(() => {
+    if (checklistPct === 100) markLessonCompleted(lesson.id);
+  }, [checklistPct, lesson.id, markLessonCompleted]);
+
+  useEffect(() => {
+    if (questDone && initialLessonId) markLessonCompleted(initialLessonId);
+  }, [questDone, initialLessonId, markLessonCompleted]);
 
   const toggleChecklist = useCallback((item) => {
     unlockLifeOSAudio();

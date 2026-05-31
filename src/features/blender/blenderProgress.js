@@ -1,10 +1,12 @@
 import { getBlenderDateKey } from "./blenderCourses.js";
 
-export function createBlenderStorageKeys(date = new Date()) {
+export function createBlenderStorageKeys(date = new Date(), lessonId = "global") {
   const dateKey = getBlenderDateKey(date);
+  const safeLessonId = String(lessonId || "global").replace(/[^a-zA-Z0-9_-]/g, "-");
   return Object.freeze({
     dateKey,
-    checklist: `lifeos:blender-academy:${dateKey}:checklist`,
+    lessonId: safeLessonId,
+    checklist: `lifeos:blender-academy:${dateKey}:${safeLessonId}:checklist`,
     extraGate: `lifeos:blender-academy:${dateKey}:extraGate`,
   });
 }
@@ -28,6 +30,33 @@ export function writeJsonArray(key, value) {
   } catch {
     return false;
   }
+}
+
+const BLENDER_COMPLETED_LESSONS_KEY = "lifeos:blender-academy:completed-lessons:v1";
+
+function readLegacyCompletedLessonIds() {
+  if (typeof window === "undefined") return [];
+  try {
+    const completed = [];
+    const legacyChecklistPattern = /^lifeos:blender-academy:\d{4}-\d{2}-\d{2}:checklist$/;
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !legacyChecklistPattern.test(key)) continue;
+      const items = readJsonArray(key);
+      if (items.length >= 5) completed.push("lesson-0-1-base-file");
+    }
+    return completed;
+  } catch {
+    return [];
+  }
+}
+
+export function readCompletedBlenderLessonIds() {
+  return Array.from(new Set([...readJsonArray(BLENDER_COMPLETED_LESSONS_KEY), ...readLegacyCompletedLessonIds()]));
+}
+
+export function writeCompletedBlenderLessonIds(value) {
+  return writeJsonArray(BLENDER_COMPLETED_LESSONS_KEY, Array.from(new Set(Array.isArray(value) ? value.filter(Boolean) : [])));
 }
 
 export function readString(key) {
