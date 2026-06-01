@@ -3021,6 +3021,49 @@ const CSS = `
 .rl-task-card{padding:16px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075);transition:all .22s ease}
 .rl-task-card:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.14)}
 	.rl-sticky-timer{position:sticky;top:12px;z-index:20;backdrop-filter:blur(22px)}
+.rl-view-shell{position:relative}
+.rl-cockpit-hero{position:relative;overflow:hidden;margin-bottom:18px;padding:24px;border-radius:26px;border:1px solid rgba(34,211,238,.18);background:linear-gradient(135deg,rgba(10,17,31,.94),rgba(15,23,42,.72) 52%,rgba(8,13,27,.94));box-shadow:0 22px 80px rgba(0,0,0,.32);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:end}
+.rl-hero-glow{position:absolute;inset:-120px -80px auto auto;width:360px;height:260px;background:radial-gradient(circle,rgba(34,211,238,.22),transparent 62%);filter:blur(2px);pointer-events:none}
+.rl-hero-copy,.rl-hero-board{position:relative;z-index:1}
+.rl-hero-title{margin:6px 0 8px;font-family:'Sora','Manrope',system-ui,sans-serif;font-size:clamp(28px,4vw,54px);line-height:.94;font-weight:950;letter-spacing:-.055em;color:#f8fafc;text-wrap:balance}
+.rl-hero-sub{max-width:720px;margin:0 0 16px;color:#a8b7cd;font-size:14px;line-height:1.55}
+.rl-kicker{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#22d3ee;font-weight:950}
+.rl-hero-board{padding:16px;border-radius:20px;background:rgba(2,6,23,.42);border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(18px)}
+.rl-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;border:1px solid rgba(34,211,238,.20);background:rgba(34,211,238,.08);color:#67e8f9;font-size:11px;font-weight:900;white-space:nowrap}
+.rl-left-flow,.rl-side-stack{display:flex;flex-direction:column;gap:14px}
+.rl-now-card{position:relative;overflow:hidden;padding:22px;border-radius:24px;background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 60px rgba(0,0,0,.25)}
+.rl-now-bg{position:absolute;inset:0;opacity:.9;pointer-events:none}
+.rl-now-top{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:start}
+.rl-now-title{margin:5px 0 8px;font-family:'Sora','Manrope',system-ui,sans-serif;font-size:clamp(24px,3.4vw,42px);line-height:1;letter-spacing:-.045em;color:#f8fafc}
+.rl-now-copy{margin:0;color:#a8b7cd;line-height:1.5;font-size:13px;max-width:760px}
+.rl-now-clock{font-family:'Sora','Manrope',system-ui,sans-serif;font-size:clamp(34px,5vw,64px);font-weight:950;line-height:.9;font-variant-numeric:tabular-nums;text-shadow:0 0 30px currentColor}
+.rl-now-meta{position:relative;z-index:1;display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 12px}
+.rl-now-meta span{border:1px solid rgba(255,255,255,.09);background:rgba(2,6,23,.32);border-radius:999px;padding:5px 9px;color:#cbd5e1;font-size:11px;font-weight:850}
+.rl-now-actions{position:relative;z-index:1;display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.rl-action-primary,.rl-action-secondary{min-height:44px;border-radius:14px;padding:0 16px;font-weight:950;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.rl-action-primary{border:1px solid rgba(34,211,238,.36);background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(34,211,238,.08));color:#67e8f9}
+.rl-action-secondary{border:1px solid rgba(52,211,153,.30);background:rgba(52,211,153,.09);color:#6ee7b7}
+.rl-action-primary:hover,.rl-action-secondary:hover{transform:translateY(-1px)}
+.rl-playbook-card{padding:18px;border-radius:24px;background:rgba(255,255,255,.032);border:1px solid rgba(255,255,255,.08)}
+.rl-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}
+.rl-section-title{margin:4px 0 0;font-family:'Sora','Manrope',system-ui,sans-serif;font-size:22px;line-height:1.05;letter-spacing:-.035em;color:#f8fafc}
+.rl-plan-note{padding:12px 14px;border-radius:16px;background:rgba(251,191,36,.075);border:1px solid rgba(251,191,36,.16);color:#fde68a;font-size:12px;line-height:1.55;margin-bottom:14px}
+.rl-training-lane{display:grid;gap:10px}
+.rl-playbook-row{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:12px;align-items:start;padding:16px;border-radius:18px;background:linear-gradient(135deg,rgba(15,23,42,.70),rgba(15,23,42,.36));border:1px solid rgba(255,255,255,.075);transition:transform .22s ease,border-color .22s ease,background .22s ease}
+.rl-playbook-row.on{background:linear-gradient(135deg,rgba(34,211,238,.105),rgba(15,23,42,.46))}
+.rl-playbook-row.done{opacity:.78}
+.rl-playbook-row:hover{transform:translateY(-1px)}
+.rl-row-index,.rl-row-icon{width:38px;height:38px;border-radius:13px;border:1px solid;display:flex;align-items:center;justify-content:center;font-weight:950;flex-shrink:0}
+.rl-row-main h3{margin:0;color:#f8fafc;font-size:15px;line-height:1.2;letter-spacing:-.01em}
+.rl-row-main p{margin:6px 0 0;color:#9ca8ba;font-size:12px;line-height:1.45}
+.rl-row-title-line{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.rl-row-title-line span{font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:950;white-space:nowrap}
+.rl-row-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.rl-row-tags span{font-size:10.5px;color:#a8b7cd;border:1px solid rgba(255,255,255,.075);background:rgba(255,255,255,.035);border-radius:999px;padding:4px 7px;font-weight:800}
+.rl-row-coach{margin-top:9px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);font-size:11.2px;line-height:1.45}
+.rl-row-actions{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.rl-row-actions button{width:40px;height:40px;border-radius:13px;border:1px solid;background:rgba(255,255,255,.035);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease}
+.rl-row-actions button:hover{transform:translateY(-1px)}
 .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,10,.98);border-top:1px solid rgba(255,255,255,.07);padding:6px 8px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(28px);animation:mobNavIn .32s cubic-bezier(.34,1.56,.64,1);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .mob-nav::-webkit-scrollbar{display:none}
 .mob-nav-item{flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 5px;border-radius:11px;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);color:#4b5563;position:relative;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -3069,6 +3112,14 @@ const CSS = `
   .rf-main-grid{grid-template-columns:1fr}
   .profile-main-grid{grid-template-columns:1fr}
   .rl-main-grid{grid-template-columns:1fr}
+  .rl-cockpit-hero{grid-template-columns:1fr;padding:18px;border-radius:22px}
+  .rl-hero-board{max-width:none}
+  .rl-now-top{grid-template-columns:1fr}
+  .rl-now-clock{font-size:44px}
+  .rl-playbook-row{grid-template-columns:auto minmax(0,1fr);gap:10px}
+  .rl-row-index{display:none}
+  .rl-row-actions{grid-column:1 / -1;flex-direction:row}
+  .rl-row-actions button{flex:1;width:auto}
   .wardrobe-grid{grid-template-columns:1fr}
   .wardrobe-days{grid-template-columns:1fr}
 	  .rl-sticky-timer{position:relative;top:auto}
@@ -4305,6 +4356,19 @@ function RocketLeagueView() {
   const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
   const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
   const speedflipDarRecommended = plan.subtasks.some(task => task.speedflipDar || String(task.id).includes("speedflip") || String(task.title).toLowerCase().includes("speedflip"));
+  const spotlightTask = activeTask || nextIncompleteTask;
+  const spotlightIsMatchTask = spotlightTask ? (spotlightTask.type === RL_SUBTASK_TYPES.MATCHES || spotlightTask.noTimer) : false;
+  const spotlightElapsed = spotlightTask && !spotlightIsMatchTask ? getElapsedSeconds(spotlightTask.id) : totalElapsedSeconds;
+  const spotlightTargetSeconds = spotlightTask && !spotlightIsMatchTask ? Math.max(1, spotlightTask.minutes * 60) : Math.max(1, totalTargetSeconds);
+  const spotlightPct = spotlightTask
+    ? spotlightIsMatchTask
+      ? Math.min(100, Math.round((getMatchCount(spotlightTask.id) / Math.max(1, Math.floor(Number(spotlightTask.targetCount) || 1))) * 100))
+      : Math.min(100, Math.round((spotlightElapsed / spotlightTargetSeconds) * 100))
+    : progressPct;
+  const spotlightAccent = spotlightTask?.accent || "#22d3ee";
+  const planRequiredCount = requiredRocketTasks.length;
+  const planDoneLabel = `${doneCount}/${planRequiredCount}`;
+
 
   const markTilted = useCallback(() => {
     unlockLifeOSAudio();
@@ -4335,177 +4399,115 @@ ${line}` : line));
   }, [activeTask, nextIncompleteTask, toggleSubtask]);
 
   return (
-    <div style={{ animation:"sldIn .3s ease" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", marginBottom:18, flexWrap:"wrap" }}>
-        <div>
-          <div style={S.ptitle}>Rocket League Training</div>
-          <div style={S.psub}>90 min · ciclos de 2 semanas · 1 mecánica nueva a la vez · Training Packs + Freeplay</div>
+    <div className="rl-view-shell" style={{ animation:"sldIn .3s ease" }}>
+      <section className="rl-cockpit-hero">
+        <div className="rl-hero-glow" />
+        <div className="rl-hero-copy">
+          <div className="rl-kicker">Rocket League Playbook</div>
+          <h1 className="rl-hero-title">Sesión de shooting · 90 min</h1>
+          <p className="rl-hero-sub">2 mapas principales + 1 complementario. Entrená fuerte, claro y sin convertir la sesión en ranked frío.</p>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
-              <span key={chip} style={{ ...S.chipBase, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", color:"#22d3ee" }}>{chip}</span>
+              <span key={chip} className="rl-pill">{chip}</span>
             ))}
           </div>
         </div>
-        <div className="g" style={{ padding:14, minWidth:220 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:800, textTransform:"uppercase", letterSpacing:.8 }}>Misión padre</span>
-            <span style={{ fontSize:11, color:missionStatus.color, fontWeight:800 }}>{missionStatus.label}</span>
+        <div className="rl-hero-board">
+          <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", marginBottom:12 }}>
+            <span style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900, textTransform:"uppercase", letterSpacing:1.2 }}>Misión padre</span>
+            <span style={{ fontSize:11, color:missionStatus.color, fontWeight:900 }}>{missionStatus.label}</span>
           </div>
-          <ProgresoBar pct={progressPct} gradient="linear-gradient(90deg,#22d3ee,#a78bfa)" height={7}/>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:T_COLOR.muted, marginTop:8 }}>
-            <span>{doneCount}/{plan.subtasks.length} submisiones</span>
-            <span>{formatSeconds(totalElapsedSeconds)} / {formatSeconds(totalTargetSeconds)}</span>
+          <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:950, color:T_COLOR.text, lineHeight:1 }}>{planDoneLabel}</div>
+          <div style={{ fontSize:11.5, color:T_COLOR.muted, margin:"4px 0 12px" }}>bloques obligatorios listos</div>
+          <ProgresoBar pct={progressPct} gradient="linear-gradient(90deg,#22d3ee,#fbbf24,#34d399)" height={8}/>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10.5, color:T_COLOR.muted, marginTop:9 }}>
+            <span>{formatSeconds(totalElapsedSeconds)} entrenados</span>
+            <span>{progressPct}%</span>
           </div>
         </div>
-      </div>
+      </section>
 
       <div className="rl-main-grid">
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div className="g" style={{ padding:18, borderColor:"rgba(34,211,238,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-              <div style={{ width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(34,211,238,.12)", color:"#22d3ee" }}><Gamepad2 size={19}/></div>
+        <div className="rl-left-flow">
+          <section className="rl-now-card" style={{ borderColor:`${spotlightAccent}38` }}>
+            <div className="rl-now-bg" style={{ background:`radial-gradient(circle at 18% 0%, ${spotlightAccent}24, transparent 42%)` }} />
+            <div className="rl-now-top">
               <div style={{ minWidth:0 }}>
-                <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:800, color:T_COLOR.text }}>{plan.title}</div>
-                <div style={{ fontSize:12, color:T_COLOR.muted }}>{plan.focus}</div>
-                <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:8 }}>
-                  <span style={{ fontSize:10.5, fontWeight:900, color:weeklyFocus.accent, background:`${weeklyFocus.accent}12`, border:`1px solid ${weeklyFocus.accent}24`, borderRadius:999, padding:"4px 8px" }}>Ciclo actual: {weeklyFocus.short}</span>
-                  <span style={{ fontSize:10.5, fontWeight:900, color:focusRole.type === "focus" ? "#34d399" : "#fbbf24", background:focusRole.type === "focus" ? "rgba(52,211,153,.08)" : "rgba(251,191,36,.08)", border:focusRole.type === "focus" ? "1px solid rgba(52,211,153,.16)" : "1px solid rgba(251,191,36,.16)", borderRadius:999, padding:"4px 8px" }}>{focusRole.label}</span>
-                </div>
+                <div className="rl-kicker" style={{ color:spotlightAccent }}>{activeTask ? "Bloque activo" : "Ahora toca"}</div>
+                <h2 className="rl-now-title">{spotlightTask?.title || "Entrenamiento completo"}</h2>
+                <p className="rl-now-copy">{spotlightTask?.instruction || "Cerrá con resumen mental y guardá el progreso del día."}</p>
+              </div>
+              <div className="rl-now-clock" style={{ color:spotlightAccent }}>
+                {spotlightTask && !spotlightIsMatchTask ? formatSeconds(getElapsedSeconds(spotlightTask.id)) : formatSeconds(totalElapsedSeconds)}
               </div>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }} className="mob-layout-grid">
-              <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Duración</div>
-                <div style={{ fontSize:20, fontWeight:900, color:T_COLOR.text }}>{plan.minutes} min</div>
-              </div>
-              <div style={{ padding:12, borderRadius:12, background:`${weeklyFocus.accent}10`, border:`1px solid ${weeklyFocus.accent}22` }}>
-                <div style={{ fontSize:10, color:weeklyFocus.accent, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Ciclo</div>
-                <div style={{ fontSize:13, fontWeight:900, color:T_COLOR.text, lineHeight:1.25 }}>{weeklyFocus.short}</div>
-                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
-              </div>
-              <div style={{ padding:12, borderRadius:12, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Tiempo</div>
-                <div style={{ fontSize:20, fontWeight:900, color:"#22d3ee" }}>{formatSeconds(totalElapsedSeconds)}</div>
-              </div>
-              <div style={{ padding:12, borderRadius:12, background:"rgba(251,191,36,.075)", border:"1px solid rgba(251,191,36,.18)" }}>
-                <div style={{ fontSize:10, color:"#fbbf24", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Regla</div>
-                <div style={{ fontSize:12, fontWeight:800, color:T_COLOR.text, lineHeight:1.35 }}>1 mecánica nueva</div>
-              </div>
-              <div style={{ padding:12, borderRadius:12, background:"rgba(167,139,250,.075)", border:"1px solid rgba(167,139,250,.18)" }}>
-                <div style={{ fontSize:10, color:"#c4b5fd", textTransform:"uppercase", fontWeight:800, letterSpacing:.8 }}>Próximo ciclo</div>
-                <div style={{ fontSize:18, fontWeight:900, color:"#c4b5fd", fontVariantNumeric:"tabular-nums" }}>{formatCountdownSeconds(nextWeeklyFocusSeconds)}</div>
-                <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Plan diario: {tomorrowPlan.title}</div>
-              </div>
+            <div className="rl-now-meta">
+              <span>{spotlightTask ? getRocketLeagueTaskRole(spotlightTask, plan) : "Cierre"}</span>
+              <span>{spotlightTask && !spotlightIsMatchTask ? `objetivo ${spotlightTask.minutes}:00` : `${doneCount}/${planRequiredCount} bloques`}</span>
+              <span>{plan.primaryMechanicLabel || weeklyFocus.label}</span>
             </div>
-            <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(248,113,113,.07)", border:"1px solid rgba(248,113,113,.18)", color:"#fca5a5", fontSize:12, fontWeight:700 }}>
-              Roadmap por ciclos: el foco actual es <b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.label}</b>. {plan.supportLabel || "90 min: freeplay, foco principal, descanso, aplicación, fundamentos, replay y cierre."}
+            <ProgresoBar pct={spotlightPct} gradient={`linear-gradient(90deg,${spotlightAccent}88,${spotlightAccent})`} height={10}/>
+            <div className="rl-now-actions">
+              <button onClick={activeTask ? () => toggleTimer(activeTask.id) : startNextBlock} disabled={!activeTask && !nextIncompleteTask} className="rl-action-primary" style={{ opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>
+                {activeTask ? <Pause size={17}/> : <Play size={17}/>} {activeTask ? "Pausar bloque" : "Iniciar siguiente"}
+              </button>
+              <button onClick={completeCurrentOrNext} disabled={!activeTask && !nextIncompleteTask} className="rl-action-secondary" style={{ opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>
+                <CheckCircle2 size={17}/> Completar bloque
+              </button>
             </div>
-            <div style={{ marginTop:10, padding:12, borderRadius:12, background:"rgba(52,211,153,.06)", border:"1px solid rgba(52,211,153,.15)", color:"#bbf7d0", fontSize:11.8, lineHeight:1.55 }}>
-              <b style={{ color:"#34d399" }}>Lectura correcta:</b> una mecánica nueva por ciclo de 2 semanas. Recoveries, boost management, no double commit, anti-tilt y replay note se mantienen como fundamentos diarios.
-            </div>
-          </div>
+          </section>
 
-          <div className="g rl-sticky-timer" style={{ padding:16, borderColor:activeTask ? "rgba(34,211,238,.32)" : "rgba(255,255,255,.08)", background:activeTask ? "rgba(34,211,238,.055)" : "rgba(255,255,255,.025)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", flexWrap:"wrap" }}>
-              <div style={{ minWidth:0, flex:1 }}>
-                <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>{activeTask ? "Bloque activo" : "Siguiente bloque"}</div>
-                <div style={{ fontFamily:T_FONT.display, fontSize:18, color:T_COLOR.text, fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{activeTask?.title || nextIncompleteTask?.title || "Entrenamiento completo"}</div>
-                <div style={{ fontSize:11.5, color:T_COLOR.muted }}>{activeTask ? `${formatSeconds(getElapsedSeconds(activeTask.id))} / ${activeTask.minutes}:00` : nextIncompleteTask ? "Tocá iniciar para seguir sin perderte" : "Revisá el resumen final"}</div>
+          <section className="rl-playbook-card">
+            <div className="rl-section-head">
+              <div>
+                <div className="rl-kicker">Plan de hoy</div>
+                <h2 className="rl-section-title">Cabina de entrenamiento</h2>
               </div>
-              <div style={{ fontFamily:T_FONT.display, fontSize:32, fontWeight:900, color:activeTask ? "#22d3ee" : T_COLOR.text, fontVariantNumeric:"tabular-nums" }}>{activeTask ? formatSeconds(getElapsedSeconds(activeTask.id)) : formatSeconds(totalElapsedSeconds)}</div>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                <button onClick={activeTask ? () => toggleTimer(activeTask.id) : startNextBlock} disabled={!activeTask && !nextIncompleteTask} style={{ border:"1px solid rgba(34,211,238,.28)", background:"rgba(34,211,238,.10)", color:"#22d3ee", borderRadius:11, padding:"9px 12px", fontWeight:900, cursor:"pointer", opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>{activeTask ? "Pausar" : "Iniciar siguiente"}</button>
-                <button onClick={completeCurrentOrNext} disabled={!activeTask && !nextIncompleteTask} style={{ border:"1px solid rgba(52,211,153,.25)", background:"rgba(52,211,153,.09)", color:"#34d399", borderRadius:11, padding:"9px 12px", fontWeight:900, cursor:"pointer", opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>Completar bloque</button>
-              </div>
+              <span className="rl-pill" style={{ color:weeklyFocus.accent, borderColor:`${weeklyFocus.accent}35`, background:`${weeklyFocus.accent}12` }}>{weeklyFocus.short}</span>
             </div>
-          </div>
-
-          <div className="rl-task-grid">
-            {plan.subtasks.map((task, index) => {
-              const done = completedSet.has(task.id);
-              const active = activeSubtaskId === task.id;
-              const elapsed = getElapsedSeconds(task.id);
-              const isMatchTask = task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer;
-              const matchCount = isMatchTask ? getMatchCount(task.id) : 0;
-              const targetCount = Math.max(1, Math.floor(Number(task.targetCount) || 1));
-              const target = task.minutes * 60;
-              const pct = isMatchTask
-                ? Math.min(100, Math.round((matchCount / targetCount) * 100))
-                : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
-              const over = !isMatchTask && elapsed > target;
-              const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : (task.type === RL_SUBTASK_TYPES.SPEEDFLIP || task.type === RL_SUBTASK_TYPES.SPEEDFLIP_DAR) ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
-              const taskRole = getRocketLeagueTaskRole(task, plan);
-              const taskRoleStyle = getRocketLeagueRoleBadgeStyle(taskRole, task.accent);
-              return (
-                <div key={task.id} className="rl-task-card" style={{ opacity: done ? .72 : 1, borderColor: done ? `${task.accent}35` : "rgba(255,255,255,.075)" }}>
-                  <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
-                    <div style={{ width:40, height:40, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, background:`${task.accent}14`, color:task.accent, border:`1px solid ${task.accent}24` }}>
-                      <Icon size={18}/>
-                    </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
-                        <span style={{ fontSize:10, fontWeight:900, color:task.accent, letterSpacing:1 }}>#{index + 1}</span>
-                        <span style={{ fontSize:13.5, fontWeight:800, color:T_COLOR.text }}>{task.title}</span>
-                        <span style={{ fontSize:10, fontWeight:800, color:T_COLOR.muted, border:"1px solid rgba(255,255,255,.08)", borderRadius:99, padding:"2px 7px" }}>{task.type}</span>
-                        <span style={{ fontSize:10, fontWeight:900, ...taskRoleStyle, borderRadius:99, padding:"2px 7px" }}>{taskRole}</span>
-                      </div>
-                      <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>{task.instruction}</div>
-                      {task.roleReason && (
-                        <div style={{ marginTop:7, fontSize:10.8, color:taskRole === "Foco principal" ? "#fde68a" : "#bbf7d0", lineHeight:1.45, background:taskRole === "Foco principal" ? "rgba(251,191,36,.055)" : "rgba(52,211,153,.045)", border:taskRole === "Foco principal" ? "1px solid rgba(251,191,36,.12)" : "1px solid rgba(52,211,153,.10)", borderRadius:9, padding:"7px 8px" }}>
-                          {task.roleReason}
-                        </div>
-                      )}
-                      {task.pack && (
-                        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
-                          <span style={{ fontSize:11, color:"#22d3ee", fontWeight:900, background:"rgba(34,211,238,.09)", border:"1px solid rgba(34,211,238,.18)", borderRadius:9, padding:"4px 8px" }}>Código: {task.pack.code}</span>
-                          <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.pack.focus}</span>
-                        </div>
-                      )}
-                      {task.workshop && (
-                        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginTop:9 }}>
-                          <span style={{ fontSize:11, color:"#38bdf8", fontWeight:900, background:"rgba(56,189,248,.09)", border:"1px solid rgba(56,189,248,.18)", borderRadius:9, padding:"4px 8px" }}>Workshop normal: {task.workshop.name}</span>
-                          <span style={{ fontSize:11, color:"#34d399", fontWeight:900, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.16)", borderRadius:9, padding:"4px 8px" }}>Epic safe · sin modos extra</span>
-                          <span style={{ fontSize:11, color:T_COLOR.muted, fontWeight:700, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)", borderRadius:9, padding:"4px 8px" }}>{task.workshop.focus}</span>
-                          <span style={{ fontSize:10.5, color:T_COLOR.muted, fontWeight:700, width:"100%" }}>{task.workshop.howToUse}</span>
-                        </div>
-                      )}
-                      <div style={{ marginTop:10 }}>
+            <div className="rl-plan-note"><b>Lectura rápida:</b> Freeplay para entrar caliente, 2 mapas principales de shooting, descanso real y 1 mapa complementario. Una mecánica nueva por ciclo; no metas ranked frío.</div>
+            <div className="rl-training-lane">
+              {plan.subtasks.map((task, index) => {
+                const done = completedSet.has(task.id);
+                const active = activeSubtaskId === task.id;
+                const elapsed = getElapsedSeconds(task.id);
+                const isMatchTask = task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer;
+                const currentMatchCount = isMatchTask ? getMatchCount(task.id) : 0;
+                const targetCount = Math.max(1, Math.floor(Number(task.targetCount) || 1));
+                const target = task.minutes * 60;
+                const pct = isMatchTask ? Math.min(100, Math.round((currentMatchCount / targetCount) * 100)) : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
+                const over = !isMatchTask && elapsed > target;
+                const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : (task.type === RL_SUBTASK_TYPES.SPEEDFLIP || task.type === RL_SUBTASK_TYPES.SPEEDFLIP_DAR) ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
+                const taskRole = getRocketLeagueTaskRole(task, plan);
+                const status = done ? "Listo" : active ? "En curso" : "Pendiente";
+                return (
+                  <article key={task.id} className={`rl-playbook-row ${active ? "on" : ""} ${done ? "done" : ""}`} style={{ borderColor:active ? `${task.accent}55` : done ? `${task.accent}28` : "rgba(255,255,255,.075)" }}>
+                    <div className="rl-row-index" style={{ color:task.accent, borderColor:`${task.accent}30`, background:`${task.accent}12` }}>{String(index + 1).padStart(2,"0")}</div>
+                    <div className="rl-row-icon" style={{ color:task.accent, background:`${task.accent}12`, borderColor:`${task.accent}26` }}><Icon size={18}/></div>
+                    <div className="rl-row-main">
+                      <div className="rl-row-title-line"><h3>{task.title}</h3><span style={{ color:done ? "#34d399" : active ? task.accent : T_COLOR.muted }}>{status}</span></div>
+                      <p>{task.instruction}</p>
+                      <div className="rl-row-tags"><span>{taskRole}</span><span>{task.type}</span>{task.pack && <span>Código: {task.pack.code}</span>}{task.workshop && <span>{task.workshop.name}</span>}</div>
+                      {task.roleReason && <div className="rl-row-coach" style={{ color:taskRole === "Foco principal" ? "#fde68a" : "#bbf7d0" }}>{task.roleReason}</div>}
+                      <div style={{ marginTop:12 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:over ? "#fbbf24" : T_COLOR.muted, marginBottom:6 }}>
-                          {isMatchTask ? (
-                            <>
-                              <span><Sword size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {matchCount}/{targetCount} partidas</span>
-                              <span>sin cronómetro</span>
-                            </>
-                          ) : (
-                            <>
-                              <span><Timer size={11} style={{ verticalAlign:"-2px", marginRight:4 }}/> {formatSeconds(elapsed)}</span>
-                              <span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span>
-                            </>
-                          )}
+                          {isMatchTask ? (<><span>{currentMatchCount}/{targetCount} partidas</span><span>sin cronómetro</span></>) : (<><span>{formatSeconds(elapsed)}</span><span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span></>)}
                         </div>
                         <ProgresoBar pct={pct} gradient={over ? "linear-gradient(90deg,#fbbf24,#fb923c)" : `linear-gradient(90deg,${task.accent}88,${task.accent})`} height={6}/>
                       </div>
                     </div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:8, flexShrink:0 }}>
-                      <button
-                        onClick={() => isMatchTask ? updateMatchProgress(task, 1) : toggleTimer(task.id)}
-                        style={{ width:38, height:38, borderRadius:11, border:`1px solid ${active || isMatchTask ? task.accent : "rgba(255,255,255,.1)"}`, background:active || isMatchTask ? `${task.accent}18` : "rgba(255,255,255,.04)", color:active || isMatchTask ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
-                        title={isMatchTask ? "+1 partida" : active ? "Pausar" : "Iniciar"}
-                      >
-                        {isMatchTask ? <Plus size={16}/> : active ? <Pause size={16}/> : <Play size={16}/>} 
-                      </button>
-                      <button onClick={() => toggleSubtask(task.id)} style={{ width:38, height:38, borderRadius:11, border:`1px solid ${done ? task.accent : "rgba(255,255,255,.1)"}`, background:done ? `${task.accent}18` : "rgba(255,255,255,.04)", color:done ? task.accent : T_COLOR.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={done ? "Desmarcar" : "Completar"}>
-                        {done ? <CheckCircle2 size={17}/> : <Circle size={17}/>} 
-                      </button>
+                    <div className="rl-row-actions">
+                      <button onClick={() => isMatchTask ? updateMatchProgress(task, 1) : toggleTimer(task.id)} style={{ borderColor:active || isMatchTask ? `${task.accent}70` : "rgba(255,255,255,.10)", color:active || isMatchTask ? task.accent : T_COLOR.muted, background:active || isMatchTask ? `${task.accent}14` : "rgba(255,255,255,.035)" }} title={isMatchTask ? "+1 partida" : active ? "Pausar" : "Iniciar"}>{isMatchTask ? <Plus size={16}/> : active ? <Pause size={16}/> : <Play size={16}/>}</button>
+                      <button onClick={() => toggleSubtask(task.id)} style={{ borderColor:done ? `${task.accent}70` : "rgba(255,255,255,.10)", color:done ? task.accent : T_COLOR.muted, background:done ? `${task.accent}14` : "rgba(255,255,255,.035)" }} title={done ? "Desmarcar" : "Completar"}>{done ? <CheckCircle2 size={17}/> : <Circle size={17}/>}</button>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        <div className="rl-side-stack">
           <div className="g" style={{ padding:18 }}>
             <div style={S.stitle}>Cronómetro</div>
             <div style={{ fontFamily:T_FONT.display, fontSize:38, fontWeight:900, color:activeSubtaskId ? "#22d3ee" : T_COLOR.text, lineHeight:1 }}>{formatSeconds(totalElapsedSeconds)}</div>
