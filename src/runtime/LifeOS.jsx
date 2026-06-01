@@ -448,32 +448,128 @@ function getWardrobeOutfitSignature(items = []) {
   return items.map(item => `${item.type}:${item.id}`).join("|");
 }
 
+const WARDROBE_SCHOOL_DAY_COUNT = 5;
+
+function getWardrobeHistory(wardrobe = createWardrobeInitial()) {
+  return Array.isArray(wardrobe?.history) ? wardrobe.history : [];
+}
+
+function getWardrobeHistoryItems(entries = [], type = "") {
+  return entries.flatMap((entry) => Array.isArray(entry?.items) ? entry.items : []).filter((item) => item?.type === type);
+}
+
+function getWardrobePreparedDayIndices(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey()) {
+  const prepared = new Set();
+  getWardrobeHistory(wardrobe).forEach((entry) => {
+    if (entry?.weekKey !== weekKey || entry?.action !== "ready") return;
+    const dayIdx = Number.isInteger(entry.targetDayIdx) ? entry.targetDayIdx : Number.isInteger(entry.dayIndex) ? entry.dayIndex : -1;
+    if (dayIdx >= 0 && dayIdx < WARDROBE_SCHOOL_DAY_COUNT) prepared.add(dayIdx);
+  });
+  return prepared;
+}
+
+function getWardrobeDayIndexFromDate(date = new Date()) {
+  return (date.getDay() + 6) % 7;
+}
+
+function getNextWardrobeSchoolDate(fromDate = new Date()) {
+  const next = new Date(fromDate);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() + 1);
+  let guard = 0;
+  while (getWardrobeDayIndexFromDate(next) >= WARDROBE_SCHOOL_DAY_COUNT && guard < 8) {
+    next.setDate(next.getDate() + 1);
+    guard += 1;
+  }
+  return next;
+}
+
+function pickWardrobeItemAvoiding(pool = [], seed = "wardrobe", opts = {}) {
+  const bannedIds = new Set((opts.bannedIds || []).filter(Boolean).map(String));
+  const bannedColors = new Set((opts.bannedColors || []).filter(Boolean).map((c) => String(c).toLowerCase()));
+  const preferFavorite = Boolean(opts.preferFavorite);
+  const normalized = Array.isArray(pool) ? pool.filter(Boolean) : [];
+  const stages = [
+    normalized.filter((item) => !bannedIds.has(String(item.id)) && !bannedColors.has(String(item.color || "").toLowerCase())),
+    normalized.filter((item) => !bannedIds.has(String(item.id))),
+    normalized.filter((item) => !bannedColors.has(String(item.color || "").toLowerCase())),
+    normalized,
+  ];
+  let choices = stages.find((stage) => stage.length) || [];
+  const favorites = choices.filter((item) => item.favorite);
+  if (preferFavorite && favorites.length) choices = favorites;
+  if (!choices.length) return null;
+  const shuffled = seededShuffle(choices, `${seed}:${choices.map(item => item.id).join("|")}`);
+  return shuffled[0] || choices[0];
+}
+
 function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey()) {
   const items = normalizeWardrobeItems(wardrobe.items);
-  const history = Array.isArray(wardrobe.history) ? wardrobe.history : [];
+  const history = getWardrobeHistory(wardrobe);
   const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
   const dateKey = getLifeOSDateKey();
   const palette = seededShuffle(WARDROBE_COLOR_GUIDE, `wardrobe-palette:${weekKey}:${profile.style}:${profile.weather}:${profile.occasion}:${items.length}`).slice(0, 7);
   const topPool = getWardrobePool(items, "top", dateKey);
-  const bottomPool = seededShuffle(getWardrobePool(items, "bottom", dateKey), `wardrobe-bottoms:${weekKey}:${profile.style}:${items.length}`);
+  const bottomPool = getWardrobePool(items, "bottom", dateKey);
   const shoePool = getWardrobePool(items, "shoes", dateKey);
-  const bottomGap = bottomPool.length >= 4 ? 2 : bottomPool.length >= 2 ? 1 : 0;
-  const recentBottomIds = [];
-  const usedThisWeek = new Set();
+  const schoolBottomRotation = seededShuffle(bottomPool, `wardrobe-school-bottoms:${weekKey}:${profile.style}:${items.length}`).slice(0, Math.min(3, Math.max(1, bottomPool.length)));
+  const bottomUseCounts = new Map();
+  const generatedTopIds = new Set();
+  const generatedTopColors = new Set();
+  const generatedSignatures = new Set();
+  const recentUsefulEntries = history.filter((h) => ["used", "ready", "weekend"].includes(h?.action)).slice(-18);
+  const recentTopItems = getWardrobeHistoryItems(recentUsefulEntries, "top");
+  const recentWeekendEntries = history.filter((h) => h?.action === "weekend" || /s[áa]bado|domingo|fin de semana|salida/i.test(String(h?.day || ""))).slice(-6);
+  const recentWeekendTopItems = getWardrobeHistoryItems(recentWeekendEntries, "top");
+  const recentTopIds = recentTopItems.slice(-6).map((item) => item.id);
+  const recentTopColors = recentTopItems.slice(-5).map((item) => item.color);
+  const weekendTopIds = recentWeekendTopItems.slice(-3).map((item) => item.id);
+  const weekendTopColors = recentWeekendTopItems.slice(-3).map((item) => item.color);
   const disliked = new Set(history.filter(h => h?.action === "dislike").map(h => h.signature).filter(Boolean));
-  const recentlyUsed = new Set(history.filter(h => h?.action === "used").slice(-14).map(h => h.signature).filter(Boolean));
+  const recentlyUsedSignatures = new Set(recentUsefulEntries.map(h => h.signature).filter(Boolean));
+  const previousBottomIds = [];
 
   return DAY_NAMES.map((day, idx) => {
+    const isSchoolDay = idx < WARDROBE_SCHOOL_DAY_COUNT;
     let chosen = null;
-    for (let attempt = 0; attempt < 9; attempt += 1) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
       const seed = `wardrobe:${weekKey}:${idx}:${attempt}:${items.length}:${profile.style}:${profile.weather}:${profile.occasion}`;
       const mainColor = palette[(idx + attempt) % palette.length] || "crema";
-      const top = pickFromWardrobePool(topPool, `${seed}:top:${mainColor}`, [], attempt % 3 === 0) || { id:`fallback-top-${idx}`, type:"top", name:`Camisa ${mainColor}`, color:mainColor, style:"sugerido" };
-      const bottom = pickFromWardrobePool(bottomPool, `${seed}:bottom`, recentBottomIds) || { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
-      const shoes = pickFromWardrobePool(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, [], attempt % 4 === 0) || { id:`fallback-shoes-${idx}`, type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
+      const topBannedIds = isSchoolDay
+        ? [...recentTopIds, ...weekendTopIds, ...generatedTopIds]
+        : [...weekendTopIds, ...recentTopIds.slice(-3)];
+      const topBannedColors = isSchoolDay
+        ? [...recentTopColors.slice(-3), ...generatedTopColors]
+        : [...weekendTopColors, ...recentTopColors.slice(-2)];
+      const top = pickWardrobeItemAvoiding(topPool, `${seed}:top:${mainColor}`, {
+        bannedIds: topBannedIds,
+        bannedColors: topBannedColors,
+        preferFavorite: attempt % 4 === 0,
+      }) || { id:`fallback-top-${idx}`, type:"top", name:`Camisa ${mainColor}`, color:mainColor, style:"sugerido" };
+
+      let bottomCandidates = isSchoolDay
+        ? (schoolBottomRotation.length ? schoolBottomRotation : bottomPool).filter((item) => (bottomUseCounts.get(String(item.id)) || 0) < 2)
+        : bottomPool;
+      if (!bottomCandidates.length) bottomCandidates = schoolBottomRotation.length ? schoolBottomRotation : bottomPool;
+      const bottom = pickWardrobeItemAvoiding(bottomCandidates, `${seed}:bottom`, {
+        bannedIds: previousBottomIds.slice(-1),
+        preferFavorite: attempt % 3 === 0,
+      }) || { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+      const shoes = pickWardrobeItemAvoiding(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, {
+        preferFavorite: attempt % 4 === 0,
+      }) || { id:`fallback-shoes-${idx}`, type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
       const outfitItems = [top, bottom, shoes];
       const signature = getWardrobeOutfitSignature(outfitItems);
-      const scorePenalty = (usedThisWeek.has(signature) ? 3 : 0) + (disliked.has(signature) ? 2 : 0) + (recentlyUsed.has(signature) ? 1 : 0);
+      const exactTopRepeatPenalty = recentTopIds.map(String).includes(String(top.id)) ? 4 : 0;
+      const weekendRepeatPenalty = weekendTopIds.map(String).includes(String(top.id)) ? 5 : 0;
+      const colorRepeatPenalty = recentTopColors.map(c => String(c).toLowerCase()).includes(String(top.color || "").toLowerCase()) ? 2 : 0;
+      const generatedTopPenalty = generatedTopIds.has(String(top.id)) ? 4 : generatedTopColors.has(String(top.color || "").toLowerCase()) ? 2 : 0;
+      const bottomOverusePenalty = isSchoolDay && (bottomUseCounts.get(String(bottom.id)) || 0) >= 2 ? 8 : 0;
+      const scorePenalty =
+        (generatedSignatures.has(signature) ? 4 : 0) +
+        (disliked.has(signature) ? 3 : 0) +
+        (recentlyUsedSignatures.has(signature) ? 2 : 0) +
+        exactTopRepeatPenalty + weekendRepeatPenalty + colorRepeatPenalty + generatedTopPenalty + bottomOverusePenalty;
       if (!chosen || scorePenalty < chosen.scorePenalty) chosen = { top, bottom, shoes, mainColor, signature, scorePenalty };
       if (scorePenalty === 0) break;
     }
@@ -482,20 +578,72 @@ function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getSche
     const bottom = chosen.bottom;
     const shoes = chosen.shoes;
     const mainColor = chosen.mainColor;
-    usedThisWeek.add(chosen.signature);
-    recentBottomIds.push(bottom.id);
-    while (recentBottomIds.length > bottomGap) recentBottomIds.shift();
+    generatedSignatures.add(chosen.signature);
+    generatedTopIds.add(String(top.id));
+    generatedTopColors.add(String(top.color || "").toLowerCase());
+    previousBottomIds.push(bottom.id);
+    if (isSchoolDay) bottomUseCounts.set(String(bottom.id), (bottomUseCounts.get(String(bottom.id)) || 0) + 1);
 
     return {
       day,
+      dayIndex: idx,
       full: DAY_FULL[idx],
       title: `${top.color} + ${bottom.color}`,
       tone: mainColor,
       signature: chosen.signature,
       items: [top, bottom, shoes],
-      why: `Look para tono ${profile.skinTone || "canela"}, clima ${profile.weather || "normal"} y ocasión ${profile.occasion || "casual"}. Evita repetir pantalón pegado cuando hay opciones y baja prioridad a combinaciones que marcaste como repetidas o feas.`,
+      schoolDay: isSchoolDay,
+      optionalWeekend: !isSchoolDay,
+      why: isSchoolDay
+        ? `Outfit de clase con pantalón reutilizable máximo 2 veces por semana y camisa rotada para no repetir la misma prenda ni el mismo color reciente.`
+        : `Fin de semana opcional: no se muestra fijo. Generalo solo si vas a salir.`,
     };
   });
+}
+
+function buildWeekendWardrobeOutfit(wardrobe = createWardrobeInitial(), weekKey = getScheduleWeekKey(), laundryDone = false, variant = 0) {
+  const items = normalizeWardrobeItems(wardrobe.items);
+  const history = getWardrobeHistory(wardrobe);
+  const profile = deepMerge(createWardrobeInitial().profile, wardrobe.profile || {});
+  const dateKey = getLifeOSDateKey();
+  const topPool = getWardrobePool(items, "top", dateKey);
+  const bottomPool = getWardrobePool(items, "bottom", dateKey);
+  const shoePool = getWardrobePool(items, "shoes", dateKey);
+  const weekEntries = history.filter((h) => h?.weekKey === weekKey && ["used", "ready", "weekend"].includes(h?.action));
+  const recentWeekendEntries = history.filter((h) => h?.action === "weekend" || /s[áa]bado|domingo|fin de semana|salida/i.test(String(h?.day || ""))).slice(-8);
+  const weekTopItems = getWardrobeHistoryItems(weekEntries, "top");
+  const weekBottomItems = getWardrobeHistoryItems(weekEntries, "bottom");
+  const weekendTopItems = getWardrobeHistoryItems(recentWeekendEntries, "top");
+  const bottomCounts = weekBottomItems.reduce((acc, item) => {
+    const key = String(item.id);
+    acc.set(key, (acc.get(key) || 0) + 1);
+    return acc;
+  }, new Map());
+  const seed = `wardrobe-weekend:${weekKey}:${profile.style}:${profile.weather}:${profile.occasion}:${laundryDone ? "washed" : "not-washed"}:${variant}`;
+  const top = pickWardrobeItemAvoiding(topPool, `${seed}:top`, {
+    bannedIds: [...weekendTopItems.slice(-3).map(item => item.id), ...(laundryDone ? [] : weekTopItems.map(item => item.id))],
+    bannedColors: weekendTopItems.slice(-3).map(item => item.color),
+    preferFavorite: true,
+  }) || topPool[0] || { id:"fallback-weekend-top", type:"top", name:"Camisa neutra", color:"negro", style:"sugerido" };
+  let bottomCandidates = laundryDone ? bottomPool : bottomPool.filter((item) => (bottomCounts.get(String(item.id)) || 0) < 2);
+  if (!bottomCandidates.length) bottomCandidates = bottomPool;
+  const bottom = pickWardrobeItemAvoiding(bottomCandidates, `${seed}:bottom`, { preferFavorite:true }) || bottomPool[0] || { id:"fallback-weekend-bottom", type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+  const shoes = pickWardrobeItemAvoiding(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, { preferFavorite:true }) || shoePool[0] || { id:"fallback-weekend-shoes", type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
+  const outfitItems = [top, bottom, shoes];
+  return {
+    day:"Salida",
+    dayIndex: 6,
+    full:"Salida de fin de semana",
+    title:`${top.color} + ${bottom.color}`,
+    tone: top.color,
+    signature: getWardrobeOutfitSignature(outfitItems),
+    items: outfitItems,
+    weekend: true,
+    laundryDone,
+    why: laundryDone
+      ? "Como ya lavaste, LifeOS puede recuperar prendas de la semana, pero evita repetir la misma camisa/foto de fines de semana recientes."
+      : "Como no has lavado, LifeOS evita camisas ya preparadas/usadas esta semana y limita pantalones que ya llegaron a 2 usos.",
+  };
 }
 
 function isNightlyQuest(q) {
@@ -6071,6 +6219,8 @@ function WardrobeView() {
   const items = normalizeWardrobeItems(wardrobe.items);
   const [now, setNow] = useState(() => Date.now());
   const [draft, setDraft] = useState({ type:"top", name:"", color:"", style:"casual" });
+  const [weekendMode, setWeekendMode] = useState("");
+  const [weekendRoll, setWeekendRoll] = useState(0);
 
   const closetInputStyle = useCallback(() => ({
     width: "100%",
@@ -6090,12 +6240,23 @@ function WardrobeView() {
     return () => clearInterval(timer);
   }, []);
 
-  const weekKey = getScheduleWeekKey(new Date(now));
-  const todayKey = getLifeOSDateKey(new Date(now));
+  const currentDate = useMemo(() => new Date(now), [now]);
+  const nextSchoolDate = useMemo(() => getNextWardrobeSchoolDate(currentDate), [currentDate]);
+  const planningWeekKey = getScheduleWeekKey(nextSchoolDate);
+  const targetStartIdx = getWardrobeDayIndexFromDate(nextSchoolDate);
+  const todayKey = getLifeOSDateKey(currentDate);
   const laundryUntil = getLifeOSDateKey(new Date(now + 2 * 24 * 60 * 60 * 1000));
   const remixCountdown = formatCountdownSeconds(getSecondsUntilNextScheduleWeek(now));
-  const outfits = useMemo(() => buildWardrobeWeek(wardrobe, weekKey), [wardrobe, weekKey]);
-  const lastUsedOutfit = useMemo(() => (Array.isArray(wardrobe.history) ? [...wardrobe.history].reverse().find(h => h?.action === "used") : null), [wardrobe.history]);
+  const outfits = useMemo(() => buildWardrobeWeek(wardrobe, planningWeekKey), [wardrobe, planningWeekKey]);
+  const preparedDays = useMemo(() => getWardrobePreparedDayIndices(wardrobe, planningWeekKey), [wardrobe, planningWeekKey]);
+  const preparedCount = preparedDays.size;
+  const nextOutfit = useMemo(() => {
+    return outfits.slice(targetStartIdx, WARDROBE_SCHOOL_DAY_COUNT).find((outfit) => !preparedDays.has(outfit.dayIndex))
+      || outfits.slice(0, WARDROBE_SCHOOL_DAY_COUNT).find((outfit) => !preparedDays.has(outfit.dayIndex))
+      || null;
+  }, [outfits, targetStartIdx, preparedDays]);
+  const weekendOutfit = useMemo(() => weekendMode ? buildWeekendWardrobeOutfit(wardrobe, planningWeekKey, weekendMode === "washed", weekendRoll) : null, [wardrobe, planningWeekKey, weekendMode, weekendRoll]);
+  const lastUsedOutfit = useMemo(() => getWardrobeHistory(wardrobe).slice().reverse().find(h => ["used", "ready", "weekend"].includes(h?.action)), [wardrobe.history]);
 
   const addItem = useCallback(() => {
     const name = draft.name.trim();
@@ -6118,18 +6279,27 @@ function WardrobeView() {
   }, [pDispatch]);
 
   const markOutfit = useCallback((outfit, action) => {
+    if (!outfit) return;
     unlockLifeOSAudio();
-    playLifeOSSound(action === "used" ? "complete" : "menu");
+    playLifeOSSound(action === "dislike" ? "menu" : "complete");
     pDispatch(AC.wardrobeOutfitMark({
       action,
+      weekKey: planningWeekKey,
       day: outfit.full,
+      dayIndex: outfit.dayIndex,
+      targetDayIdx: outfit.dayIndex,
+      targetDateKey: nextOutfit && outfit.signature === nextOutfit.signature ? getDateKeyForScheduleDay(planningWeekKey, outfit.dayIndex) : todayKey,
       signature: outfit.signature,
       items: outfit.items.map(item => ({ id:item.id, type:item.type, name:item.name, color:item.color })),
     }));
-    const msg = action === "used" ? "Outfit marcado como usado" : "Combinación evitada";
-    const sub = action === "used" ? "LifeOS la baja de prioridad en próximas semanas." : "No debería repetirse tan fácil.";
+    const msg = action === "ready" ? "Outfit listo" : action === "weekend" ? "Salida guardada" : "Combinación evitada";
+    const sub = action === "ready"
+      ? "LifeOS mostrará el siguiente día de clase sin revelar toda la semana."
+      : action === "weekend"
+        ? "Se guardó para evitar repetir la misma camisa en próximas fotos/salidas."
+        : "No debería repetirse tan fácil.";
     uiDispatch(AC.toastAdd(Date.now(), msg, sub));
-  }, [pDispatch, uiDispatch]);
+  }, [pDispatch, uiDispatch, planningWeekKey, nextOutfit, todayKey]);
 
   const toggleFavorite = useCallback((item) => {
     pDispatch(AC.wardrobeItemUpdate(item.id, { favorite: !item.favorite }));
@@ -6146,22 +6316,92 @@ function WardrobeView() {
     uiDispatch(AC.toastAdd(Date.now(), "Clóset reiniciado", "Volvió a la base sugerida."));
   }, [pDispatch, uiDispatch]);
 
+  const itemLine = (item, key) => (
+    <div key={key || item.type} style={{ display:"flex", justifyContent:"space-between", gap:8, padding:"9px 10px", borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.055)", fontSize:12 }}>
+      <span style={{ color:T_COLOR.text, fontWeight:900 }}>{item.name}</span>
+      <span style={{ color:T_COLOR.muted }}>{item.color}</span>
+    </div>
+  );
+
   return (
     <div style={{ animation:"sldIn .3s ease" }}>
       <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
         <div>
           <div style={S.ptitle}>Clóset / Ropero</div>
-          <div style={S.psub}>Outfits semanales sin parecer retrato: camisa, pantalón y tenis con rotación inteligente.</div>
+          <div style={S.psub}>Un outfit a la vez: pantalones reutilizables, camisas con variedad visual y fines de semana solo si hay salida.</div>
         </div>
-        <div className="g" style={{ padding:14, minWidth:220 }}>
-          <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>Próxima randomización</div>
-          <div style={{ fontFamily:T_FONT.display, fontSize:24, fontWeight:900, color:"#a78bfa", fontVariantNumeric:"tabular-nums" }}>{remixCountdown}</div>
-          <div style={{ fontSize:11, color:T_COLOR.muted }}>Semana activa: {weekKey}</div>
+        <div className="g" style={{ padding:14, minWidth:230 }}>
+          <div style={{ fontSize:10, color:T_COLOR.muted, textTransform:"uppercase", letterSpacing:.8, fontWeight:900 }}>Semana de outfits</div>
+          <div style={{ fontFamily:T_FONT.display, fontSize:22, fontWeight:900, color:"#a78bfa", fontVariantNumeric:"tabular-nums" }}>{preparedCount}/5 listos</div>
+          <div style={{ fontSize:11, color:T_COLOR.muted }}>Nueva semana en {remixCountdown}</div>
         </div>
       </div>
 
       <div className="wardrobe-grid">
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="g" style={{ padding:20, borderColor:"rgba(34,211,238,.24)", background:"linear-gradient(135deg, rgba(34,211,238,.08), rgba(167,139,250,.06) 45%, rgba(15,23,42,.46))" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"flex-start", flexWrap:"wrap", marginBottom:14 }}>
+              <div>
+                <div style={{ fontSize:10.5, color:"#22d3ee", fontWeight:1000, letterSpacing:1.4, textTransform:"uppercase", marginBottom:6 }}>Próximo outfit de clase</div>
+                <div style={{ fontFamily:T_FONT.display, fontSize:26, color:T_COLOR.text, fontWeight:1000, lineHeight:1.08 }}>
+                  {nextOutfit ? `Outfit de ${nextOutfit.full}` : "Semana de clase lista"}
+                </div>
+                <div style={{ color:T_COLOR.muted, fontSize:13, lineHeight:1.55, marginTop:8, maxWidth:640 }}>
+                  {nextOutfit
+                    ? "LifeOS no revela toda la semana. Marcá “Listo el outfit” y recién aparece el siguiente día de clase."
+                    : "Ya dejaste preparados los 5 outfits de clase. El fin de semana queda opcional."}
+                </div>
+              </div>
+              <div style={{ padding:"9px 12px", borderRadius:999, border:"1px solid rgba(52,211,153,.22)", background:"rgba(52,211,153,.08)", color:"#34d399", fontSize:12, fontWeight:900 }}>
+                3 pantalones aprox · máx 2 usos
+              </div>
+            </div>
+
+            {nextOutfit ? (
+              <>
+                <div style={{ display:"grid", gap:8, marginBottom:12 }}>
+                  {nextOutfit.items.map((item) => itemLine(item, `${nextOutfit.day}-${item.type}`))}
+                </div>
+                <div style={{ padding:12, borderRadius:13, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.16)", color:"#fcd34d", fontSize:12.5, lineHeight:1.55, marginBottom:12 }}>
+                  {nextOutfit.why} Las camisas rotan más fuerte que los pantalones para no repetir la misma prenda en fotos de semanas seguidas.
+                </div>
+                <div style={{ display:"flex", gap:9, flexWrap:"wrap" }}>
+                  <button onClick={() => markOutfit(nextOutfit, "ready")} style={{ border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", borderRadius:12, padding:"10px 13px", fontSize:12, fontWeight:1000, cursor:"pointer" }}>Listo el outfit</button>
+                  <button onClick={() => markOutfit(nextOutfit, "dislike")} style={{ border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", borderRadius:12, padding:"10px 13px", fontSize:12, fontWeight:900, cursor:"pointer" }}>No me gusta</button>
+                </div>
+              </>
+            ) : (
+              <div style={{ padding:14, borderRadius:14, background:"rgba(52,211,153,.08)", border:"1px solid rgba(52,211,153,.18)", color:"#bbf7d0", fontSize:13, fontWeight:800 }}>Los días de clase ya están cubiertos. No se muestran para mantener la intriga.</div>
+            )}
+          </div>
+
+          <div className="g" style={{ padding:18, borderColor:"rgba(251,191,36,.18)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", alignItems:"center", marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:10.5, color:"#fbbf24", fontWeight:1000, letterSpacing:1.2, textTransform:"uppercase", marginBottom:5 }}>Salida de fin de semana</div>
+                <div style={{ ...S.stitle, marginBottom:4 }}>Generar solo si vas a salir</div>
+                <div style={{ color:T_COLOR.muted, fontSize:12.5, lineHeight:1.5 }}>Sábado y domingo no tienen outfit fijo. Decí si ya lavaste y LifeOS decide cuánto puede reutilizar.</div>
+              </div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button onClick={() => { setWeekendMode("washed"); setWeekendRoll((n) => n + 1); }} style={{ border:"1px solid rgba(52,211,153,.24)", background:weekendMode === "washed" ? "rgba(52,211,153,.16)" : "rgba(255,255,255,.04)", color:weekendMode === "washed" ? "#34d399" : T_COLOR.muted, borderRadius:11, padding:"9px 11px", fontSize:11.5, fontWeight:900, cursor:"pointer" }}>Ya lavé</button>
+                <button onClick={() => { setWeekendMode("not-washed"); setWeekendRoll((n) => n + 1); }} style={{ border:"1px solid rgba(251,191,36,.24)", background:weekendMode === "not-washed" ? "rgba(251,191,36,.13)" : "rgba(255,255,255,.04)", color:weekendMode === "not-washed" ? "#fbbf24" : T_COLOR.muted, borderRadius:11, padding:"9px 11px", fontSize:11.5, fontWeight:900, cursor:"pointer" }}>No he lavado</button>
+              </div>
+            </div>
+            {!weekendOutfit ? (
+              <div style={{ padding:12, borderRadius:12, border:"1px dashed rgba(255,255,255,.14)", color:T_COLOR.muted, fontSize:12.5 }}>Tocá una opción para generar la salida. No se guarda nada hasta que marcás “Guardar salida”.</div>
+            ) : (
+              <div style={{ display:"grid", gap:10 }}>
+                <div style={{ fontFamily:T_FONT.display, fontSize:18, fontWeight:1000, color:T_COLOR.text }}>{weekendOutfit.title}</div>
+                <div style={{ display:"grid", gap:8 }}>{weekendOutfit.items.map((item) => itemLine(item, `weekend-${item.type}`))}</div>
+                <div style={{ color:T_COLOR.muted, fontSize:12.5, lineHeight:1.55 }}>{weekendOutfit.why}</div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <button onClick={() => markOutfit(weekendOutfit, "weekend")} style={{ border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", borderRadius:12, padding:"9px 12px", fontSize:12, fontWeight:1000, cursor:"pointer" }}>Guardar salida</button>
+                  <button onClick={() => setWeekendRoll((n) => n + 1)} style={{ border:"1px solid rgba(34,211,238,.22)", background:"rgba(34,211,238,.07)", color:"#22d3ee", borderRadius:12, padding:"9px 12px", fontSize:12, fontWeight:900, cursor:"pointer" }}>Generar otra vez</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="g" style={{ padding:18, borderColor:"rgba(34,211,238,.16)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
               <Palette size={18} color="#22d3ee"/>
@@ -6181,36 +6421,9 @@ function WardrobeView() {
               </select>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
-              LifeOS separa pantalones, evita repetir combinaciones usadas/no gustadas y prioriza tonos que favorecen piel canela: negro, terracota, crema, blanco cálido, camel, verde oliva, azul marino, borgoña, denim oscuro y gris carbón.
+              Reglas nuevas: pantalones se pueden repetir hasta 2 veces por semana; camisas rotan con más fuerza y se evita repetir la misma camisa o color dominante en salidas/fotos de semanas seguidas.
             </div>
-            {lastUsedOutfit && <div style={{ marginTop:10, fontSize:11.5, color:T_COLOR.muted }}>Último outfit usado: {new Date(lastUsedOutfit.date).toLocaleDateString("es-ES")} · {lastUsedOutfit.day}</div>}
-          </div>
-
-          <div className="wardrobe-days">
-            {outfits.map((outfit, idx) => (
-              <div key={`${weekKey}-${outfit.day}`} className="g" style={{ padding:16, borderColor: idx === todayIdx ? "rgba(34,211,238,.32)" : "rgba(255,255,255,.07)" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"center", marginBottom:10 }}>
-                  <div>
-                    <div style={{ fontSize:11, color:idx === todayIdx ? "#22d3ee" : T_COLOR.muted, fontWeight:900, textTransform:"uppercase", letterSpacing:.8 }}>{outfit.full}</div>
-                    <div style={{ fontFamily:T_FONT.display, fontSize:17, color:T_COLOR.text, fontWeight:900 }}>{outfit.title}</div>
-                  </div>
-                  <Shirt size={20} color={idx === todayIdx ? "#22d3ee" : "#a78bfa"}/>
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:10 }}>
-                  {outfit.items.map(item => (
-                    <div key={`${outfit.day}-${item.type}`} style={{ display:"flex", justifyContent:"space-between", gap:8, padding:"7px 9px", borderRadius:10, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.055)", fontSize:12 }}>
-                      <span style={{ color:T_COLOR.text, fontWeight:800 }}>{item.name}</span>
-                      <span style={{ color:T_COLOR.muted }}>{item.color}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ color:T_COLOR.muted, fontSize:11.5, lineHeight:1.5, marginBottom:10 }}>{outfit.why}</div>
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <button onClick={() => markOutfit(outfit, "used")} style={{ border:"1px solid rgba(52,211,153,.22)", background:"rgba(52,211,153,.08)", color:"#34d399", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>Usé este outfit</button>
-                  <button onClick={() => markOutfit(outfit, "dislike")} style={{ border:"1px solid rgba(248,113,113,.22)", background:"rgba(248,113,113,.08)", color:"#f87171", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>No me gusta</button>
-                </div>
-              </div>
-            ))}
+            {lastUsedOutfit && <div style={{ marginTop:10, fontSize:11.5, color:T_COLOR.muted }}>Último registro: {new Date(lastUsedOutfit.date).toLocaleDateString("es-ES")} · {lastUsedOutfit.day}</div>}
           </div>
         </div>
 
@@ -6224,7 +6437,7 @@ function WardrobeView() {
               <select value={draft.type} onChange={(e) => setDraft(d => ({ ...d, type:e.target.value }))} style={closetInputStyle()}>
                 {WARDROBE_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camisa terracota, pantalón beige, tenis grises" style={closetInputStyle()} />
+              <input value={draft.name} onChange={(e) => setDraft(d => ({ ...d, name:e.target.value }))} placeholder="Ej: camisa azul marino, pantalón blanco hueso, tenis negros" style={closetInputStyle()} />
               <input value={draft.color} onChange={(e) => setDraft(d => ({ ...d, color:e.target.value }))} placeholder="Color" style={closetInputStyle()} />
               <input value={draft.style} onChange={(e) => setDraft(d => ({ ...d, style:e.target.value }))} placeholder="Estilo: casual, formal, deportivo" style={closetInputStyle()} />
               <button onClick={addItem} style={{ minHeight:42, borderRadius:12, border:"1px solid rgba(52,211,153,.28)", background:"rgba(52,211,153,.12)", color:"#34d399", fontWeight:900, cursor:"pointer" }}>Agregar al clóset</button>
@@ -6237,7 +6450,7 @@ function WardrobeView() {
               <button onClick={resetCloset} style={{ border:"1px solid rgba(248,113,113,.2)", background:"rgba(248,113,113,.06)", color:"#f87171", borderRadius:9, padding:"7px 9px", fontSize:11, fontWeight:900, cursor:"pointer" }}>Reset</button>
             </div>
             {items.length === 0 ? (
-              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa camisas, pantalones y tenis sugeridos. Agregá tus colores reales para evitar looks repetidos.</div>
+              <div style={{ color:T_COLOR.muted, fontSize:12, lineHeight:1.6 }}>Aún no agregaste ropa. Mientras tanto, LifeOS usa camisas, pantalones y tenis sugeridos. Agregá tus prendas reales para evitar repetir la misma camisa en fotos.</div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:520, overflow:"auto" }}>
                 {items.map(item => {
@@ -6262,7 +6475,6 @@ function WardrobeView() {
     </div>
   );
 }
-
 
 function isLifeOSStandalone() {
   if (typeof window === "undefined") return false;
