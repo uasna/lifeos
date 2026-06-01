@@ -3365,6 +3365,303 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{
 .toast{border-radius:18px!important;background:rgba(12,18,29,.94)!important;border-color:rgba(170,160,255,.24)!important;box-shadow:0 18px 50px rgba(0,0,0,.34)!important}
 .lvlup{background:rgba(6,9,15,.86)!important}
 .lvlup-box{border-radius:30px!important;background:linear-gradient(180deg,rgba(22,28,41,.96),rgba(11,16,25,.95))!important;border-color:rgba(242,196,119,.28)!important;box-shadow:0 28px 90px rgba(0,0,0,.48)!important}
+
+/* ─────────────────────────────────────────────────────────────────
+   Phase 2 · Premium navigation rail
+   Scope: sidebar / navigation shell only. Feature logic untouched.
+───────────────────────────────────────────────────────────────── */
+.sb{
+  width:264px!important;
+  padding:12px!important;
+  background:
+    radial-gradient(circle at 20% 0%,rgba(139,124,246,.12),transparent 32%),
+    linear-gradient(180deg,rgba(9,14,24,.94),rgba(6,10,18,.9))!important;
+  border-right:1px solid rgba(168,183,205,.12)!important;
+  box-shadow:22px 0 70px rgba(0,0,0,.28)!important;
+}
+.sb-shell{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  border-radius:26px;
+  padding:12px;
+  background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.014));
+  border:1px solid rgba(168,183,205,.105);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+  overflow:hidden;
+}
+.sb-brand{
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:11px;
+  min-height:52px;
+  padding:8px;
+  border:0;
+  background:transparent;
+  color:var(--lo-text);
+  text-align:left;
+  cursor:pointer;
+}
+.sb-brand:hover{transform:none!important}
+.sb-mark{
+  width:38px;
+  height:38px;
+  display:grid;
+  place-items:center;
+  border-radius:15px;
+  background:linear-gradient(145deg,rgba(139,124,246,.98),rgba(92,200,215,.9));
+  color:white;
+  box-shadow:0 16px 36px rgba(92,200,215,.14),inset 0 1px 0 rgba(255,255,255,.32);
+  flex-shrink:0;
+}
+.sb-brand-copy{min-width:0}
+.sb-name{
+  font-family:'Sora','Manrope',system-ui,sans-serif!important;
+  font-size:14px!important;
+  font-weight:900!important;
+  letter-spacing:.01em!important;
+  color:#f8fafc!important;
+  background:none!important;
+  -webkit-text-fill-color:initial!important;
+}
+.sb-ver{
+  margin-top:2px!important;
+  color:#5cc8d7!important;
+  opacity:.92!important;
+  font-size:9px!important;
+  font-weight:900!important;
+  letter-spacing:.16em!important;
+}
+.sb-status-card{
+  position:relative;
+  padding:13px;
+  border-radius:20px;
+  background:linear-gradient(135deg,rgba(92,200,215,.10),rgba(139,124,246,.075));
+  border:1px solid rgba(92,200,215,.18);
+  box-shadow:0 14px 34px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.055);
+  overflow:hidden;
+}
+.sb-status-card::after{
+  content:"";
+  position:absolute;
+  width:90px;
+  height:90px;
+  right:-36px;
+  top:-42px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(92,200,215,.22),transparent 68%);
+  pointer-events:none;
+}
+.sb-mini-label,.sb-section-title{
+  font-size:9px;
+  line-height:1;
+  color:#748197;
+  font-weight:950;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+.sb-status-row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:9px;
+  position:relative;
+  z-index:1;
+}
+.sb-status-title{
+  color:#f8fafc;
+  font-weight:950;
+  letter-spacing:-.03em;
+  font-size:15px;
+  line-height:1.15;
+}
+.sb-status-sub{
+  margin-top:4px;
+  color:#97a3b6;
+  font-size:11px;
+  line-height:1.25;
+  font-weight:700;
+}
+.sb-status-dot{
+  width:10px;
+  height:10px;
+  margin-top:3px;
+  border-radius:999px;
+  background:#67e8f9;
+  box-shadow:0 0 0 5px rgba(103,232,249,.08),0 0 18px rgba(103,232,249,.45);
+  flex-shrink:0;
+}
+.sb-nav{
+  flex:1;
+  overflow:auto;
+  padding:2px 2px 4px;
+  scrollbar-width:none;
+}
+.sb-nav::-webkit-scrollbar{display:none}
+.sb-section{margin-top:5px}
+.sb-section + .sb-section{margin-top:14px}
+.sb-section-title{
+  padding:0 9px 8px;
+  color:#5b677c;
+}
+.sb-section-list{display:flex;flex-direction:column;gap:4px}
+.ni{
+  width:100%;
+  min-height:50px;
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  margin:0!important;
+  padding:9px 10px!important;
+  border-radius:18px!important;
+  border:1px solid transparent!important;
+  color:#8d99ad!important;
+  background:transparent!important;
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+  text-align:left;
+}
+.ni:hover{
+  transform:translateX(2px)!important;
+  color:#f8fafc!important;
+  background:rgba(255,255,255,.045)!important;
+  border-color:rgba(168,183,205,.10)!important;
+}
+.ni.on{
+  color:#f8fafc!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.085),rgba(92,200,215,.055))!important;
+  border-color:rgba(168,183,205,.19)!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.065)!important;
+}
+.ni.on::before{
+  content:"";
+  position:absolute;
+  inset:8px auto 8px 0;
+  width:3px;
+  border-radius:0 10px 10px 0;
+  background:linear-gradient(180deg,#67e8f9,#a78bfa);
+  box-shadow:0 0 18px rgba(103,232,249,.38);
+}
+.ni.accent:not(.on){background:rgba(167,139,250,.035)!important}
+.ni-glow{
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 18% 50%,rgba(92,200,215,.13),transparent 38%);
+  opacity:0;
+  transition:opacity .22s var(--lo-ease);
+  pointer-events:none;
+}
+.ni.on .ni-glow,.ni:hover .ni-glow{opacity:1}
+.ni-icon{
+  width:32px;
+  height:32px;
+  border-radius:13px;
+  display:grid;
+  place-items:center;
+  color:currentColor;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(168,183,205,.075);
+  flex-shrink:0;
+  position:relative;
+  z-index:1;
+}
+.ni.on .ni-icon{
+  color:#67e8f9;
+  background:rgba(92,200,215,.10);
+  border-color:rgba(92,200,215,.20);
+}
+.ni-copy{display:flex!important;flex-direction:column;gap:2px;min-width:0;flex:1!important;position:relative;z-index:1}
+.ni-label{font-size:13px;font-weight:900;color:inherit;line-height:1.05}
+.ni-hint{font-size:10.5px;font-weight:750;color:#64748b;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni.on .ni-hint{color:#96a3b8}
+.ni-cue{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:#a78bfa;
+  box-shadow:0 0 18px rgba(167,139,250,.85);
+  flex-shrink:0;
+  position:relative;
+  z-index:1;
+}
+.ni-bar{display:none!important}
+.sb-footer{
+  margin-top:0!important;
+  padding-top:12px!important;
+  border-top:1px solid rgba(168,183,205,.10)!important;
+}
+.user-card{
+  width:100%;
+  border:1px solid rgba(168,183,205,.12)!important;
+  border-radius:20px!important;
+  padding:11px!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.062),rgba(255,255,255,.025))!important;
+  color:#f8fafc;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  cursor:pointer;
+  text-align:left;
+  animation:none!important;
+  box-shadow:0 12px 32px rgba(0,0,0,.18)!important;
+}
+.user-card:hover{
+  transform:translateY(-1px)!important;
+  border-color:rgba(170,160,255,.25)!important;
+}
+.ava{
+  width:36px!important;
+  height:36px!important;
+  border-radius:15px!important;
+  font-family:'Sora','Manrope',system-ui,sans-serif!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 12px 26px rgba(139,124,246,.16)!important;
+}
+.user-info{min-width:0;flex:1}
+.user-name{font-size:13px;font-weight:950;color:#f8fafc;line-height:1.1}
+.user-rank{margin-top:3px;font-size:10.5px;color:#a78bfa;font-weight:900;letter-spacing:.02em}
+.user-pulse{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:#7dd3ad;
+  box-shadow:0 0 16px rgba(125,211,173,.6);
+  flex-shrink:0;
+}
+.mob-more-panel{
+  left:10px!important;
+  right:10px!important;
+  bottom:78px!important;
+  padding:16px!important;
+  border-radius:28px!important;
+}
+.mob-more-title{
+  color:#a8b4c8!important;
+  letter-spacing:.16em!important;
+  margin-bottom:12px!important;
+}
+.mob-more-btn{
+  min-height:54px!important;
+  border-radius:18px!important;
+}
+.mob-nav{
+  left:12px!important;
+  right:12px!important;
+  bottom:10px!important;
+  border:1px solid rgba(168,183,205,.13)!important;
+  border-radius:26px!important;
+  padding:8px calc(8px + env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-right))!important;
+}
+.mob-nav-item.on::before{
+  top:-5px!important;
+  width:34px!important;
+  height:4px!important;
+  border-radius:999px!important;
+}
+
 @keyframes loRise{from{opacity:0;transform:translateY(10px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes loFloat{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(24px,32px,0) scale(1.08)}}
 @keyframes loSheen{0%,58%{transform:translateX(-160%);opacity:0}68%{opacity:.42}100%{transform:translateX(420%);opacity:0}}
@@ -3388,6 +3685,25 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{
   .s-grid{gap:10px!important}
   .sc{min-height:116px;padding:15px!important}
 }
+
+@media(max-width:860px) and (min-width:641px){
+  .sb{width:78px!important;padding:10px!important}
+  .sb-shell{border-radius:22px;padding:9px;gap:12px}
+  .sb-brand{justify-content:center;padding:4px;min-height:46px}
+  .sb-brand-copy,.sb-status-card,.sb-section-title,.ni-copy,.user-info,.user-pulse{display:none!important}
+  .sb-mark{width:38px;height:38px}
+  .sb-nav{padding:0}
+  .sb-section + .sb-section{margin-top:12px}
+  .ni{justify-content:center!important;min-height:48px!important;padding:8px!important}
+  .ni-icon{width:34px;height:34px}
+  .ni.on::before{inset:10px auto 10px -1px}
+  .user-card{justify-content:center;padding:8px!important;border-radius:18px!important}
+}
+@media(max-width:640px){
+  .mob-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .mob-nav-label{font-size:10px!important;font-weight:850!important}
+}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
 }
@@ -7051,6 +7367,20 @@ const NAV_GROUPS = [
 
 const NAV_ITEMS = NAV_GROUPS.flatMap(group => group.items);
 
+const NAV_HINTS = Object.freeze({
+  dashboard:    "Centro del día",
+  quests:       "Tareas y XP",
+  schedule:     "Plan y cálculo",
+  focus:        "Bloques activos",
+  rocketLeague: "Training playbook",
+  blender:      "Academia 3D",
+  wardrobe:     "Outfit próximo",
+  reflection:   "Cierre mental",
+  stats:        "Lectura semanal",
+  profile:      "Identidad",
+  settings:     "Sistema",
+});
+
 const VIEW_ALIASES = Object.freeze({
   inicio:       "dashboard",
   hoy:          "dashboard",
@@ -7491,6 +7821,8 @@ export default function LifeOS() {
 
   const normalizedView = normalizeView(ui.view);
   const ActiveView = VIEW_MAP[normalizedView] || DashboardView;
+  const activeNav = NAV_ITEMS.find(n => n.id === normalizedView) || NAV_ITEMS[0];
+  const activeGroup = NAV_GROUPS.find(group => group.items.some(n => n.id === normalizedView))?.title || "Sistema";
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Buenos días" : hour < 17 ? "Buenas tardes" : "Buenas noches";
@@ -7545,46 +7877,68 @@ export default function LifeOS() {
           <div className="orb1"/><div className="orb2"/>
 
           {/* ── Sidebar ── */}
-          <aside className="sb">
-            <div className="sb-logo">
-              <div className="sb-icon"><Zap size={17} color="white"/></div>
-              <div><div className="sb-name">LIFE OS</div><div className="sb-ver">v31.11</div></div>
-            </div>
-
-            <nav style={{ flex:1, overflow:"auto", paddingRight:2 }}>
-              {NAV_GROUPS.map(group => (
-                <div key={group.title} style={{ marginBottom:12 }}>
-                  <div style={{ fontSize:10, color:"#475569", fontWeight:900, letterSpacing:1.1, textTransform:"uppercase", padding:"0 12px 6px" }}>{group.title}</div>
-                  {group.items.map(n => {
-                    const I  = n.icon;
-                    const on = ui.view === n.id;
-                    return (
-                      <div
-                        key={n.id}
-                        className={`ni ${on ? "on" : ""}`}
-                        onClick={() => handleNavClick(n.id)}
-                        style={n.accent && !on ? { borderColor:"rgba(167,139,250,.12)", background:"rgba(167,139,250,.04)" } : {}}
-                      >
-                        {on && <span className="ni-bar"/>}
-                        <I size={17} style={{ flexShrink:0, color: n.accent && !on ? "#a78bfa80" : "" }}/>
-                        <span>{n.label}</span>
-                        {n.accent && !on && triggers.length > 0 && (
-                          <span style={{ width:7, height:7, borderRadius:"50%", background:"#a78bfa", flexShrink:0, boxShadow:"0 0 6px #a78bfa" }}/>
-                        )}
-                      </div>
-                    );
-                  })}
+          <aside className="sb" aria-label="LifeOS navigation">
+            <div className="sb-shell">
+              <button className="sb-brand" type="button" onClick={() => handleNavClick("dashboard")} aria-label="Volver a Hoy">
+                <div className="sb-mark"><Zap size={17}/></div>
+                <div className="sb-brand-copy">
+                  <div className="sb-name">LIFE OS</div>
+                  <div className="sb-ver">v31.11 · personal</div>
                 </div>
-              ))}
-            </nav>
+              </button>
 
-            <div className="sb-footer">
-              <div className="user-card">
-                <div className="ava">H</div>
-                <div className="user-info">
-                  <div style={{ fontSize:13, fontWeight:600, color:"#eef2f8" }}>Hector</div>
-                  <div style={{ fontSize:11, color:"#7c3aed", fontWeight:700, letterSpacing:.4 }}>Lv.{level} · {SELECTORS.rank(level)}</div>
+              <div className="sb-status-card">
+                <div className="sb-mini-label">Ahora en foco</div>
+                <div className="sb-status-row">
+                  <div>
+                    <div className="sb-status-title">{activeNav?.label || "Hoy"}</div>
+                    <div className="sb-status-sub">{activeGroup} · {NAV_HINTS[activeNav?.id] || "Operativo"}</div>
+                  </div>
+                  <div className="sb-status-dot"/>
                 </div>
+              </div>
+
+              <nav className="sb-nav">
+                {NAV_GROUPS.map(group => (
+                  <section key={group.title} className="sb-section">
+                    <div className="sb-section-title">{group.title}</div>
+                    <div className="sb-section-list">
+                      {group.items.map(n => {
+                        const I  = n.icon;
+                        const on = normalizedView === n.id;
+                        const hasReflectionCue = n.accent && !on && triggers.length > 0;
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            className={`ni ${on ? "on" : ""} ${n.accent ? "accent" : ""}`}
+                            onClick={() => handleNavClick(n.id)}
+                            aria-current={on ? "page" : undefined}
+                          >
+                            <span className="ni-glow"/>
+                            <span className="ni-icon"><I size={17}/></span>
+                            <span className="ni-copy">
+                              <span className="ni-label">{n.label}</span>
+                              <span className="ni-hint">{NAV_HINTS[n.id] || "Abrir"}</span>
+                            </span>
+                            {hasReflectionCue && <span className="ni-cue"/>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </nav>
+
+              <div className="sb-footer">
+                <button className="user-card" type="button" onClick={() => handleNavClick("profile")}>
+                  <div className="ava">H</div>
+                  <div className="user-info">
+                    <div className="user-name">Hector</div>
+                    <div className="user-rank">Lv.{level} · {SELECTORS.rank(level)}</div>
+                  </div>
+                  <div className="user-pulse"/>
+                </button>
               </div>
             </div>
           </aside>
