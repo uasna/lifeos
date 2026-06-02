@@ -527,6 +527,14 @@ function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getSche
   const weekendTopColors = recentWeekendTopItems.slice(-3).map((item) => item.color);
   const disliked = new Set(history.filter(h => h?.action === "dislike").map(h => h.signature).filter(Boolean));
   const recentlyUsedSignatures = new Set(recentUsefulEntries.map(h => h.signature).filter(Boolean));
+  const preparedBottomByDay = new Map();
+  history.forEach((entry) => {
+    if (entry?.weekKey !== weekKey || !["ready", "used"].includes(entry?.action)) return;
+    const dayIdx = Number.isInteger(entry.targetDayIdx) ? entry.targetDayIdx : Number.isInteger(entry.dayIndex) ? entry.dayIndex : -1;
+    if (dayIdx < 0 || dayIdx >= WARDROBE_SCHOOL_DAY_COUNT) return;
+    const bottomItem = (Array.isArray(entry.items) ? entry.items : []).find(item => item?.type === "bottom");
+    if (bottomItem?.id) preparedBottomByDay.set(dayIdx, String(bottomItem.id));
+  });
   const previousBottomIds = [];
 
   return DAY_NAMES.map((day, idx) => {
@@ -551,8 +559,13 @@ function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getSche
         ? (schoolBottomRotation.length ? schoolBottomRotation : bottomPool).filter((item) => (bottomUseCounts.get(String(item.id)) || 0) < 2)
         : bottomPool;
       if (!bottomCandidates.length) bottomCandidates = schoolBottomRotation.length ? schoolBottomRotation : bottomPool;
+      const previousPreparedBottomId = isSchoolDay && idx > 0 ? preparedBottomByDay.get(idx - 1) : null;
+      const consecutiveBottomBans = Array.from(new Set([
+        ...previousBottomIds.slice(-1),
+        previousPreparedBottomId,
+      ].filter(Boolean).map(String)));
       const bottom = pickWardrobeItemAvoiding(bottomCandidates, `${seed}:bottom`, {
-        bannedIds: previousBottomIds.slice(-1),
+        bannedIds: consecutiveBottomBans,
         preferFavorite: attempt % 3 === 0,
       }) || { id:`fallback-bottom-${idx}`, type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
       const shoes = pickWardrobeItemAvoiding(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, {
@@ -581,8 +594,8 @@ function buildWardrobeWeek(wardrobe = createWardrobeInitial(), weekKey = getSche
     generatedSignatures.add(chosen.signature);
     generatedTopIds.add(String(top.id));
     generatedTopColors.add(String(top.color || "").toLowerCase());
-    previousBottomIds.push(bottom.id);
-    if (isSchoolDay) bottomUseCounts.set(String(bottom.id), (bottomUseCounts.get(String(bottom.id)) || 0) + 1);
+    previousBottomIds.push(preparedBottomByDay.get(idx) || bottom.id);
+    if (isSchoolDay) bottomUseCounts.set(String(preparedBottomByDay.get(idx) || bottom.id), (bottomUseCounts.get(String(preparedBottomByDay.get(idx) || bottom.id)) || 0) + 1);
 
     return {
       day,
@@ -614,6 +627,7 @@ function buildWeekendWardrobeOutfit(wardrobe = createWardrobeInitial(), weekKey 
   const weekTopItems = getWardrobeHistoryItems(weekEntries, "top");
   const weekBottomItems = getWardrobeHistoryItems(weekEntries, "bottom");
   const weekendTopItems = getWardrobeHistoryItems(recentWeekendEntries, "top");
+  const lastBottomItem = getWardrobeHistoryItems(history.filter((h) => ["used", "ready", "weekend"].includes(h?.action)).slice(-4), "bottom").slice(-1)[0];
   const bottomCounts = weekBottomItems.reduce((acc, item) => {
     const key = String(item.id);
     acc.set(key, (acc.get(key) || 0) + 1);
@@ -627,7 +641,7 @@ function buildWeekendWardrobeOutfit(wardrobe = createWardrobeInitial(), weekKey 
   }) || topPool[0] || { id:"fallback-weekend-top", type:"top", name:"Camisa neutra", color:"negro", style:"sugerido" };
   let bottomCandidates = laundryDone ? bottomPool : bottomPool.filter((item) => (bottomCounts.get(String(item.id)) || 0) < 2);
   if (!bottomCandidates.length) bottomCandidates = bottomPool;
-  const bottom = pickWardrobeItemAvoiding(bottomCandidates, `${seed}:bottom`, { preferFavorite:true }) || bottomPool[0] || { id:"fallback-weekend-bottom", type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
+  const bottom = pickWardrobeItemAvoiding(bottomCandidates, `${seed}:bottom`, { bannedIds:lastBottomItem?.id ? [lastBottomItem.id] : [], preferFavorite:true }) || bottomPool[0] || { id:"fallback-weekend-bottom", type:"bottom", name:"Pantalón denim oscuro", color:"denim oscuro", style:"sugerido" };
   const shoes = pickWardrobeItemAvoiding(shoePool, `${seed}:shoes:${top.color}:${bottom.color}`, { preferFavorite:true }) || shoePool[0] || { id:"fallback-weekend-shoes", type:"shoes", name:"Tenis neutros", color:"negros", style:"sugerido" };
   const outfitItems = [top, bottom, shoes];
   return {
@@ -666,16 +680,43 @@ function isRocketQuest(q) {
   return q?.id === ROCKET_LEAGUE_PARENT_QUEST_ID || text.includes("rocket");
 }
 
-function createFixedQuestScheduleBlock(q, key, name, type, duration, desc, startMin, dateKey, focus = []) {
+function createFixedQuestScheduleBlock(q, key, name, type, duration, desc, startMin, dateKey, focus = [], extra = {}) {
   return B(key, name || q?.title || "Bloque", type, duration, desc || q?.sub || "Misión diaria", {
-    questId: q?.id,
-    quest: q || null,
+    questId: extra.independent ? null : q?.id,
+    quest: extra.independent ? null : (q || null),
+    completionKey: extra.completionKey || null,
+    completionLabel: extra.completionLabel || name || q?.title || "Bloque",
     focus: focus.length ? focus : (q ? questScheduleFocus(q) : ["Bloque", "Ejecución"]),
     randomized: false,
     dateKey,
     startMin,
     endMin: startMin + duration,
+    independent: Boolean(extra.independent),
   });
+}
+
+const SCHEDULE_BLOCK_COMPLETIONS_KEY = "lifeos:schedule-block-completions:v1";
+
+function readScheduleBlockCompletions() {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(SCHEDULE_BLOCK_COMPLETIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeScheduleBlockCompletions(keys = []) {
+  try {
+    if (typeof localStorage === "undefined") return false;
+    const clean = Array.from(new Set((Array.isArray(keys) ? keys : []).filter(Boolean).map(String))).slice(-240);
+    localStorage.setItem(SCHEDULE_BLOCK_COMPLETIONS_KEY, JSON.stringify(clean));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getLifeOSDayMode(state, dateKey = getLifeOSDateKey()) {
@@ -1484,7 +1525,12 @@ function buildMissionScheduleBlocks(dayIdx, quests = QUESTS, weekKey = getSchedu
       "11:15–11:45 PM · repaso externo, dudas y preparación del proyecto de Cálculo antes de dormir",
       T(23, 15),
       scheduleDateKey,
-      ["Repaso", "Dudas", "Preparar mañana"]
+      ["Repaso", "Dudas", "Preparar mañana"],
+      {
+        independent: true,
+        completionKey: `calc-night-review:${scheduleDateKey}`,
+        completionLabel: "Repaso cálculo nocturno"
+      }
     ));
   }
 
@@ -3792,7 +3838,7 @@ const QuestItem = memo(function QuestItem({ q, completed, onComplete, isBurst })
 
 const TimelineBlock = memo(function TimelineBlock({ block, showConnector, completed = false, onComplete }) {
   const type = ACT_TYPES[block.type] || ACT_TYPES.SKILL;
-  const canComplete = Boolean(block.quest && typeof onComplete === "function");
+  const canComplete = Boolean((block.quest || block.completionKey) && typeof onComplete === "function");
   if (block.type === "BUFFER") {
     return (
       <div className="tl-buf" style={{ minHeight: block.duration >= 15 ? 34 : 26 }}>
@@ -3823,7 +3869,7 @@ const TimelineBlock = memo(function TimelineBlock({ block, showConnector, comple
             <div className="tl-type-chip" style={{ background:`${type.color}14`, color:type.color, border:`1px solid ${type.color}22`, marginTop:1 }}>{type.label}</div>
             {canComplete && (
               <button
-                onClick={(e) => { e.stopPropagation(); onComplete(block.quest); }}
+                onClick={(e) => { e.stopPropagation(); onComplete(block); }}
                 style={{
                   width:28,
                   height:28,
@@ -5103,6 +5149,7 @@ function ScheduleView() {
 
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const completedSet = useMemo(() => SELECTORS.completedSet(persistent.quests.completedIds), [persistent.quests.completedIds]);
+  const [scheduleBlockCompletions, setScheduleBlockCompletions] = useState(() => new Set(readScheduleBlockCompletions()));
   const swimDays  = useMemo(() => SELECTORS.swimDays(persistent.planner.swimPairIndex), [persistent.planner.swimPairIndex]);
   const sel       = ui.scheduleDay;
   const [scheduleNow, setScheduleNow] = useState(() => Date.now());
@@ -5116,7 +5163,7 @@ function ScheduleView() {
     const interval = setInterval(() => setScheduleNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
-  const missionBlocks = useMemo(() => allBlocks.filter(b => b.questId), [allBlocks]);
+  const missionBlocks = useMemo(() => allBlocks.filter(b => b.questId || b.completionKey), [allBlocks]);
 
   const load   = useMemo(() => calcLoad(allBlocks.filter(b => b.type !== "BUFFER")), [allBlocks]);
   const li     = loadInfo(load);
@@ -5128,11 +5175,28 @@ function ScheduleView() {
   const skillMin = useMemo(() => typeMins("SKILL"),    [typeMins]);
   const recMin   = useMemo(() => (typeMins("RECOVERY") + typeMins("BUFFER")), [typeMins]);
 
-  const completedMissionCount = useMemo(() => missionBlocks.filter(b => completedSet.has(b.questId)).length, [missionBlocks, completedSet]);
+  const completedMissionCount = useMemo(() => missionBlocks.filter(b => b.questId ? completedSet.has(b.questId) : scheduleBlockCompletions.has(b.completionKey)).length, [missionBlocks, completedSet, scheduleBlockCompletions]);
   const missionPct = missionBlocks.length ? Math.round((completedMissionCount / missionBlocks.length) * 100) : 0;
   const missedRisk = useMemo(() => calculateMissedQuestPenalty(persistent, persistent.quests.completedIds), [persistent, persistent.quests.completedIds]);
 
-  const handleQuestComplete = useCallback((q) => {
+  const handleScheduleBlockComplete = useCallback((block) => {
+    if (!block) return;
+    if (block.completionKey && !block.quest) {
+      const key = String(block.completionKey);
+      const wasCompleted = scheduleBlockCompletions.has(key);
+      const next = new Set(scheduleBlockCompletions);
+      if (wasCompleted) next.delete(key); else next.add(key);
+      setScheduleBlockCompletions(next);
+      writeScheduleBlockCompletions([...next]);
+      unlockLifeOSAudio();
+      if (!wasCompleted) playLifeOSSound("complete");
+      const id = Date.now();
+      uiDispatch(AC.toastAdd(id, wasCompleted ? "Bloque desmarcado" : "Bloque completado", block.completionLabel || block.name || "Horario"));
+      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
+      return;
+    }
+
+    const q = block.quest;
     if (!q) return;
     if (q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) {
       const id = Date.now();
@@ -5158,7 +5222,7 @@ function ScheduleView() {
     if (!wasCompleted && newNivel > oldNivel) {
       setTimeout(() => { uiDispatch(AC.showNivelUp()); setTimeout(() => uiDispatch(AC.hideNivelUp()), 3200); }, 300);
     }
-  }, [completedSet, persistent.xp.total, pDispatch, uiDispatch]);
+  }, [completedSet, scheduleBlockCompletions, persistent.xp.total, pDispatch, uiDispatch]);
 
   const TimelineSection = ({ blocks, label, labelColor, labelBg, labelBorder }) => (
     <div className="g" style={{ padding:"18px 16px 16px" }}>
@@ -5175,8 +5239,8 @@ function ScheduleView() {
             key={`${b.key}-${i}`}
             block={b}
             showConnector={i < blocks.length-1}
-            completed={b.questId ? completedSet.has(b.questId) : false}
-            onComplete={handleQuestComplete}
+            completed={b.questId ? completedSet.has(b.questId) : b.completionKey ? scheduleBlockCompletions.has(b.completionKey) : false}
+            onComplete={handleScheduleBlockComplete}
           />
         ))}
       </div>
@@ -6671,7 +6735,7 @@ function WardrobeView() {
                 </div>
               </div>
               <div style={{ padding:"9px 12px", borderRadius:999, border:"1px solid rgba(52,211,153,.22)", background:"rgba(52,211,153,.08)", color:"#34d399", fontSize:12, fontWeight:900 }}>
-                3 pantalones aprox · máx 2 usos
+                3 pantalones aprox · máx 2 usos · no seguidos
               </div>
             </div>
 
@@ -6739,7 +6803,7 @@ function WardrobeView() {
               </select>
             </div>
             <div style={{ marginTop:12, padding:12, borderRadius:12, background:"rgba(251,191,36,.07)", border:"1px solid rgba(251,191,36,.18)", color:"#fcd34d", fontSize:12, lineHeight:1.55 }}>
-              Reglas nuevas: pantalones se pueden repetir hasta 2 veces por semana; camisas rotan con más fuerza y se evita repetir la misma camisa o color dominante en salidas/fotos de semanas seguidas.
+              Reglas nuevas: pantalones se pueden repetir hasta 2 veces por semana, pero nunca en días seguidos si hay otra opción; camisas rotan con más fuerza y se evita repetir la misma camisa o color dominante en salidas/fotos de semanas seguidas.
             </div>
             {lastUsedOutfit && <div style={{ marginTop:10, fontSize:11.5, color:T_COLOR.muted }}>Último registro: {new Date(lastUsedOutfit.date).toLocaleDateString("es-ES")} · {lastUsedOutfit.day}</div>}
           </div>
