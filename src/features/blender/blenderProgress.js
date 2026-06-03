@@ -32,7 +32,11 @@ export function writeJsonArray(key, value) {
   }
 }
 
-const BLENDER_COMPLETED_LESSONS_KEY = "lifeos:blender-academy:completed-lessons:v1";
+const BLENDER_COMPLETED_LESSONS_KEY_V1 = "lifeos:blender-academy:completed-lessons:v1";
+const BLENDER_COMPLETED_LESSONS_KEY = "lifeos:blender-academy:completed-lessons:v2";
+
+const RUNAWAY_COMPLETION_LIMIT = 2;
+const SAFE_FIRST_LESSON_ID = "lesson-0-1-base-file";
 
 function readLegacyCompletedLessonIds() {
   if (typeof window === "undefined") return [];
@@ -51,12 +55,39 @@ function readLegacyCompletedLessonIds() {
   }
 }
 
+function normalizeCompletedBlenderLessonIds(ids) {
+  return Array.from(new Set(Array.isArray(ids) ? ids.filter(Boolean) : []));
+}
+
+function repairLegacyCompletedBlenderLessonIds(ids) {
+  const unique = normalizeCompletedBlenderLessonIds(ids);
+
+  // Early Phase 1 builds could mark several future lessons as completed just
+  // because the parent Blender quest was already marked for the day. When that
+  // happens, the academy appears to jump from Course 0 to a later course. Repair
+  // only the old v1/legacy state conservatively; v2 progress can grow normally.
+  if (unique.length > RUNAWAY_COMPLETION_LIMIT) {
+    return unique.includes(SAFE_FIRST_LESSON_ID) ? [SAFE_FIRST_LESSON_ID] : unique.slice(0, 1);
+  }
+
+  return unique;
+}
+
 export function readCompletedBlenderLessonIds() {
-  return Array.from(new Set([...readJsonArray(BLENDER_COMPLETED_LESSONS_KEY), ...readLegacyCompletedLessonIds()]));
+  const current = readJsonArray(BLENDER_COMPLETED_LESSONS_KEY);
+  if (current.length) return normalizeCompletedBlenderLessonIds(current);
+
+  const migrated = repairLegacyCompletedBlenderLessonIds([
+    ...readJsonArray(BLENDER_COMPLETED_LESSONS_KEY_V1),
+    ...readLegacyCompletedLessonIds(),
+  ]);
+
+  if (migrated.length) writeJsonArray(BLENDER_COMPLETED_LESSONS_KEY, migrated);
+  return migrated;
 }
 
 export function writeCompletedBlenderLessonIds(value) {
-  return writeJsonArray(BLENDER_COMPLETED_LESSONS_KEY, Array.from(new Set(Array.isArray(value) ? value.filter(Boolean) : [])));
+  return writeJsonArray(BLENDER_COMPLETED_LESSONS_KEY, normalizeCompletedBlenderLessonIds(value));
 }
 
 export function readString(key) {

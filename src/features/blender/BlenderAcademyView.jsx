@@ -19,7 +19,6 @@ import { unlockLifeOSAudio, playLifeOSSound } from "../../utils/audio.js";
 
 export function BlenderAcademyView({ questDone = false, onToggleSession }) {
   const [completedLessonIds, setCompletedLessonIds] = useState(() => readCompletedBlenderLessonIds());
-  const initialLessonId = useMemo(() => getTodayBlenderLesson(BLENDER_COURSES, completedLessonIds).lesson?.id, []);
   const { course, module, lesson } = useMemo(() => getTodayBlenderLesson(BLENDER_COURSES, completedLessonIds), [completedLessonIds]);
   const nextCourse = useMemo(() => getNextBlenderCourse(BLENDER_COURSES), []);
   const keys = useMemo(() => createBlenderStorageKeys(new Date(), lesson?.id), [lesson?.id]);
@@ -61,10 +60,6 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
     if (checklistPct === 100) markLessonCompleted(lesson.id);
   }, [checklistPct, lesson.id, markLessonCompleted]);
 
-  useEffect(() => {
-    if (questDone && initialLessonId) markLessonCompleted(initialLessonId);
-  }, [questDone, initialLessonId, markLessonCompleted]);
-
   const toggleChecklist = useCallback((item) => {
     unlockLifeOSAudio();
     playLifeOSSound("menu");
@@ -76,6 +71,12 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
     playLifeOSSound("menu");
     setSelectedExtraReason(current => current === reasonId ? null : reasonId);
   }, []);
+
+  const handleSessionToggle = useCallback(() => {
+    unlockLifeOSAudio();
+    if (!questDone) markLessonCompleted(lesson.id);
+    if (typeof onToggleSession === "function") onToggleSession();
+  }, [lesson.id, markLessonCompleted, onToggleSession, questDone]);
 
   return (
     <div style={shellStyle}>
@@ -122,7 +123,7 @@ export function BlenderAcademyView({ questDone = false, onToggleSession }) {
                 <div style={{ height:"100%", width:`${checklistPct}%`, background:`linear-gradient(90deg, ${course.accent}, #f472b6)`, borderRadius:999, transition:"width .25s ease" }}/>
               </div>
             </div>
-            <button onClick={onToggleSession} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.26)" : `${course.accent}66`}`, background:questDone ? "rgba(148,163,184,.08)" : `${course.accent}18`, color:questDone ? "#94a3b8" : course.accent, borderRadius:15, padding:"13px 15px", fontWeight:950, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", gap:9 }}>
+            <button onClick={handleSessionToggle} style={{ border:`1px solid ${questDone ? "rgba(148,163,184,.26)" : `${course.accent}66`}`, background:questDone ? "rgba(148,163,184,.08)" : `${course.accent}18`, color:questDone ? "#94a3b8" : course.accent, borderRadius:15, padding:"13px 15px", fontWeight:950, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", gap:9 }}>
               {questDone ? <CheckCircle2 size={18}/> : <Circle size={18}/>} {questDone ? "Sesión marcada" : "Completar sesión Blender"}
             </button>
           </aside>
