@@ -4568,17 +4568,31 @@ function RocketLeagueView() {
     reminder: "",
   }));
   const [replayHistory, setReplayHistory] = useState(() => storageLoad("lifeos:rl:replayHistory", []));
+  const [timerState, setTimerState] = useState(() => storageLoad(`lifeos:rl:timers:${todayKey}`, {
+    activeBlockId: ROCKET_LEAGUE_ROUTINE_BLOCKS[0]?.id || "",
+    running: false,
+    elapsedByBlock: {},
+    completedAtByBlock: {},
+  }));
+  const timerStateRef = useRef(timerState);
 
+  useEffect(() => { timerStateRef.current = timerState; }, [timerState]);
   useEffect(() => { storageSave(`lifeos:rl:session:${todayKey}`, sessionState); }, [sessionState, storageSave, todayKey]);
   useEffect(() => { storageSave(`lifeos:rl:precheck:${todayKey}`, precheck); }, [precheck, storageSave, todayKey]);
   useEffect(() => { storageSave(`lifeos:rl:routineBlocks:${todayKey}`, completedBlocks); }, [completedBlocks, storageSave, todayKey]);
   useEffect(() => { storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog); }, [dailyLog, storageSave, todayKey]);
   useEffect(() => { storageSave(`lifeos:rl:replayNote:${todayKey}`, replayNote); }, [replayNote, storageSave, todayKey]);
+  useEffect(() => { storageSave(`lifeos:rl:timers:${todayKey}`, timerState); }, [timerState, storageSave, todayKey]);
 
   const checkedCount = precheckItems.filter(item => precheck[item]).length;
   const completedBlockCount = ROCKET_LEAGUE_ROUTINE_BLOCKS.filter(block => completedBlocks[block.id]).length;
   const routinePct = Math.round((completedBlockCount / Math.max(ROCKET_LEAGUE_ROUTINE_BLOCKS.length, 1)) * 100);
   const sessionStatus = parentCompleted ? "Completada" : sessionState.started ? "En progreso" : "Pendiente";
+  const timerElapsedByBlock = timerState.elapsedByBlock && typeof timerState.elapsedByBlock === "object" ? timerState.elapsedByBlock : {};
+  const activeBlock = ROCKET_LEAGUE_ROUTINE_BLOCKS.find(block => block.id === timerState.activeBlockId) || null;
+  const nextBlock = ROCKET_LEAGUE_ROUTINE_BLOCKS.find(block => !completedBlocks[block.id]) || ROCKET_LEAGUE_ROUTINE_BLOCKS[0];
+  const controlBlock = activeBlock || nextBlock;
+  const totalElapsedSeconds = ROCKET_LEAGUE_ROUTINE_BLOCKS.reduce((sum, block) => sum + Math.max(0, Math.floor(Number(timerElapsedByBlock[block.id]) || 0)), 0);
 
   const weeklyStats = useMemo(() => {
     const recent = Array.isArray(dailyHistory) ? dailyHistory.slice(-7) : [];
@@ -4602,12 +4616,119 @@ function RocketLeagueView() {
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
   }, [uiDispatch]);
 
-  const startSession = useCallback(() => {
+  const formatTimerSeconds = useCallback((seconds) => {
+    const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = String(Math.floor(safe / 60)).padStart(2, "0");
+    const secs = String(safe % 60).padStart(2, "0");
+    return `${mins}:${secs}`;
+  }, []);
+
+  const getBlockTargetSeconds = useCallback((block) => Math.max(1, Math.floor(Number(block?.minutes) || 0) * 60), []);
+  const getBlockElapsedSeconds = useCallback((blockId) => Math.max(0, Math.floor(Number(timerStateRef.current?.elapsedByBlock?.[blockId]) || 0)), []);
+
+  const playRocketTimerAlarm = useCallback((blockTitle = "bloque") => {
+    unlockLifeOSAudio();
+    playLifeOSSound("timer");
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => playLifeOSSound("timer"), 260);
+      window.setTimeout(() => playLifeOSSound("timer"), 620);
+      window.setTimeout(() => playLifeOSSound("timer"), 980);
+      if (window.navigator?.vibrate) window.navigator.vibrate([260, 120, 260, 120, 520]);
+    }
+    notify("Timer terminado", `${blockTitle} finalizó. Marcá el bloque o pasá al siguiente.`);
+  }, [notify]);
+
+  const startBlockTimer = useCallback((blockId) => {
+    const block = ROCKET_LEAGUE_ROUTINE_BLOCKS.find(item => item.id === blockId) || ROCKET_LEAGUE_ROUTINE_BLOCKS[0];
+    if (!block) return;
     unlockLifeOSAudio();
     playLifeOSSound("menu");
     setSessionState(prev => ({ ...prev, started: true, startedAt: prev.startedAt || new Date().toISOString() }));
-    notify("Rocket League iniciado", "Seguí la rutina fija de 90 min; no improvisés bloques");
+    setTimerState(prev => ({
+      ...prev,
+      activeBlockId: block.id,
+      running: true,
+      elapsedByBlock: prev.elapsedByBlock || {},
+      completedAtByBlock: prev.completedAtByBlock || {},
+    }));
+  }, []);
+
+  const pauseBlockTimer = useCallback(() => {
+    setTimerState(prev => ({ ...prev, running: false }));
+    notify("Timer pausado", "El tiempo queda guardado; al continuar no se reinicia.");
   }, [notify]);
+
+  const completeBlockTimer = useCallback((block, playSound = true) => {
+    if (!block) return;
+    const targetSeconds = getBlockTargetSeconds(block);
+    setTimerState(prev => ({
+      ...prev,
+      activeBlockId: block.id,
+      running: false,
+      elapsedByBlock: { ...(prev.elapsedByBlock || {}), [block.id]: targetSeconds },
+      completedAtByBlock: { ...(prev.completedAtByBlock || {}), [block.id]: new Date().toISOString() },
+    }));
+    setCompletedBlocks(prev => ({ ...prev, [block.id]: true }));
+    if (playSound) {
+      unlockLifeOSAudio();
+      playLifeOSSound("complete");
+    }
+  }, [getBlockTargetSeconds]);
+
+  const resetBlockTimer = useCallback((block) => {
+    if (!block) return;
+    setTimerState(prev => {
+      const nextElapsed = { ...(prev.elapsedByBlock || {}) };
+      const nextCompletedAt = { ...(prev.completedAtByBlock || {}) };
+      delete nextElapsed[block.id];
+      delete nextCompletedAt[block.id];
+      return {
+        ...prev,
+        running: prev.activeBlockId === block.id ? false : prev.running,
+        elapsedByBlock: nextElapsed,
+        completedAtByBlock: nextCompletedAt,
+      };
+    });
+    setCompletedBlocks(prev => ({ ...prev, [block.id]: false }));
+  }, []);
+
+  useEffect(() => {
+    if (!timerState.running || !timerState.activeBlockId) return undefined;
+    if (typeof window === "undefined") return undefined;
+    const tick = window.setInterval(() => {
+      setTimerState(prev => {
+        if (!prev.running || !prev.activeBlockId) return prev;
+        const block = ROCKET_LEAGUE_ROUTINE_BLOCKS.find(item => item.id === prev.activeBlockId);
+        if (!block) return { ...prev, running: false };
+        const targetSeconds = getBlockTargetSeconds(block);
+        const elapsedByBlock = prev.elapsedByBlock || {};
+        const currentElapsed = Math.max(0, Math.floor(Number(elapsedByBlock[block.id]) || 0));
+        const nextElapsed = Math.min(targetSeconds, currentElapsed + 1);
+        const finishedNow = currentElapsed < targetSeconds && nextElapsed >= targetSeconds;
+        if (finishedNow) {
+          window.setTimeout(() => {
+            setCompletedBlocks(donePrev => ({ ...donePrev, [block.id]: true }));
+            playRocketTimerAlarm(block.title);
+          }, 0);
+        }
+        return {
+          ...prev,
+          running: finishedNow ? false : true,
+          elapsedByBlock: { ...elapsedByBlock, [block.id]: nextElapsed },
+          completedAtByBlock: finishedNow
+            ? { ...(prev.completedAtByBlock || {}), [block.id]: new Date().toISOString() }
+            : (prev.completedAtByBlock || {}),
+        };
+      });
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [timerState.running, timerState.activeBlockId, getBlockTargetSeconds, playRocketTimerAlarm]);
+
+  const startSession = useCallback(() => {
+    const block = controlBlock || ROCKET_LEAGUE_ROUTINE_BLOCKS[0];
+    startBlockTimer(block?.id);
+    notify("Rocket League iniciado", `Timer activo: ${block?.title || "primer bloque"}. Pausar no reinicia el contador.`);
+  }, [controlBlock, startBlockTimer, notify]);
 
   const markRoutineComplete = useCallback(() => {
     setDailyLog(prev => ({ ...prev, completed: "Sí" }));
@@ -4730,6 +4851,40 @@ function RocketLeagueView() {
     </div>
   );
 
+  const TimerPanel = ({ block, compact = false }) => {
+    if (!block) return null;
+    const elapsed = Math.max(0, Math.floor(Number(timerElapsedByBlock[block.id]) || 0));
+    const target = getBlockTargetSeconds(block);
+    const remaining = Math.max(0, target - elapsed);
+    const running = timerState.running && timerState.activeBlockId === block.id;
+    const done = Boolean(completedBlocks[block.id]) || elapsed >= target;
+    const pct = Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
+    return (
+      <div style={{ ...softCard, padding: compact ? 13 : 16, borderColor: running ? "rgba(34,211,238,.36)" : done ? "rgba(52,211,153,.28)" : "rgba(148,163,184,.14)", background: running ? "rgba(34,211,238,.08)" : done ? "rgba(52,211,153,.07)" : softCard.background }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", flexWrap:"wrap" }}>
+          <div>
+            <div style={{ color:running ? "#67e8f9" : done ? "#86efac" : T_COLOR.muted, fontSize:11, fontWeight:950, letterSpacing:1 }}>{block.label} · {block.minutes} min</div>
+            <div style={{ color:T_COLOR.text, fontWeight:950, fontSize: compact ? 16 : 19, marginTop:4 }}>{block.title}</div>
+            <div style={{ color:T_COLOR.muted, fontSize:12, marginTop:5 }}>{running ? "corriendo" : done ? "completado" : elapsed > 0 ? "pausado / pendiente" : "sin iniciar"}</div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ color:T_COLOR.text, fontSize: compact ? 30 : 42, lineHeight:1, fontWeight:950, fontVariantNumeric:"tabular-nums" }}>{formatTimerSeconds(remaining)}</div>
+            <div style={{ color:T_COLOR.muted, fontSize:11, marginTop:4 }}>{formatTimerSeconds(elapsed)} / {formatTimerSeconds(target)}</div>
+          </div>
+        </div>
+        <div style={{ height:8, borderRadius:999, background:"rgba(148,163,184,.12)", overflow:"hidden", marginTop:12 }}>
+          <div style={{ width:`${pct}%`, height:"100%", borderRadius:999, background:done ? "linear-gradient(90deg,#22c55e,#86efac)" : "linear-gradient(90deg,#22d3ee,#a78bfa)", transition:"width .35s ease" }} />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:8, marginTop:12 }} className="mob-layout-grid">
+          <button onClick={() => startBlockTimer(block.id)} disabled={done && elapsed >= target} style={{ ...actionStyle, minHeight:38, opacity:done && elapsed >= target ? .55 : 1 }}><Play size={15}/> {elapsed > 0 && !done ? "Continuar" : "Iniciar"}</button>
+          <button onClick={pauseBlockTimer} disabled={!running} style={{ ...actionStyle, minHeight:38, opacity:running ? 1 : .55, borderColor:"rgba(251,191,36,.28)", background:"rgba(251,191,36,.08)", color:"#fde68a" }}><Pause size={15}/> Pausar</button>
+          <button onClick={() => completeBlockTimer(block)} style={{ ...actionStyle, minHeight:38, borderColor:"rgba(52,211,153,.28)", background:"rgba(52,211,153,.09)", color:"#86efac" }}><CheckCircle2 size={15}/> Completar</button>
+          <button onClick={() => resetBlockTimer(block)} style={{ ...actionStyle, minHeight:38, borderColor:"rgba(148,163,184,.18)", background:"rgba(255,255,255,.035)", color:T_COLOR.muted }}><RefreshCw size={15}/> Reiniciar</button>
+        </div>
+      </div>
+    );
+  };
+
   const renderRoutineTab = () => (
     <div style={{ display:"grid", gap:10 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
@@ -4737,21 +4892,26 @@ function RocketLeagueView() {
           <div style={labelStyle}>Rutina 90 min</div>
           <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Bloques con descanso incluido</h2>
         </div>
-        <div style={{ ...softCard, padding:"10px 13px", color:"#67e8f9", fontWeight:950 }}>{completedBlockCount}/{ROCKET_LEAGUE_ROUTINE_BLOCKS.length} · {routinePct}%</div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <div style={{ ...softCard, padding:"10px 13px", color:"#67e8f9", fontWeight:950 }}>{completedBlockCount}/{ROCKET_LEAGUE_ROUTINE_BLOCKS.length} · {routinePct}%</div>
+          <div style={{ ...softCard, padding:"10px 13px", color:"#c4b5fd", fontWeight:950 }}>{formatTimerSeconds(totalElapsedSeconds)} acumulados</div>
+        </div>
       </div>
+      <TimerPanel block={controlBlock} />
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
         {ROCKET_LEAGUE_ROUTINE_BLOCKS.map(block => {
           const done = Boolean(completedBlocks[block.id]);
           return (
-            <article key={block.id} style={{ ...softCard, padding:16, borderColor:done ? "rgba(52,211,153,.28)" : "rgba(148,163,184,.12)", background:done ? "rgba(52,211,153,.075)" : softCard.background }}>
+            <article key={block.id} style={{ ...softCard, padding:16, borderColor:done ? "rgba(52,211,153,.28)" : timerState.activeBlockId === block.id ? "rgba(34,211,238,.30)" : "rgba(148,163,184,.12)", background:done ? "rgba(52,211,153,.075)" : timerState.activeBlockId === block.id ? "rgba(34,211,238,.055)" : softCard.background }}>
               <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start" }}>
                 <div>
                   <div style={{ color:"#67e8f9", fontSize:11, fontWeight:950, letterSpacing:1 }}>{block.label} · {block.minutes} min</div>
                   <h3 style={{ margin:"6px 0 10px", color:T_COLOR.text, fontSize:17 }}>{block.title}</h3>
                 </div>
-                <button onClick={() => setCompletedBlocks(prev => ({ ...prev, [block.id]: !prev[block.id] }))} style={{ width:42, height:42, borderRadius:14, border:done ? "1px solid rgba(52,211,153,.38)" : "1px solid rgba(148,163,184,.18)", background:done ? "rgba(52,211,153,.14)" : "rgba(255,255,255,.035)", cursor:"pointer" }} aria-label={`Marcar ${block.title}`}>{done ? <CheckCircle2 size={19} color="#34d399"/> : <Circle size={19} color="#64748b"/>}</button>
+                <button onClick={() => done ? resetBlockTimer(block) : completeBlockTimer(block)} style={{ width:42, height:42, borderRadius:14, border:done ? "1px solid rgba(52,211,153,.38)" : "1px solid rgba(148,163,184,.18)", background:done ? "rgba(52,211,153,.14)" : "rgba(255,255,255,.035)", cursor:"pointer" }} aria-label={`Marcar ${block.title}`}>{done ? <CheckCircle2 size={19} color="#34d399"/> : <Circle size={19} color="#64748b"/>}</button>
               </div>
-              <div style={{ display:"grid", gap:8, color:T_COLOR.muted, fontSize:12.5, lineHeight:1.45 }}>
+              <TimerPanel block={block} compact />
+              <div style={{ display:"grid", gap:8, color:T_COLOR.muted, fontSize:12.5, lineHeight:1.45, marginTop:10 }}>
                 <div><b style={{ color:T_COLOR.text }}>Qué hacer:</b> {block.do}</div>
                 <div><b style={{ color:T_COLOR.text }}>Qué no hacer:</b> {block.avoid}</div>
                 <div><b style={{ color:"#fbbf24" }}>Métrica:</b> {block.metric}</div>
@@ -4895,7 +5055,8 @@ function RocketLeagueView() {
               ["Rutina activa", "Sí · fija 90 min"],
               ["Revisión", "Semanal"],
               ["Checklist", `${checkedCount}/${precheckItems.length}`],
-            ].map(([label, value]) => <div key={label} style={{ display:"flex", justifyContent:"space-between", gap:12, fontSize:13 }}><span style={{ color:T_COLOR.muted }}>{label}</span><b style={{ color:label === "Checklist" ? "#67e8f9" : T_COLOR.text }}>{value}</b></div>)}
+              ["Timer", timerState.running ? `Corriendo · ${activeBlock?.label || "bloque"}` : `${formatTimerSeconds(totalElapsedSeconds)} acumulados`],
+            ].map(([label, value]) => <div key={label} style={{ display:"flex", justifyContent:"space-between", gap:12, fontSize:13 }}><span style={{ color:T_COLOR.muted }}>{label}</span><b style={{ color:label === "Checklist" || label === "Timer" ? "#67e8f9" : T_COLOR.text }}>{value}</b></div>)}
           </div>
         </div>
       </section>
@@ -4909,11 +5070,15 @@ function RocketLeagueView() {
           <button onClick={startSession} style={{ ...actionStyle, minWidth:180 }}><Play size={16}/> Iniciar sesión</button>
         </div>
         <SummaryFocus />
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:10, marginTop:14 }} className="mob-layout-grid">
+        <div style={{ marginTop:14 }}>
+          <TimerPanel block={controlBlock} />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10, marginTop:14 }} className="mob-layout-grid">
           <button onClick={() => setDetailTab("routine")} style={actionStyle}><Timer size={16}/> Ver rutina completa</button>
           <button onClick={() => setDetailTab("packs")} style={actionStyle}><Target size={16}/> Ver training packs</button>
           <button onClick={() => setDetailTab("log")} style={actionStyle}><Edit3 size={16}/> Registrar sesión</button>
           <button onClick={() => setDetailTab("weekly")} style={actionStyle}><RefreshCw size={16}/> Revisión semanal</button>
+          <button onClick={markRoutineComplete} style={{ ...actionStyle, borderColor:"rgba(52,211,153,.30)", background:"rgba(52,211,153,.10)", color:"#86efac" }}><CheckCircle2 size={16}/> Completar rutina</button>
         </div>
       </section>
 
