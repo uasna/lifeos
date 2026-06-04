@@ -4766,8 +4766,8 @@ ${line}` : line));
         <div className="rl-hero-glow" />
         <div className="rl-hero-copy">
           <div className="rl-kicker">Rocket League Playbook</div>
-          <h1 className="rl-hero-title">Sesión de shooting · 90 min</h1>
-          <p className="rl-hero-sub">2 mapas principales + 1 complementario. Entrená fuerte, claro y sin convertir la sesión en ranked frío.</p>
+          <h1 className="rl-hero-title">Rotación diaria Rocket · 90 min</h1>
+          <p className="rl-hero-sub">LifeOS elige el pack, Workshop o review exacto de cada bloque. Open nets, air roll shots, kickoffs, 50/50 y rotación sin decidir a mano.</p>
           <div className="rl-chip-row">
             {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
               <span key={chip} className="rl-pill">{chip}</span>
@@ -4827,7 +4827,7 @@ ${line}` : line));
               </div>
               <span className="rl-pill" style={{ color:weeklyFocus.accent, borderColor:`${weeklyFocus.accent}35`, background:`${weeklyFocus.accent}12` }}>{weeklyFocus.short}</span>
             </div>
-            <div className="rl-plan-note"><b>Lectura rápida:</b> Freeplay para entrar caliente, 2 mapas principales de shooting, descanso real y 1 mapa complementario. Una mecánica nueva por ciclo; no metas ranked frío.</div>
+            <div className="rl-plan-note"><b>Lectura rápida:</b> estructura fija de 90 min. Solo rota el recurso exacto: RL 04 open nets, RL 06 air roll shots, RL 08 kickoffs, RL 10 50/50 y RL 12 decisiones. Si un código falla, dejá nota y buscalo por nombre.</div>
             <div className="rl-training-lane">
               {plan.subtasks.map((task, index) => {
                 const done = completedSet.has(task.id);
@@ -4895,7 +4895,7 @@ ${line}` : line));
           <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
               <Layers size={18} color="#38bdf8"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop pausado</div>
+              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop bajo condición</div>
             </div>
             <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
               Workshop queda fuera hasta nuevo aviso. La rutina activa usa Freeplay + Training Packs para controlar mejor la dificultad y evitar que Dribbling Challenge/Rings se vuelvan foco antes de tiempo.
@@ -4933,7 +4933,7 @@ ${line}` : line));
               Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
             </div>
             <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.mainShootingPair, ROCKET_LEAGUE_PACKS.shootingComplementaryRotation, ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.tenShotsToMaster, ROCKET_LEAGUE_PACKS.airRollShotsBismo, ROCKET_LEAGUE_PACKS.shootingConsistency, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.shotsYouShouldntMiss, ROCKET_LEAGUE_PACKS.basicRebounds, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.hardSaves, ROCKET_LEAGUE_PACKS.recoveryTraining, ROCKET_LEAGUE_PACKS.speedflipMusty].filter(Boolean).map(pack => (
+              {[ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.powershotPractice, ROCKET_LEAGUE_PACKS.airRollShotsAlt, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.speedflipKickoffTest, ROCKET_LEAGUE_PACKS.masteringKickoffs, ROCKET_LEAGUE_PACKS.basicKickoffs, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.defensiveSituations, ROCKET_LEAGUE_PACKS.tenShotsToMaster, ROCKET_LEAGUE_PACKS.shootingConsistency, ROCKET_LEAGUE_PACKS.recoveryTraining].filter(Boolean).map(pack => (
                 <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
                   <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
                   <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>

@@ -43,12 +43,17 @@ export const ROCKET_LEAGUE_PACKS = Object.freeze({
   groundShots: {
     name: "Ground Shots · Poquito",
     code: "6EB1-79B2-33B8-681C",
-    focus: "tiros básicos consistentes con volumen alto",
+    focus: "tiros abiertos, básicos y repetibles",
   },
   mainShootingPair: {
     name: "2 mapas principales · Yeeza + Poquito",
     code: "Yeeza 7028-5E10-88EF-E83E · Poquito 6EB1-79B2-33B8-681C",
     focus: "15 min powershots + 15 min ground shots; potencia, dirección y tiros ganables",
+  },
+  powershotPractice: {
+    name: "Powershot Practice",
+    code: "C9E4-0F05-B71A-C322",
+    focus: "potencia limpia en tiros abiertos de viernes",
   },
   tenShotsToMaster: {
     name: "10 Shots to Master",
@@ -68,7 +73,7 @@ export const ROCKET_LEAGUE_PACKS = Object.freeze({
   shootingComplementaryRotation: {
     name: "Mapa complementario · rotación shooting",
     code: "10 Shots 8A9B-4843-7039-8611 · Air Roll B16C-8FDA-D26C-32FD · Consistency 4912-A5C9-9A56-55D",
-    focus: "elegí 1 complemento del día: precisión, air roll shot o consistencia",
+    focus: "precisión, air roll shot o consistencia como complemento",
   },
   shotsYouShouldntMiss: {
     name: "Shots You Shouldn't Miss",
@@ -93,7 +98,12 @@ export const ROCKET_LEAGUE_PACKS = Object.freeze({
   shadowDefense: {
     name: "Shadow Defense",
     code: "5CCE-FB29-7B05-A0B1",
-    focus: "defender sin regalar espacio",
+    focus: "defender sin regalar espacio ni saltar antes de tiempo",
+  },
+  defensiveSituations: {
+    name: "Defensive Situations",
+    code: "E494-9C3E-61BD-9097",
+    focus: "rotación defensiva, shadow y decisiones bajo presión",
   },
   hardSaves: {
     name: "Hard Saves & Clears",
@@ -120,8 +130,23 @@ export const ROCKET_LEAGUE_PACKS = Object.freeze({
     code: "A503-264C-A7EB-D282",
     focus: "speedflip exigente para kickoff real",
   },
+  speedflipKickoffTest: {
+    name: "Speedflip Kickoff Test",
+    code: "A503-264C-A7EB-D282",
+    focus: "kickoff con speedflip limpio y contacto estable",
+  },
+  masteringKickoffs: {
+    name: "Mastering Kickoffs",
+    code: "8939-4C63-B233-83C1",
+    focus: "saques consistentes, contacto central y salida útil",
+  },
+  basicKickoffs: {
+    name: "Kickoffs básicos",
+    code: "4125-17D5-2C7B-EBEF",
+    focus: "kickoffs limpios sin buscar mecánica de más",
+  },
   airRollShots: {
-    name: "Power shot + Air Roll Shot",
+    name: "Power shot + Air roll shot",
     code: "1C4E-D311-1506-B6C1",
     focus: "tiros con ajuste de air roll antes del impacto",
   },
@@ -148,13 +173,59 @@ export const ROCKET_LEAGUE_PACKS = Object.freeze({
 });
 
 export const ROCKET_LEAGUE_WORKSHOP_RULES = Object.freeze([
-  "Workshop queda pausado hasta nuevo aviso: no aparece en la rutina activa.",
-  "La sesión activa usa Freeplay + Training Packs para controlar mejor la dificultad.",
-  "Dribbling Challenge 1 Remastered y mapas similares quedan solo como biblioteca/benchmark manual, no como misión diaria.",
-  "Si más adelante se reactiva Workshop, debe volver como bloque opcional corto, nunca como foco principal para noob.",
+  "Si un código no funciona, dejá nota y buscalo por nombre dentro del juego antes de cambiar el plan.",
+  "Si un mapa Workshop no está instalado, usá el training pack alternativo indicado en ese bloque.",
+  "En Epic, Workshop solo entra si BakkesMod + Workshop Map Loader ya funcionan. Si no, fallback sin perder tiempo.",
+  "No agregar más de un mapa nuevo por día: si el bloque ya pide un Workshop nuevo y no está listo, usá fallback.",
+  "Air roll shots no es freestyle: air roll solo corrige el ángulo antes del impacto.",
+  "No saltarse descansos. La rutina cabe en 90 minutos porque los descansos ya están dentro.",
 ]);
 
 export const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({
+  aimTrainingByCoCo: {
+    name: "Aim Training · By CoCo",
+    source: "Workshop",
+    focus: "tiros abiertos y puntería con lectura rápida",
+    kind: "Aim / Shooting",
+    modeSafe: true,
+    activeRotation: true,
+    fallbackPackKey: "groundShots",
+    avoid: "No buscar score perfecto; mantener tiros limpios y consistentes.",
+    howToUse: "Usalo solo si ya está instalado. En Epic requiere BakkesMod + Workshop Map Loader; si no está listo, hacé Ground Shots de Poquito.",
+  },
+  speedJumpRings2: {
+    name: "Speed Jump: Rings 2",
+    source: "Workshop",
+    focus: "control aéreo y air roll sin convertirlo en freestyle",
+    kind: "Rings / Air roll",
+    modeSafe: true,
+    activeRotation: true,
+    fallbackPackKey: "airRollShotsAlt",
+    avoid: "No speedrun. No girar por girar. Estabilizar primero, corregir ángulo después.",
+    howToUse: "Si ya está instalado, 12 min de control. Si no, fallback: Air Roll Shots 84D2-072D-80CF-7D0D.",
+  },
+  speedJumpRings3: {
+    name: "Speed Jump: Rings 3",
+    source: "Workshop",
+    focus: "control aéreo progresivo con ruta más exigente",
+    kind: "Rings / Air roll",
+    modeSafe: true,
+    activeRotation: true,
+    fallbackPackKey: "airRollShots",
+    avoid: "No clips, no freestyle, no pelear el mapa si estás tilteado.",
+    howToUse: "Solo si ya está instalado. Si no, fallback: Power shot + Air roll shot 1C4E-D311-1506-B6C1.",
+  },
+  dribble2Overhaul: {
+    name: "Dribble 2 Overhaul",
+    source: "Workshop",
+    focus: "control bajo, low 50 y retos sin regalar posesión",
+    kind: "Dribbling / 50-50",
+    modeSafe: true,
+    activeRotation: true,
+    fallbackPackKey: "shadowDefense",
+    avoid: "No speedrun. Usarlo para control y challenges bajos, no para frustrarte.",
+    howToUse: "Si no está instalado, usá Shadow Defense 5CCE-FB29-7B05-A0B1 o 1v1 casual con objetivo low 50.",
+  },
   dribblingChallenge1Remastered: {
     name: "Dribbling Challenge 1 Remastered",
     source: "BakkesPlugins map · Workshop normal",
@@ -705,19 +776,20 @@ export function getRocketLeagueRoadmapWeekNumber(dateKey = getRocketLeagueDateKe
 }
 
 export function getRocketLeagueCycleFocus(dateKey = getRocketLeagueDateKey()) {
-  const weekNumber = getRocketLeagueRoadmapWeekNumber(dateKey);
-  const cycle = weekNumber <= 2
-    ? ROCKET_LEAGUE_TWO_WEEK_CYCLES[0]
-    : weekNumber <= 4
-      ? ROCKET_LEAGUE_TWO_WEEK_CYCLES[1]
-      : weekNumber <= 6
-        ? ROCKET_LEAGUE_TWO_WEEK_CYCLES[2]
-        : ROCKET_LEAGUE_TWO_WEEK_CYCLES[3];
+  const dayLabel = getRocketLeagueDayLabel(dateKey);
   return Object.freeze({
-    ...cycle,
-    weekNumber,
-    cycleWeek: cycle.cycleIndex < 3 ? ((weekNumber - 1) % 2) + 1 : Math.max(1, weekNumber - 6),
-    roadmapLabel: `Semana ${weekNumber} · ${cycle.short}`,
+    cycleIndex: 0,
+    weekRange: "Rotación semanal fija",
+    id: "daily-rotation",
+    label: `Rotación ${dayLabel} · recursos elegidos`,
+    short: "Rotación diaria",
+    goal: "open nets, 50/50, kickoffs, rotación y air roll shots sin perder tiempo decidiendo mapas",
+    planBaseId: "rocket-daily-rotation",
+    accent: "#22d3ee",
+    newMechanicRule: "La estructura de 90 min no cambia; solo rota el pack, Workshop o review exacto de cada bloque.",
+    weekNumber: getRocketLeagueRoadmapWeekNumber(dateKey),
+    cycleWeek: getRocketLeagueDayIndex(dateKey),
+    roadmapLabel: `Rotación ${dayLabel}`,
   });
 }
 
@@ -730,11 +802,7 @@ export function getRocketLeagueWeeklyFocus(dateKey = getRocketLeagueDateKey()) {
 }
 
 export function getRocketLeagueFocusRole(dateKey = getRocketLeagueDateKey()) {
-  const focus = getRocketLeagueCycleFocus(dateKey);
-  if (focus.id === "speedflip-clean") {
-    return { type: "advanced", label: "Ciclo avanzado", detail: "speedflip solo después de consolidar shots, ground dribble y aerial control" };
-  }
-  return { type: "cycle", label: "Ciclo de 2 semanas", detail: "máximo 1 mecánica nueva a la vez; fundamentos diarios se mantienen" };
+  return { type: "daily-rotation", label: "Rotación diaria fija", detail: "LifeOS elige el recurso exacto de cada bloque; no se decide manualmente antes de entrenar." };
 }
 
 export function getSecondsUntilNextRocketWeeklyFocus(now = Date.now()) {
@@ -803,6 +871,142 @@ const makeReplayNoteTask = (id, instruction = "5 min: revisá mentalmente 1 erro
   RL_TRAINING_ROLES.REVIEW,
   "Este bloque convierte la práctica en aprendizaje. No se reemplaza por otra partida."
 );
+
+
+const RL_DAY_LABELS = Object.freeze(["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]);
+const ROCKET_LEAGUE_DAILY_ROTATION_VERSION = "v32-rotation-selectors";
+
+const rlPackResource = (name, pack, focus = pack.focus, note = "") => Object.freeze({ kind: "pack", name, pack, focus, note });
+const rlWorkshopResource = (name, workshop, fallbackPack, focus = workshop.focus, note = "") => Object.freeze({ kind: "workshop", name, workshop, fallbackPack, focus, note });
+const rlManualResource = (name, focus, note = "") => Object.freeze({ kind: "manual", name, focus, note });
+const rlReplayResource = (name, focus, note = "") => Object.freeze({ kind: "replay", name, focus, note });
+const rlTestResource = (name, focus, note = "") => Object.freeze({ kind: "test", name, focus, note });
+
+function getRocketLeagueDayIndex(dateKey = getRocketLeagueDateKey()) {
+  return parseRocketLeagueDateKey(dateKey).getDay();
+}
+
+export function getRocketLeagueDayLabel(dateKey = getRocketLeagueDateKey()) {
+  return RL_DAY_LABELS[getRocketLeagueDayIndex(dateKey)] || "Día";
+}
+
+export const ROCKET_LEAGUE_DAILY_ROTATION = Object.freeze({
+  openNets: Object.freeze([
+    rlTestResource("Test de 20 tiros abiertos", "benchmark semanal de open nets", "Domingo: hacé 20 tiros abiertos, anotá cuántos metés limpios y no cambies de mapa."),
+    rlPackResource("Ground Shots · Poquito", ROCKET_LEAGUE_PACKS.groundShots),
+    rlPackResource("Powershots · Yeeza", ROCKET_LEAGUE_PACKS.powershots),
+    rlWorkshopResource("Aim Training · By CoCo", ROCKET_LEAGUE_WORKSHOP_MAPS.aimTrainingByCoCo, ROCKET_LEAGUE_PACKS.groundShots, "open nets y puntería con Workshop", "Si no está instalado o ya agregaste un mapa nuevo hoy, usá Ground Shots de Poquito."),
+    rlPackResource("Ground Shots · Poquito", ROCKET_LEAGUE_PACKS.groundShots),
+    rlPackResource("Powershot Practice", ROCKET_LEAGUE_PACKS.powershotPractice),
+    rlWorkshopResource("Aim Training · By CoCo", ROCKET_LEAGUE_WORKSHOP_MAPS.aimTrainingByCoCo, ROCKET_LEAGUE_PACKS.groundShots, "open nets y puntería con Workshop", "Si no está instalado o ya agregaste un mapa nuevo hoy, usá Ground Shots de Poquito."),
+  ]),
+  airRoll: Object.freeze([
+    rlManualResource("Freeplay air roll shots", "air roll shots libres sin freestyle", "Domingo: tiros con air roll en freeplay; air roll solo corrige ángulo antes del contacto."),
+    rlPackResource("Air Roll Shots", ROCKET_LEAGUE_PACKS.airRollShotsAlt),
+    rlPackResource("Power shot + Air roll shot", ROCKET_LEAGUE_PACKS.airRollShots),
+    rlWorkshopResource("Speed Jump: Rings 2", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings2, ROCKET_LEAGUE_PACKS.airRollShotsAlt, "control aéreo y orientación", "Si el mapa no está instalado, hacé Air Roll Shots 84D2-072D-80CF-7D0D."),
+    rlPackResource("Air Roll Shots", ROCKET_LEAGUE_PACKS.airRollShotsAlt),
+    rlPackResource("Power shot + Air roll shot", ROCKET_LEAGUE_PACKS.airRollShots),
+    rlWorkshopResource("Speed Jump: Rings 3", ROCKET_LEAGUE_WORKSHOP_MAPS.speedJumpRings3, ROCKET_LEAGUE_PACKS.airRollShots, "control aéreo progresivo", "Si el mapa no está instalado, hacé Power shot + Air roll shot 1C4E-D311-1506-B6C1."),
+  ]),
+  kickoffs: Object.freeze([
+    rlTestResource("Test de 10 kickoffs limpios", "benchmark semanal de kickoffs", "Domingo: 10 kickoffs limpios. Medí contacto, recuperación y si quedás útil después del saque."),
+    rlPackResource("Speedflip Kickoff Test", ROCKET_LEAGUE_PACKS.speedflipKickoffTest),
+    rlPackResource("Mastering Kickoffs", ROCKET_LEAGUE_PACKS.masteringKickoffs),
+    rlPackResource("Kickoffs básicos", ROCKET_LEAGUE_PACKS.basicKickoffs),
+    rlPackResource("Speedflip Kickoff Test", ROCKET_LEAGUE_PACKS.speedflipKickoffTest),
+    rlPackResource("Mastering Kickoffs", ROCKET_LEAGUE_PACKS.masteringKickoffs),
+    rlManualResource("Freeplay · 20 respawns de kickoff", "20 saques limpios sin mapa nuevo", "Sábado: reiniciá kickoff 20 veces. Priorizá contacto, recuperación y no quedar muerto."),
+  ]),
+  challenges: Object.freeze([
+    rlReplayResource("Replay corto · 3 50/50 perdidos", "detectar por qué perdés challenges", "Domingo: revisá un replay corto y anotá 3 50/50 perdidos: tarde, alto, sin boost o mal ángulo."),
+    rlManualResource("1v1 casual · objetivo low 50", "low challenges sin saltar de más", "Jugá 1v1 casual o freeplay situacional. Objetivo: low 50, no challenge alto sin necesidad."),
+    rlWorkshopResource("Dribble 2 Overhaul", ROCKET_LEAGUE_WORKSHOP_MAPS.dribble2Overhaul, ROCKET_LEAGUE_PACKS.shadowDefense, "dribble/control para low 50", "Si no está instalado, usá Shadow Defense o 1v1 casual con objetivo low 50."),
+    rlPackResource("Shadow Defense", ROCKET_LEAGUE_PACKS.shadowDefense),
+    rlManualResource("1v1 casual · no saltar antes de tiempo", "paciencia en low challenges", "Entrá a 1v1 casual con una sola regla: no saltar antes de tiempo. Perder la jugada por impaciencia cuenta como error."),
+    rlWorkshopResource("Dribble 2 Overhaul", ROCKET_LEAGUE_WORKSHOP_MAPS.dribble2Overhaul, ROCKET_LEAGUE_PACKS.shadowDefense, "dribble/control para low 50", "Si no está instalado, usá Shadow Defense o 1v1 casual con objetivo low 50."),
+    rlPackResource("Shadow Defense", ROCKET_LEAGUE_PACKS.shadowDefense),
+  ]),
+  decisions: Object.freeze([
+    rlReplayResource("Resumen semanal del error más repetido", "cierre semanal de decisiones", "Domingo: anotá el error que más se repitió esta semana y una regla concreta para la próxima."),
+    rlReplayResource("Replay · 3 errores de rotación", "rotación y posición", "Lunes: mirá un replay o recordá una partida. Anotá 3 errores de rotación sin justificarte."),
+    rlPackResource("Defensive Situations", ROCKET_LEAGUE_PACKS.defensiveSituations),
+    rlReplayResource("Replay · 3 overcommits", "detectar cuándo te fuiste de más", "Miércoles: buscá 3 overcommits y escribí qué opción más segura había."),
+    rlPackResource("Shadow Defense", ROCKET_LEAGUE_PACKS.shadowDefense),
+    rlReplayResource("Replay · 3 jugadas donde llegué tarde", "timing y lectura de jugada", "Viernes: encontrá 3 jugadas donde llegaste tarde y anotá si fue boost, posición o indecisión."),
+    rlPackResource("Defensive Situations", ROCKET_LEAGUE_PACKS.defensiveSituations),
+  ]),
+});
+
+function rlResourceInstruction(resource, fallbackSentence = "") {
+  if (!resource) return "Seguí el recurso asignado por LifeOS y no cambies de mapa a mitad del bloque.";
+  if (resource.kind === "pack") return `Training Pack asignado: ${resource.pack.name} · Código ${resource.pack.code}. Si el código no funciona, dejá nota y buscalo por nombre dentro del juego. ${resource.note || ""}`.trim();
+  if (resource.kind === "workshop") {
+    const fallback = resource.fallbackPack ? `Fallback: ${resource.fallbackPack.name} · Código ${resource.fallbackPack.code}.` : fallbackSentence;
+    return `Workshop asignado: ${resource.workshop.name}. Usalo solo si ya está instalado y en Epic solo con BakkesMod + Workshop Map Loader funcionando. ${fallback} No agregues más de un mapa nuevo por día. ${resource.note || ""}`.trim();
+  }
+  return `${resource.note || resource.focus || "Bloque manual."} Si no tenés claro cómo hacerlo, simplificá y registrá una nota rápida.`.trim();
+}
+
+function makeRlSelectorSubtask(id, blockCode, blockTitle, resource, minutes, baseInstruction, accent, role = RL_TRAINING_ROLES.SUPPORT) {
+  const taskType = resource?.kind === "pack"
+    ? RL_SUBTASK_TYPES.PACK
+    : resource?.kind === "workshop"
+      ? RL_SUBTASK_TYPES.WORKSHOP
+      : resource?.kind === "replay"
+        ? RL_SUBTASK_TYPES.MENTAL
+        : RL_SUBTASK_TYPES.MECHANIC;
+  const title = `${blockCode} · ${blockTitle} · ${resource?.name || "recurso del día"}`;
+  const task = Object.freeze({
+    id,
+    title,
+    type: taskType,
+    minutes,
+    pack: resource?.kind === "pack" ? resource.pack : undefined,
+    workshop: resource?.kind === "workshop" ? resource.workshop : undefined,
+    resourceKind: resource?.kind || "manual",
+    instruction: `${baseInstruction} ${rlResourceInstruction(resource)}`.replace(/\s+/g, " ").trim(),
+    focus: resource?.focus || blockTitle,
+    accent,
+  });
+  return withRlTrainingRole(task, role, `${blockCode} rota por día. LifeOS elige el recurso exacto para que no perdás tiempo decidiendo.`);
+}
+
+function makeRocketLeagueDailyRotationPlan(dateKey = getRocketLeagueDateKey()) {
+  const dayIndex = getRocketLeagueDayIndex(dateKey);
+  const dayLabel = getRocketLeagueDayLabel(dateKey);
+  const openNets = ROCKET_LEAGUE_DAILY_ROTATION.openNets[dayIndex];
+  const airRoll = ROCKET_LEAGUE_DAILY_ROTATION.airRoll[dayIndex];
+  const kickoffs = ROCKET_LEAGUE_DAILY_ROTATION.kickoffs[dayIndex];
+  const challenges = ROCKET_LEAGUE_DAILY_ROTATION.challenges[dayIndex];
+  const decisions = ROCKET_LEAGUE_DAILY_ROTATION.decisions[dayIndex];
+  const blocks = Object.freeze([
+    RL_FREEPLAY_SUBTASK,
+    makeRlSelectorSubtask("rl04-open-nets", "RL 04", "Open nets / tiros abiertos", openNets, 15, "Bloque de tiros abiertos. Meta: meter goles ganables con dirección, no tirar por tirar.", "#fbbf24", RL_TRAINING_ROLES.MAIN),
+    makeRlBreakSubtask("rl05-break-7", 7, "Descanso técnico: agua, manos sueltas, cero TikTok. El siguiente bloque necesita precisión."),
+    makeRlSelectorSubtask("rl06-air-roll-shots", "RL 06", "Air roll shots", airRoll, 12, "Air roll solo para cuadrar el carro antes del impacto. No freestyle, no clips.", "#e879f9", RL_TRAINING_ROLES.SUPPORT),
+    makeRlSelectorSubtask("rl08-kickoffs", "RL 08", "Saques / kickoffs", kickoffs, 12, "Kickoffs limpios: contacto, recuperación y posición útil después del saque.", "#60a5fa", RL_TRAINING_ROLES.SUPPORT),
+    makeRlBreakSubtask("rl09-break-7", 7, "Descanso técnico: soltá el control y reset mental antes de challenges/decisiones."),
+    makeRlSelectorSubtask("rl10-low-challenges", "RL 10", "50/50 y low challenges", challenges, 12, "Low challenges: no saltar antes de tiempo, no regalar el challenge alto, salir vivo de la jugada.", "#34d399", RL_TRAINING_ROLES.SUPPORT),
+    makeRlSelectorSubtask("rl12-rotation-decisions", "RL 12", "Rotación / decisiones", decisions, 10, "Decisiones: detectar el error repetido y convertirlo en una regla simple para la próxima partida.", "#a78bfa", RL_TRAINING_ROLES.REVIEW),
+    makeMentalCloseTask("rl14-close-5", "5 min: guardá el error principal del día, el pack/mapa usado y una acción exacta para mañana. No metas otro mapa al final."),
+    RL_ONE_V_ONE_SUBTASK,
+  ]);
+  const timedMinutes = blocks.reduce((sum, task) => sum + Math.max(0, Number(task.minutes) || 0), 0);
+  return Object.freeze({
+    id: `rocket-daily-rotation-${dateKey}-${ROCKET_LEAGUE_DAILY_ROTATION_VERSION}`,
+    baseId: "rocket-daily-rotation",
+    title: `Rotación diaria ${dayLabel} · 90 min`,
+    focus: "Open nets, air roll shots, kickoffs, 50/50 y rotación sin decidir mapas manualmente",
+    primaryFocus: "daily-rotation",
+    primaryMechanicLabel: "Open nets + 50/50 + kickoffs",
+    supportLabel: "90 min fijos: los recursos exactos rotan por día; descansos incluidos; no agregar más de un mapa nuevo por día.",
+    masteryNote: "La estructura no cambia. Solo cambia el pack, Workshop o review exacto de cada bloque.",
+    balance: "90 min entrenamiento · ranked opcional",
+    minutes: timedMinutes,
+    subtasks: blocks,
+  });
+}
 
 export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
   makeRlPlan("cycle-shots-rotation", "Ciclo 1–2 · Shooting diario: 2 principales + 1 complementario", "Yeeza powershots, Poquito ground shots y un complemento rotativo para no aburrirse", [
@@ -931,11 +1135,13 @@ export const ROCKET_LEAGUE_TRAINING_PLANS = Object.freeze([
 ]);
 
 export function getRocketLeaguePlanForDate(dateKey = getRocketLeagueDateKey()) {
-  const dailyFocus = getRocketLeagueDailyFocus(dateKey);
-  return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.baseId === dailyFocus.planBaseId) || ROCKET_LEAGUE_TRAINING_PLANS[0];
+  return makeRocketLeagueDailyRotationPlan(dateKey);
 }
 
 export function getRocketLeaguePlanById(planId) {
+  const id = String(planId || "");
+  const match = id.match(/^rocket-daily-rotation-(\d{4}-\d{2}-\d{2})-/);
+  if (match) return makeRocketLeagueDailyRotationPlan(match[1]);
   return ROCKET_LEAGUE_TRAINING_PLANS.find(plan => plan.id === planId) || null;
 }
 
@@ -945,26 +1151,12 @@ export function getRocketLeagueSubtaskTargetSeconds(planId, subtaskId) {
   return subtask ? Math.max(0, Math.floor(Number(subtask.minutes) || 0) * 60) : 0;
 }
 
-const ROCKET_LEAGUE_TODAY_PROGRESS_PRESET = Object.freeze({
-  dateKey: "2026-05-29",
-  completedSubtaskIds: ["freeplay", "main-powershots-pack-30"],
-  elapsedBySubtask: Object.freeze({
-    freeplay: 10 * 60 + 25,
-    "main-powershots-pack-30": 33 * 60 + 9,
-    "break-shots-10": 7 * 60 + 52,
-  }),
-});
-
 export function createRocketLeagueCurrent(dateKey = getRocketLeagueDateKey(), planId = getRocketLeaguePlanForDate(dateKey).id) {
-  const preset = dateKey === ROCKET_LEAGUE_TODAY_PROGRESS_PRESET.dateKey
-    ? ROCKET_LEAGUE_TODAY_PROGRESS_PRESET
-    : null;
-
   return {
     dateKey,
     planId,
-    completedSubtaskIds: preset ? [...preset.completedSubtaskIds] : [],
-    elapsedBySubtask: preset ? { ...preset.elapsedBySubtask } : {},
+    completedSubtaskIds: [],
+    elapsedBySubtask: {},
     matchCountBySubtask: {},
     mental: {
       moodBefore: null,
