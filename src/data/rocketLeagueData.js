@@ -1,5 +1,5 @@
-// Rocket League minimal control-center data for LifeOS.
-// Detailed packs, workshop maps, selector tables, metrics and replay notes now live in public/Rocket_League_Training_System.xlsx.
+// Rocket League Hub data for LifeOS.
+// LifeOS owns the daily control panel; only internal training packs, Freeplay, replays and matches are used.
 
 export const ROCKET_LEAGUE_SESSION_MINUTES = 90;
 export const ROCKET_LEAGUE_PARENT_QUEST_ID = 2;
@@ -10,16 +10,112 @@ export const ROCKET_LEAGUE_PROFILE = Object.freeze({
   review: "Semanal",
 });
 
+
+export const ROCKET_LEAGUE_TODAY_FOCUS = Object.freeze({
+  openNets: "Training pack interno o freeplay: 20 tiros abiertos medidos",
+  airRoll: "Air roll shots con ajuste mínimo; control antes que estilo",
+  kickoffs: "Kickoffs limpios: salida estable, cancel controlado y recuperación",
+  fifty: "1v1/casual con objetivo: low 50, no regalar reto",
+  rotation: "Replay corto: detectar 3 overcommits o llegadas tarde",
+});
+
+export const ROCKET_LEAGUE_ROUTINE_BLOCKS = Object.freeze([
+  Object.freeze({ id: "rl-01", label: "RL 01", title: "Preparación / check-in", minutes: 3, do: "Conectar mando, abrir RL y confirmar que todo está igual que siempre.", avoid: "No tocar sensibilidad, binds ni settings por impulso.", metric: "Setup estable antes de empezar." }),
+  Object.freeze({ id: "rl-02", label: "RL 02", title: "Warm-up freeplay con recoveries", minutes: 8, do: "Moverte, caer bien, recuperar y tocar balón sin pausa larga.", avoid: "No convertirlo en freestyle ni ranked mental.", metric: "Entrar caliente sin perder control." }),
+  Object.freeze({ id: "rl-03", label: "RL 03", title: "Descanso corto", minutes: 2, do: "Soltar manos, respirar y resetear foco.", avoid: "No abrir TikTok ni cambiar el plan.", metric: "Volver sin ansiedad." }),
+  Object.freeze({ id: "rl-04", label: "RL 04", title: "Open nets / tiros abiertos", minutes: 15, do: "Pegar fuerte, limpio y con dirección en packs internos o freeplay.", avoid: "No girar por girar antes del impacto.", metric: "Open nets buenos / 20." }),
+  Object.freeze({ id: "rl-05", label: "RL 05", title: "Descanso", minutes: 3, do: "Agua, manos sueltas, mirar solo el objetivo siguiente.", avoid: "No saltarte el descanso.", metric: "Entrar al siguiente bloque fresco." }),
+  Object.freeze({ id: "rl-06", label: "RL 06", title: "Air roll shots", minutes: 12, do: "Usar air roll mínimo para ajustar ángulo y contacto.", avoid: "No freestyle, no spins innecesarios.", metric: "Tiros controlados / 20." }),
+  Object.freeze({ id: "rl-07", label: "RL 07", title: "Descanso corto", minutes: 2, do: "Cortar tensión y resetear muñeca.", avoid: "No llenar el descanso con clips/videos.", metric: "Listo para kickoffs." }),
+  Object.freeze({ id: "rl-08", label: "RL 08", title: "Saques / kickoffs", minutes: 12, do: "Practicar salida, contacto y recovery después del kickoff.", avoid: "No subir velocidad si vuelve el doble toque o el control sucio.", metric: "Kickoffs limpios / 10." }),
+  Object.freeze({ id: "rl-09", label: "RL 09", title: "Descanso", minutes: 3, do: "Respirar y recordar: reto bajo, no regalar balón.", avoid: "No entrar frustrado al 50/50.", metric: "Mental estable." }),
+  Object.freeze({ id: "rl-10", label: "RL 10", title: "50/50 y low challenges", minutes: 12, do: "Jugar 1v1/casual con foco en low 50 y no saltar antes.", avoid: "No buscar clips ni challenge alto sin cobertura.", metric: "Mejor / Igual / Peor." }),
+  Object.freeze({ id: "rl-11", label: "RL 11", title: "Descanso", minutes: 3, do: "Soltar, agua y preparar revisión de decisiones.", avoid: "No cambiar rutina aquí.", metric: "Seguir el plan." }),
+  Object.freeze({ id: "rl-12", label: "RL 12", title: "Rotación / decisiones", minutes: 10, do: "Revisar replay corto o jugar casual con objetivo específico.", avoid: "No analizar una hora; solo 3 errores claros.", metric: "3 errores detectados." }),
+  Object.freeze({ id: "rl-13", label: "RL 13", title: "Registro diario", minutes: 5, do: "Guardar energía, fluidez, error principal y corrección para mañana.", avoid: "No escribir novela ni justificar la sesión.", metric: "Una corrección accionable." }),
+]);
+
+export const ROCKET_LEAGUE_TRAINING_PACKS_SIMPLE = Object.freeze([
+  Object.freeze({
+    category: "Open nets / tiros abiertos",
+    items: Object.freeze([
+      "Ground Shots — 6EB1-79B2-33B8-681C",
+      "Powershots — 7028-5E10-88EF-E83E",
+      "Powershot Practice — C9E4-0F05-B71A-C322",
+      "Alternativa: freeplay, 20 tiros abiertos medidos",
+    ]),
+  }),
+  Object.freeze({
+    category: "Air roll shots",
+    items: Object.freeze([
+      "Air Roll Shots — 84D2-072D-80CF-7D0D",
+      "Power shot + Air roll shot — 1C4E-D311-1506-B6C1",
+      "Alternativa: freeplay, tiros con air roll mínimo",
+    ]),
+  }),
+  Object.freeze({
+    category: "Kickoffs",
+    items: Object.freeze([
+      "Speedflip Kickoff Test — A503-264C-A7EB-D282",
+      "Mastering Kickoffs — 8939-4C63-B233-83C1",
+      "Kickoffs básicos — 4125-17D5-2C7B-EBEF",
+      "Alternativa: freeplay, 20 respawns de kickoff",
+    ]),
+  }),
+  Object.freeze({
+    category: "50/50",
+    items: Object.freeze([
+      "1v1 casual con objetivo de low 50",
+      "Freeplay para control detrás del balón",
+      "Replay corto para detectar 50/50 regalados",
+    ]),
+  }),
+  Object.freeze({
+    category: "Rotación",
+    items: Object.freeze([
+      "Replay review corto",
+      "Buscar 3 errores: open net fallado, 50/50 perdido, mala rotación / overcommit",
+      "Alternativa: partida casual con objetivo específico",
+    ]),
+  }),
+]);
+
+export const ROCKET_LEAGUE_WEEKLY_REVIEW_ITEMS = Object.freeze([
+  "¿Mejoraron los open nets?",
+  "¿Perdí menos 50/50?",
+  "¿Mis kickoffs fueron más limpios?",
+  "¿Me desordené menos en rotación?",
+  "¿Los air roll shots tuvieron más control?",
+  "¿La rutina se sintió pesada o sostenible?",
+]);
+
+export const ROCKET_LEAGUE_WEEKLY_DECISIONS = Object.freeze([
+  "Mantener rutina",
+  "Ajustar un bloque",
+  "Bajar volumen",
+  "Subir dificultad",
+  "Revisar error repetido",
+]);
+
+export const ROCKET_LEAGUE_REPLAY_TYPES = Object.freeze([
+  "Rotación",
+  "50/50",
+  "Open net",
+  "Kickoff",
+  "Boost",
+  "Mala decisión",
+]);
+
 export const ROCKET_LEAGUE_CONTROLLER_PRESET = Object.freeze([]);
 export const ROCKET_LEAGUE_RECOVERY_TIPS = Object.freeze([]);
 export const ROCKET_LEAGUE_PACKS = Object.freeze({});
-export const ROCKET_LEAGUE_WORKSHOP_RULES = Object.freeze([]);
-export const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({});
+export const ROCKET_LEAGUE_WORKSHOP_RULES = Object.freeze([]); // legacy export, unused in the new Rocket Hub
+export const ROCKET_LEAGUE_WORKSHOP_MAPS = Object.freeze({}); // legacy export, unused in the new Rocket Hub
 
 export const RL_SUBTASK_TYPES = Object.freeze({
   FREEPLAY: "freeplay",
   TRAINING_PACK: "training_pack",
-  WORKSHOP: "workshop",
+  WORKSHOP: "legacy_external",
   MATCHES: "matches",
   MENTAL: "mental",
   NOTE: "note",
@@ -46,7 +142,7 @@ const ROCKET_LEAGUE_CONTROL_PLAN = Object.freeze({
   id: "rocket-control-90",
   title: "Rocket League",
   focus: "Consistencia competitiva",
-  short: "90 min fijos · detalle en Excel",
+  short: "90 min fijos · control dentro de LifeOS",
   minutes: ROCKET_LEAGUE_SESSION_MINUTES,
   subtasks: Object.freeze([
     Object.freeze({ id: "rl-control-session", title: "Rutina fija de 90 min", minutes: 90, type: RL_SUBTASK_TYPES.NOTE, optional: false }),

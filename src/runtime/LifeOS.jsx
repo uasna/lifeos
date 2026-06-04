@@ -45,6 +45,12 @@ import {
   ROCKET_LEAGUE_PACKS,
   ROCKET_LEAGUE_WORKSHOP_RULES,
   ROCKET_LEAGUE_WORKSHOP_MAPS,
+  ROCKET_LEAGUE_TODAY_FOCUS,
+  ROCKET_LEAGUE_ROUTINE_BLOCKS,
+  ROCKET_LEAGUE_TRAINING_PACKS_SIMPLE,
+  ROCKET_LEAGUE_WEEKLY_REVIEW_ITEMS,
+  ROCKET_LEAGUE_WEEKLY_DECISIONS,
+  ROCKET_LEAGUE_REPLAY_TYPES,
   RL_SUBTASK_TYPES,
   SPEEDFLIP_DAR_ERROR_LABELS,
   SPEEDFLIP_DAR_TOUCH_MOMENTS,
@@ -4503,11 +4509,16 @@ function RocketLeagueView() {
     try {
       if (typeof window === "undefined" || !window.localStorage) return fallback;
       const raw = window.localStorage.getItem(key);
-      return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : fallback;
+      if (fallback && typeof fallback === "object") return parsed && typeof parsed === "object" ? { ...fallback, ...parsed } : fallback;
+      return parsed ?? fallback;
     } catch {
       return fallback;
     }
   }, []);
+
   const storageSave = useCallback((key, value) => {
     try {
       if (typeof window !== "undefined" && window.localStorage) {
@@ -4525,90 +4536,131 @@ function RocketLeagueView() {
     "Empezar temporizador de 90 min",
   ], []);
 
-  const routineFields = useMemo(() => [
-    ["openNets", "Open nets"],
-    ["airRoll", "Air roll shots"],
-    ["kickoffs", "Kickoffs"],
-    ["fifty", "50/50"],
-    ["rotation", "Rotación"],
-  ], []);
-
+  const [detailTab, setDetailTab] = useState("routine");
+  const [sessionState, setSessionState] = useState(() => storageLoad(`lifeos:rl:session:${todayKey}`, { started: false }));
   const [precheck, setPrecheck] = useState(() => storageLoad(`lifeos:rl:precheck:${todayKey}`, {}));
-  const [todayRoutine, setTodayRoutine] = useState(() => storageLoad(`lifeos:rl:routine:${todayKey}`, {
-    openNets: "",
-    airRoll: "",
-    kickoffs: "",
-    fifty: "",
-    rotation: "",
-  }));
+  const [completedBlocks, setCompletedBlocks] = useState(() => storageLoad(`lifeos:rl:routineBlocks:${todayKey}`, {}));
   const [dailyLog, setDailyLog] = useState(() => storageLoad(`lifeos:rl:dailyLog:${todayKey}`, {
     date: todayKey,
     completed: parentCompleted ? "Sí" : "",
     energy: "",
     flow: "",
+    openNetsGood: "",
+    airRollGood: "",
+    kickoffsClean: "",
+    fiftyStatus: "",
     mainError: "",
     tomorrowFix: "",
+    notes: "",
   }));
+  const [dailyHistory, setDailyHistory] = useState(() => storageLoad("lifeos:rl:dailyHistory", []));
   const [weeklyReview, setWeeklyReview] = useState(() => storageLoad("lifeos:rl:weeklyReview", {
-    openNets: false,
-    fifty: false,
-    kickoffs: false,
-    rotation: false,
-    airRoll: false,
-    sustainable: false,
-    decision: "",
+    answers: {},
+    decisions: {},
+    note: "",
   }));
+  const [replayNote, setReplayNote] = useState(() => storageLoad(`lifeos:rl:replayNote:${todayKey}`, {
+    date: todayKey,
+    mode: "",
+    error: "",
+    type: "Rotación",
+    correction: "",
+    reminder: "",
+  }));
+  const [replayHistory, setReplayHistory] = useState(() => storageLoad("lifeos:rl:replayHistory", []));
 
-  useEffect(() => storageSave(`lifeos:rl:precheck:${todayKey}`, precheck), [precheck, storageSave, todayKey]);
-  useEffect(() => storageSave(`lifeos:rl:routine:${todayKey}`, todayRoutine), [todayRoutine, storageSave, todayKey]);
-  useEffect(() => storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog), [dailyLog, storageSave, todayKey]);
-  useEffect(() => storageSave("lifeos:rl:weeklyReview", weeklyReview), [weeklyReview, storageSave]);
+  useEffect(() => { storageSave(`lifeos:rl:session:${todayKey}`, sessionState); }, [sessionState, storageSave, todayKey]);
+  useEffect(() => { storageSave(`lifeos:rl:precheck:${todayKey}`, precheck); }, [precheck, storageSave, todayKey]);
+  useEffect(() => { storageSave(`lifeos:rl:routineBlocks:${todayKey}`, completedBlocks); }, [completedBlocks, storageSave, todayKey]);
+  useEffect(() => { storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog); }, [dailyLog, storageSave, todayKey]);
+  useEffect(() => { storageSave(`lifeos:rl:replayNote:${todayKey}`, replayNote); }, [replayNote, storageSave, todayKey]);
 
   const checkedCount = precheckItems.filter(item => precheck[item]).length;
-  const quickRoutineCount = routineFields.filter(([key]) => String(todayRoutine[key] || "").trim()).length;
+  const completedBlockCount = ROCKET_LEAGUE_ROUTINE_BLOCKS.filter(block => completedBlocks[block.id]).length;
+  const routinePct = Math.round((completedBlockCount / Math.max(ROCKET_LEAGUE_ROUTINE_BLOCKS.length, 1)) * 100);
+  const sessionStatus = parentCompleted ? "Completada" : sessionState.started ? "En progreso" : "Pendiente";
 
-  const notify = useCallback((title, sub) => {
+  const weeklyStats = useMemo(() => {
+    const recent = Array.isArray(dailyHistory) ? dailyHistory.slice(-7) : [];
+    const avg = (key) => {
+      const nums = recent.map(item => Number(item?.[key])).filter(Number.isFinite);
+      return nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : "—";
+    };
+    return {
+      energy: avg("energy"),
+      flow: avg("flow"),
+      openNets: avg("openNetsGood"),
+      airRoll: avg("airRollGood"),
+      kickoffs: avg("kickoffsClean"),
+      completed: recent.filter(item => item?.completed === "Sí").length,
+    };
+  }, [dailyHistory]);
+
+  const notify = useCallback((msg, sub) => {
     const id = Date.now();
-    uiDispatch(AC.toastAdd(id, title, sub));
+    uiDispatch(AC.toastAdd(id, msg, sub));
     setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
   }, [uiDispatch]);
 
-  const markRoutineComplete = useCallback(() => {
+  const startSession = useCallback(() => {
     unlockLifeOSAudio();
+    playLifeOSSound("menu");
+    setSessionState(prev => ({ ...prev, started: true, startedAt: prev.startedAt || new Date().toISOString() }));
+    notify("Rocket League iniciado", "Seguí la rutina fija de 90 min; no improvisés bloques");
+  }, [notify]);
+
+  const markRoutineComplete = useCallback(() => {
     setDailyLog(prev => ({ ...prev, completed: "Sí" }));
-    if (parentQuest && !parentCompleted) {
-      const oldNivel = SELECTORS.level(persistent.xp.total);
-      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
-      playLifeOSSound("mission");
-      notify("Rocket League completado", `+${parentQuest.xp} XP · 90 min cerrados sin cambiar la rutina`);
+    if (!parentQuest || parentCompleted) {
+      notify("Rocket League ya estaba marcado", "Rutina completada para hoy");
       return;
+    }
+    unlockLifeOSAudio();
+    const oldNivel = SELECTORS.level(persistent.xp.total);
+    pDispatch(AC.questComplete(parentQuest.id, parentQuest.xp, oldNivel));
+    const newNivel = SELECTORS.level(persistent.xp.total + parentQuest.xp);
+    if (newNivel > oldNivel) {
+      setTimeout(() => { uiDispatch(AC.showNivelUp()); setTimeout(() => uiDispatch(AC.hideNivelUp()), 3200); }, 250);
     }
     playLifeOSSound("complete");
     notify("Rocket League marcado", "Rutina completada para hoy");
-  }, [parentQuest, parentCompleted, persistent.xp.total, pDispatch, notify]);
+  }, [parentQuest, parentCompleted, persistent.xp.total, pDispatch, uiDispatch, notify]);
 
   const saveDailyLog = useCallback(() => {
-    storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog);
+    const entry = { ...dailyLog, date: dailyLog.date || todayKey, savedAt: new Date().toISOString() };
+    const nextHistory = [entry, ...(dailyHistory || []).filter(item => item?.date !== entry.date)].slice(0, 60).reverse();
+    setDailyHistory(nextHistory);
+    storageSave("lifeos:rl:dailyHistory", nextHistory);
+    storageSave(`lifeos:rl:dailyLog:${todayKey}`, entry);
     notify("Registro Rocket guardado", "Una corrección clara para mañana vale más que 20 métricas");
-  }, [dailyLog, notify, storageSave, todayKey]);
+  }, [dailyLog, dailyHistory, notify, storageSave, todayKey]);
 
   const saveWeeklyReview = useCallback(() => {
     storageSave("lifeos:rl:weeklyReview", weeklyReview);
-    notify("Revisión semanal guardada", "Cambiá la rutina solo en revisión, no por impulso diario");
+    notify("Revisión semanal guardada", "La rutina solo se ajusta aquí, no por impulso diario");
   }, [weeklyReview, notify, storageSave]);
+
+  const saveReplayNote = useCallback(() => {
+    const entry = { ...replayNote, date: replayNote.date || todayKey, savedAt: new Date().toISOString() };
+    const nextHistory = [entry, ...(replayHistory || []).filter(item => item?.savedAt !== entry.savedAt)].slice(0, 30);
+    setReplayHistory(nextHistory);
+    storageSave("lifeos:rl:replayHistory", nextHistory);
+    storageSave(`lifeos:rl:replayNote:${todayKey}`, entry);
+    notify("Nota de replay guardada", "Una frase recordable basta para mañana");
+  }, [replayNote, replayHistory, notify, storageSave, todayKey]);
 
   const cardStyle = {
     borderRadius: 28,
-    border: "1px solid rgba(148,163,184,.16)",
-    background: "linear-gradient(145deg,rgba(15,23,42,.78),rgba(2,6,23,.60))",
-    boxShadow: "0 22px 80px rgba(0,0,0,.20)",
+    border: "1px solid rgba(148,163,184,.14)",
+    background: "linear-gradient(145deg,rgba(15,23,42,.74),rgba(2,6,23,.56))",
+    boxShadow: "0 18px 70px rgba(0,0,0,.20)",
   };
   const softCard = {
     borderRadius: 22,
     border: "1px solid rgba(148,163,184,.12)",
-    background: "rgba(15,23,42,.52)",
+    background: "rgba(15,23,42,.46)",
   };
-  const labelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.4, color: "#67e8f9", fontWeight: 950 };
+  const labelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.35, color: "#67e8f9", fontWeight: 950 };
   const inputStyle = {
     width: "100%",
     borderRadius: 14,
@@ -4637,6 +4689,17 @@ function RocketLeagueView() {
     padding: "0 13px",
     fontSize: 12.5,
   };
+  const tabStyle = (active) => ({
+    minHeight: 38,
+    borderRadius: 999,
+    border: active ? "1px solid rgba(34,211,238,.36)" : "1px solid rgba(148,163,184,.13)",
+    background: active ? "rgba(34,211,238,.12)" : "rgba(255,255,255,.035)",
+    color: active ? "#67e8f9" : T_COLOR.muted,
+    fontWeight: 950,
+    cursor: "pointer",
+    padding: "0 13px",
+    fontSize: 12,
+  });
 
   const Rating = ({ value, onChange, label }) => (
     <div>
@@ -4650,34 +4713,189 @@ function RocketLeagueView() {
     </div>
   );
 
+  const SummaryFocus = () => (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+      {[
+        ["Open nets", ROCKET_LEAGUE_TODAY_FOCUS.openNets],
+        ["Air roll shots", ROCKET_LEAGUE_TODAY_FOCUS.airRoll],
+        ["Kickoffs", ROCKET_LEAGUE_TODAY_FOCUS.kickoffs],
+        ["50/50", ROCKET_LEAGUE_TODAY_FOCUS.fifty],
+        ["Rotación", ROCKET_LEAGUE_TODAY_FOCUS.rotation],
+      ].map(([label, value]) => (
+        <div key={label} style={{ ...softCard, padding:14, minHeight:118 }}>
+          <div style={{ fontSize:11, color:"#67e8f9", fontWeight:950, marginBottom:7 }}>{label}</div>
+          <div style={{ color:T_COLOR.text, fontWeight:850, lineHeight:1.45, fontSize:13 }}>{value}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderRoutineTab = () => (
+    <div style={{ display:"grid", gap:10 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+        <div>
+          <div style={labelStyle}>Rutina 90 min</div>
+          <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Bloques con descanso incluido</h2>
+        </div>
+        <div style={{ ...softCard, padding:"10px 13px", color:"#67e8f9", fontWeight:950 }}>{completedBlockCount}/{ROCKET_LEAGUE_ROUTINE_BLOCKS.length} · {routinePct}%</div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        {ROCKET_LEAGUE_ROUTINE_BLOCKS.map(block => {
+          const done = Boolean(completedBlocks[block.id]);
+          return (
+            <article key={block.id} style={{ ...softCard, padding:16, borderColor:done ? "rgba(52,211,153,.28)" : "rgba(148,163,184,.12)", background:done ? "rgba(52,211,153,.075)" : softCard.background }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start" }}>
+                <div>
+                  <div style={{ color:"#67e8f9", fontSize:11, fontWeight:950, letterSpacing:1 }}>{block.label} · {block.minutes} min</div>
+                  <h3 style={{ margin:"6px 0 10px", color:T_COLOR.text, fontSize:17 }}>{block.title}</h3>
+                </div>
+                <button onClick={() => setCompletedBlocks(prev => ({ ...prev, [block.id]: !prev[block.id] }))} style={{ width:42, height:42, borderRadius:14, border:done ? "1px solid rgba(52,211,153,.38)" : "1px solid rgba(148,163,184,.18)", background:done ? "rgba(52,211,153,.14)" : "rgba(255,255,255,.035)", cursor:"pointer" }} aria-label={`Marcar ${block.title}`}>{done ? <CheckCircle2 size={19} color="#34d399"/> : <Circle size={19} color="#64748b"/>}</button>
+              </div>
+              <div style={{ display:"grid", gap:8, color:T_COLOR.muted, fontSize:12.5, lineHeight:1.45 }}>
+                <div><b style={{ color:T_COLOR.text }}>Qué hacer:</b> {block.do}</div>
+                <div><b style={{ color:T_COLOR.text }}>Qué no hacer:</b> {block.avoid}</div>
+                <div><b style={{ color:"#fbbf24" }}>Métrica:</b> {block.metric}</div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderPacksTab = () => (
+    <div style={{ display:"grid", gap:12 }}>
+      <div>
+        <div style={labelStyle}>Training packs</div>
+        <h2 style={{ ...S.h2, margin:"6px 0 6px" }}>Solo internos + Freeplay</h2>
+        <p style={{ color:T_COLOR.muted, margin:0, lineHeight:1.55 }}>Nada externo: sin mapas de comunidad, sin rings, sin loaders. Si un código falla, buscalo por nombre dentro del juego.</p>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        {ROCKET_LEAGUE_TRAINING_PACKS_SIMPLE.map(group => (
+          <article key={group.category} style={{ ...softCard, padding:16 }}>
+            <h3 style={{ margin:"0 0 10px", color:T_COLOR.text, fontSize:17 }}>{group.category}</h3>
+            <div style={{ display:"grid", gap:8 }}>
+              {group.items.map(item => <div key={item} style={{ color:T_COLOR.muted, fontSize:13, lineHeight:1.45, display:"flex", gap:8 }}><span style={{ color:"#67e8f9" }}>•</span><span>{item}</span></div>)}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderLogTab = () => (
+    <div style={{ display:"grid", gap:16 }}>
+      <div>
+        <div style={labelStyle}>Registro diario</div>
+        <h2 style={{ ...S.h2, margin:"6px 0 6px" }}>Medir lo justo</h2>
+        <p style={{ color:T_COLOR.muted, margin:0 }}>Un registro corto para detectar patrón, no una tabla pesada.</p>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"160px 170px 1fr 1fr", gap:12 }} className="mob-layout-grid">
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Fecha</span><input value={dailyLog.date || todayKey} onChange={e => setDailyLog(prev => ({ ...prev, date:e.target.value }))} style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Rutina completada</span><select value={dailyLog.completed || ""} onChange={e => setDailyLog(prev => ({ ...prev, completed:e.target.value }))} style={inputStyle}><option value="">Elegir</option><option>Sí</option><option>No</option></select></label>
+        <Rating label="Energía 1-5" value={dailyLog.energy} onChange={v => setDailyLog(prev => ({ ...prev, energy:v }))}/>
+        <Rating label="Fluidez 1-5" value={dailyLog.flow} onChange={v => setDailyLog(prev => ({ ...prev, flow:v }))}/>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Open nets buenos / 20</span><input type="number" min="0" max="20" value={dailyLog.openNetsGood || ""} onChange={e => setDailyLog(prev => ({ ...prev, openNetsGood:e.target.value }))} style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Air roll shots buenos / 20</span><input type="number" min="0" max="20" value={dailyLog.airRollGood || ""} onChange={e => setDailyLog(prev => ({ ...prev, airRollGood:e.target.value }))} style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Kickoffs limpios / 10</span><input type="number" min="0" max="10" value={dailyLog.kickoffsClean || ""} onChange={e => setDailyLog(prev => ({ ...prev, kickoffsClean:e.target.value }))} style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>50/50</span><select value={dailyLog.fiftyStatus || ""} onChange={e => setDailyLog(prev => ({ ...prev, fiftyStatus:e.target.value }))} style={inputStyle}><option value="">Elegir</option><option>Mejor</option><option>Igual</option><option>Peor</option></select></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Error principal</span><textarea value={dailyLog.mainError || ""} onChange={e => setDailyLog(prev => ({ ...prev, mainError:e.target.value.slice(0, 500) }))} placeholder="Ej. Fallé open nets por entrar torcido / salté antes del 50 / roté tarde." style={{ ...inputStyle, minHeight:78, resize:"vertical" }}/></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Corrección para mañana</span><textarea value={dailyLog.tomorrowFix || ""} onChange={e => setDailyLog(prev => ({ ...prev, tomorrowFix:e.target.value.slice(0, 500) }))} placeholder="Una corrección concreta." style={{ ...inputStyle, minHeight:78, resize:"vertical" }}/></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Notas cortas</span><textarea value={dailyLog.notes || ""} onChange={e => setDailyLog(prev => ({ ...prev, notes:e.target.value.slice(0, 700) }))} placeholder="Solo si hace falta." style={{ ...inputStyle, minHeight:80, resize:"vertical" }}/></label>
+      </div>
+      <button onClick={saveDailyLog} style={{ ...actionStyle, width:"100%" }}><CheckCircle2 size={16}/> Guardar registro diario</button>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        {[
+          ["Energía", weeklyStats.energy],
+          ["Fluidez", weeklyStats.flow],
+          ["Open nets", weeklyStats.openNets],
+          ["Air roll", weeklyStats.airRoll],
+          ["Kickoffs", weeklyStats.kickoffs],
+          ["Días completos", weeklyStats.completed],
+        ].map(([label, value]) => <div key={label} style={{ ...softCard, padding:13 }}><div style={{ color:T_COLOR.muted, fontSize:11, fontWeight:900 }}>{label}</div><div style={{ color:T_COLOR.text, fontSize:22, fontWeight:950, marginTop:4 }}>{value}</div></div>)}
+      </div>
+    </div>
+  );
+
+  const renderWeeklyTab = () => (
+    <div style={{ display:"grid", gap:14 }}>
+      <div>
+        <div style={labelStyle}>Revisión semanal</div>
+        <h2 style={{ ...S.h2, margin:"6px 0 6px" }}>Cambios solo aquí</h2>
+        <p style={{ color:T_COLOR.muted, margin:0 }}>La rutina diaria no se toca por aburrimiento; se ajusta con evidencia semanal.</p>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        {ROCKET_LEAGUE_WEEKLY_REVIEW_ITEMS.map(question => {
+          const on = Boolean(weeklyReview.answers?.[question]);
+          return <button key={question} onClick={() => setWeeklyReview(prev => ({ ...prev, answers:{ ...(prev.answers || {}), [question]: !on } }))} style={{ minHeight:54, borderRadius:16, border:on ? "1px solid rgba(167,139,250,.36)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(167,139,250,.13)" : "rgba(255,255,255,.035)", color:on ? "#d8b4fe" : T_COLOR.text, cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"0 14px", textAlign:"left", fontWeight:850 }}>{on ? <CheckCircle2 size={18} color="#c084fc"/> : <Circle size={18} color="#64748b"/>}<span>{question}</span></button>;
+        })}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:8 }} className="mob-layout-grid">
+        {ROCKET_LEAGUE_WEEKLY_DECISIONS.map(decision => {
+          const on = Boolean(weeklyReview.decisions?.[decision]);
+          return <button key={decision} onClick={() => setWeeklyReview(prev => ({ ...prev, decisions:{ ...(prev.decisions || {}), [decision]: !on } }))} style={{ minHeight:42, borderRadius:14, border:on ? "1px solid rgba(251,191,36,.35)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(251,191,36,.10)" : "rgba(255,255,255,.035)", color:on ? "#fde68a" : T_COLOR.muted, fontWeight:900, cursor:"pointer" }}>{decision}</button>;
+        })}
+      </div>
+      <textarea value={weeklyReview.note || ""} onChange={e => setWeeklyReview(prev => ({ ...prev, note:e.target.value.slice(0, 900) }))} placeholder="Nota semanal corta: qué se mantiene y qué se ajusta." style={{ ...inputStyle, minHeight:110, resize:"vertical" }}/>
+      <button onClick={saveWeeklyReview} style={{ ...actionStyle, width:"100%", borderColor:"rgba(167,139,250,.32)", background:"rgba(167,139,250,.12)", color:"#d8b4fe" }}><RefreshCw size={16}/> Guardar revisión semanal</button>
+    </div>
+  );
+
+  const renderReplayTab = () => (
+    <div style={{ display:"grid", gap:14 }}>
+      <div>
+        <div style={labelStyle}>Notas de replay</div>
+        <h2 style={{ ...S.h2, margin:"6px 0 6px" }}>Una corrección, no análisis infinito</h2>
+        <p style={{ color:T_COLOR.muted, margin:0 }}>Revisá poco, detectá claro y volvé a jugar.</p>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"160px 180px 1fr", gap:12 }} className="mob-layout-grid">
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Fecha</span><input value={replayNote.date || todayKey} onChange={e => setReplayNote(prev => ({ ...prev, date:e.target.value }))} style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Modo</span><input value={replayNote.mode || ""} onChange={e => setReplayNote(prev => ({ ...prev, mode:e.target.value.slice(0, 80) }))} placeholder="1v1 / 2v2 / ranked" style={inputStyle}/></label>
+        <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Tipo</span><select value={replayNote.type || "Rotación"} onChange={e => setReplayNote(prev => ({ ...prev, type:e.target.value }))} style={inputStyle}>{ROCKET_LEAGUE_REPLAY_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Error detectado</span><textarea value={replayNote.error || ""} onChange={e => setReplayNote(prev => ({ ...prev, error:e.target.value.slice(0, 500) }))} style={{ ...inputStyle, minHeight:84, resize:"vertical" }}/></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Corrección</span><textarea value={replayNote.correction || ""} onChange={e => setReplayNote(prev => ({ ...prev, correction:e.target.value.slice(0, 500) }))} style={{ ...inputStyle, minHeight:84, resize:"vertical" }}/></label>
+        <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Una frase para recordar</span><input value={replayNote.reminder || ""} onChange={e => setReplayNote(prev => ({ ...prev, reminder:e.target.value.slice(0, 160) }))} placeholder="Ej. No saltar si todavía puedo cerrar bajo." style={inputStyle}/></label>
+      </div>
+      <button onClick={saveReplayNote} style={{ ...actionStyle, width:"100%" }}><MessageSquare size={16}/> Guardar nota de replay</button>
+    </div>
+  );
+
+  const renderDetailTab = () => {
+    if (detailTab === "packs") return renderPacksTab();
+    if (detailTab === "log") return renderLogTab();
+    if (detailTab === "weekly") return renderWeeklyTab();
+    if (detailTab === "replay") return renderReplayTab();
+    return renderRoutineTab();
+  };
+
   return (
-    <div className="view-enter" style={{ display:"grid", gap:22 }}>
-      <section style={{ ...cardStyle, padding:28, position:"relative", overflow:"hidden" }}>
-        <div style={{ position:"absolute", inset:"-20% -10% auto auto", width:320, height:220, background:"radial-gradient(circle,rgba(34,211,238,.18),transparent 65%)", pointerEvents:"none" }} />
-        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.4fr) minmax(260px,.8fr)", gap:22, alignItems:"stretch" }} className="mob-layout-grid">
+    <div className="view-enter" style={{ display:"grid", gap:18 }}>
+      <section style={{ ...cardStyle, padding:24, position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute", inset:"-22% -12% auto auto", width:330, height:220, background:"radial-gradient(circle,rgba(34,211,238,.16),transparent 65%)", pointerEvents:"none" }} />
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.25fr) minmax(250px,.75fr)", gap:18, alignItems:"stretch" }} className="mob-layout-grid">
           <div>
-            <div style={labelStyle}>Centro de control</div>
+            <div style={labelStyle}>Rocket League Hub</div>
             <h1 style={{ ...S.h1, margin:"8px 0 8px" }}>Rocket League</h1>
-            <p style={{ color:T_COLOR.muted, fontSize:15, lineHeight:1.65, maxWidth:760, margin:0 }}>
-              Objetivo actual: <b style={{ color:T_COLOR.text }}>Consistencia competitiva</b>. LifeOS solo abre la sesión; el detalle vive en el Excel.
+            <p style={{ color:T_COLOR.muted, fontSize:15, lineHeight:1.6, maxWidth:780, margin:0 }}>
+              Objetivo actual: <b style={{ color:T_COLOR.text }}>Consistencia competitiva</b>. Rutina fija de <b style={{ color:T_COLOR.text }}>{ROCKET_LEAGUE_SESSION_MINUTES} min diarios</b> con descansos incluidos.
             </p>
-            <div style={{ display:"flex", gap:9, flexWrap:"wrap", marginTop:18 }}>
-              {["90 min diarios", "Descansos incluidos", "Revisión semanal", "No freestyle"].map(tag => (
-                <span key={tag} style={{ border:"1px solid rgba(148,163,184,.16)", background:"rgba(255,255,255,.045)", color:T_COLOR.text, borderRadius:999, padding:"8px 11px", fontSize:12, fontWeight:900 }}>{tag}</span>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:16 }}>
+              {["Open nets", "50/50", "Kickoffs", "Rotación", "Air roll shots"].map(tag => (
+                <span key={tag} style={{ border:"1px solid rgba(148,163,184,.15)", background:"rgba(255,255,255,.045)", color:T_COLOR.text, borderRadius:999, padding:"7px 10px", fontSize:12, fontWeight:900 }}>{tag}</span>
               ))}
             </div>
           </div>
-          <div style={{ ...softCard, padding:18, display:"grid", gap:11 }}>
+          <div style={{ ...softCard, padding:16, display:"grid", gap:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center" }}>
               <span style={labelStyle}>Estado actual</span>
-              <span style={{ color:parentCompleted ? "#34d399" : "#fbbf24", fontWeight:950, fontSize:12 }}>{parentCompleted ? "Completado" : "En progreso"}</span>
+              <span style={{ color:parentCompleted ? "#34d399" : sessionState.started ? "#67e8f9" : "#fbbf24", fontWeight:950, fontSize:12 }}>{sessionStatus}</span>
             </div>
-            <div style={{ display:"grid", gap:9, fontSize:13, color:T_COLOR.muted }}>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Semana actual</span><b style={{ color:T_COLOR.text }}>Activa</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Rutina activa</span><b style={{ color:T_COLOR.text }}>Fija de 90 min</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Revisión</span><b style={{ color:T_COLOR.text }}>Semanal</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Checklist</span><b style={{ color:"#67e8f9" }}>{checkedCount}/{precheckItems.length}</b></div>
-            </div>
+            {[
+              ["Semana actual", "Activa"],
+              ["Rutina activa", "Sí · fija 90 min"],
+              ["Revisión", "Semanal"],
+              ["Checklist", `${checkedCount}/${precheckItems.length}`],
+            ].map(([label, value]) => <div key={label} style={{ display:"flex", justifyContent:"space-between", gap:12, fontSize:13 }}><span style={{ color:T_COLOR.muted }}>{label}</span><b style={{ color:label === "Checklist" ? "#67e8f9" : T_COLOR.text }}>{value}</b></div>)}
           </div>
         </div>
       </section>
@@ -4685,58 +4903,33 @@ function RocketLeagueView() {
       <section style={{ ...cardStyle, padding:22 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"center", flexWrap:"wrap", marginBottom:14 }}>
           <div>
-            <div style={labelStyle}>Accesos rápidos</div>
-            <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Abrir solo lo necesario</h2>
+            <div style={labelStyle}>Nivel 1 · Vista rápida diaria</div>
+            <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Hoy toca</h2>
           </div>
-          <span style={{ color:T_COLOR.muted, fontSize:12 }}>LifeOS = control · Excel = detalle</span>
+          <button onClick={startSession} style={{ ...actionStyle, minWidth:180 }}><Play size={16}/> Iniciar sesión</button>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
-          <a href="/Rocket_League_Training_System.xlsx" download style={actionStyle}><BookOpen size={16}/> Abrir Excel</a>
-          <a href="#rl-routine" style={actionStyle}><Timer size={16}/> Abrir temporizadores</a>
-          <a href="#rl-precheck" style={actionStyle}><CheckCircle2 size={16}/> Checklist pre-entreno</a>
-          <a href="#rl-log" style={actionStyle}><Edit3 size={16}/> Registro diario</a>
-          <a href="#rl-weekly" style={actionStyle}><BarChart2 size={16}/> Revisión semanal</a>
+        <SummaryFocus />
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:10, marginTop:14 }} className="mob-layout-grid">
+          <button onClick={() => setDetailTab("routine")} style={actionStyle}><Timer size={16}/> Ver rutina completa</button>
+          <button onClick={() => setDetailTab("packs")} style={actionStyle}><Target size={16}/> Ver training packs</button>
+          <button onClick={() => setDetailTab("log")} style={actionStyle}><Edit3 size={16}/> Registrar sesión</button>
+          <button onClick={() => setDetailTab("weekly")} style={actionStyle}><RefreshCw size={16}/> Revisión semanal</button>
         </div>
       </section>
 
-      <section id="rl-routine" style={{ ...cardStyle, padding:24 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
+      <section style={{ ...cardStyle, padding:22 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", flexWrap:"wrap", marginBottom:14 }}>
           <div>
-            <div style={labelStyle}>Rutina de hoy · versión resumida</div>
-            <h2 style={{ ...S.h2, margin:"7px 0 6px" }}>Hoy toca</h2>
-            <p style={{ color:T_COLOR.muted, margin:0, lineHeight:1.55 }}>Pegá aquí lo que diga el Excel o completalo manualmente. No se guarda una tabla semanal dentro de LifeOS.</p>
-          </div>
-          <div style={{ ...softCard, padding:"10px 13px", color:"#67e8f9", fontWeight:950 }}>{quickRoutineCount}/5 focos listos</div>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
-          {routineFields.map(([key,label]) => (
-            <label key={key} style={{ display:"grid", gap:7 }}>
-              <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>{label}</span>
-              <input value={todayRoutine[key] || ""} onChange={e => setTodayRoutine(prev => ({ ...prev, [key]: e.target.value }))} placeholder="Desde Excel" style={inputStyle}/>
-            </label>
-          ))}
-        </div>
-        <div style={{ marginTop:16, display:"grid", gridTemplateColumns:"1fr auto", gap:12, alignItems:"center" }} className="mob-layout-grid">
-          <div style={{ ...softCard, padding:14, color:"#fef3c7", lineHeight:1.45, fontSize:13 }}>
-            <b style={{ color:"#fbbf24" }}>Regla principal:</b> No cambiar la rutina diaria hasta la revisión semanal. Entrenar consistencia, no freestyle.
-          </div>
-          <button onClick={markRoutineComplete} style={{ ...actionStyle, borderColor:"rgba(52,211,153,.30)", background:"rgba(52,211,153,.12)", color:"#86efac", minWidth:210 }}><Trophy size={16}/> Marcar rutina completada</button>
-        </div>
-      </section>
-
-      <section id="rl-precheck" style={{ ...cardStyle, padding:24 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", flexWrap:"wrap", marginBottom:16 }}>
-          <div>
-            <div style={labelStyle}>Checklist rápido antes de entrenar</div>
-            <h2 style={{ ...S.h2, margin:"7px 0 0" }}>Entrar estable, no improvisar</h2>
+            <div style={labelStyle}>Checklist pre-entreno</div>
+            <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Listo para entrenar</h2>
           </div>
           <span style={{ color:"#67e8f9", fontWeight:950 }}>{checkedCount}/{precheckItems.length}</span>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
           {precheckItems.map(item => {
             const on = Boolean(precheck[item]);
             return (
-              <button key={item} onClick={() => setPrecheck(prev => ({ ...prev, [item]: !prev[item] }))} style={{ minHeight:54, display:"flex", alignItems:"center", gap:11, textAlign:"left", padding:"0 14px", borderRadius:16, border:on ? "1px solid rgba(52,211,153,.35)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(52,211,153,.10)" : "rgba(255,255,255,.035)", color:on ? "#bbf7d0" : T_COLOR.text, cursor:"pointer", fontWeight:850 }}>
+              <button key={item} onClick={() => setPrecheck(prev => ({ ...prev, [item]: !prev[item] }))} style={{ minHeight:52, display:"flex", alignItems:"center", gap:10, textAlign:"left", padding:"0 13px", borderRadius:16, border:on ? "1px solid rgba(52,211,153,.35)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(52,211,153,.10)" : "rgba(255,255,255,.035)", color:on ? "#bbf7d0" : T_COLOR.text, cursor:"pointer", fontWeight:850 }}>
                 {on ? <CheckCircle2 size={18} color="#34d399"/> : <Circle size={18} color="#64748b"/>}
                 <span>{item}</span>
               </button>
@@ -4745,55 +4938,40 @@ function RocketLeagueView() {
         </div>
       </section>
 
-      <section id="rl-log" style={{ ...cardStyle, padding:24 }}>
-        <div style={labelStyle}>Registro rápido</div>
-        <h2 style={{ ...S.h2, margin:"7px 0 16px" }}>Solo lo que sirve para mañana</h2>
-        <div style={{ display:"grid", gridTemplateColumns:"180px 180px 1fr 1fr", gap:12 }} className="mob-layout-grid">
-          <label style={{ display:"grid", gap:7 }}>
-            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Fecha</span>
-            <input value={dailyLog.date || todayKey} onChange={e => setDailyLog(prev => ({ ...prev, date:e.target.value }))} style={inputStyle}/>
-          </label>
-          <label style={{ display:"grid", gap:7 }}>
-            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Rutina completada</span>
-            <select value={dailyLog.completed || ""} onChange={e => setDailyLog(prev => ({ ...prev, completed:e.target.value }))} style={inputStyle}>
-              <option value="">Elegir</option><option>Sí</option><option>No</option>
-            </select>
-          </label>
+      <section style={{ ...cardStyle, padding:22 }}>
+        <div style={labelStyle}>Registro rápido diario</div>
+        <h2 style={{ ...S.h2, margin:"6px 0 14px" }}>Lo mínimo importante</h2>
+        <div style={{ display:"grid", gridTemplateColumns:"140px 170px 1fr 1fr", gap:12 }} className="mob-layout-grid">
+          <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Fecha</span><input value={dailyLog.date || todayKey} onChange={e => setDailyLog(prev => ({ ...prev, date:e.target.value }))} style={inputStyle}/></label>
+          <label style={{ display:"grid", gap:7 }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Rutina completada</span><select value={dailyLog.completed || ""} onChange={e => setDailyLog(prev => ({ ...prev, completed:e.target.value }))} style={inputStyle}><option value="">Elegir</option><option>Sí</option><option>No</option></select></label>
           <Rating label="Energía 1-5" value={dailyLog.energy} onChange={v => setDailyLog(prev => ({ ...prev, energy:v }))}/>
           <Rating label="Fluidez 1-5" value={dailyLog.flow} onChange={v => setDailyLog(prev => ({ ...prev, flow:v }))}/>
-          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}>
-            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Error principal</span>
-            <textarea value={dailyLog.mainError || ""} onChange={e => setDailyLog(prev => ({ ...prev, mainError:e.target.value.slice(0, 500) }))} placeholder="Ej. Llegué tarde al segundo toque / salté antes de tiempo / fallé open nets por girar de más." style={{ ...inputStyle, minHeight:88, resize:"vertical" }}/>
-          </label>
-          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}>
-            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Corrección para mañana</span>
-            <textarea value={dailyLog.tomorrowFix || ""} onChange={e => setDailyLog(prev => ({ ...prev, tomorrowFix:e.target.value.slice(0, 500) }))} placeholder="Una corrección concreta. No cinco." style={{ ...inputStyle, minHeight:88, resize:"vertical" }}/>
-          </label>
+          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Error principal</span><input value={dailyLog.mainError || ""} onChange={e => setDailyLog(prev => ({ ...prev, mainError:e.target.value.slice(0, 220) }))} placeholder="Un error principal" style={inputStyle}/></label>
+          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}><span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Corrección para mañana</span><input value={dailyLog.tomorrowFix || ""} onChange={e => setDailyLog(prev => ({ ...prev, tomorrowFix:e.target.value.slice(0, 220) }))} placeholder="Una corrección concreta" style={inputStyle}/></label>
         </div>
-        <button onClick={saveDailyLog} style={{ ...actionStyle, marginTop:14, width:"100%" }}><CheckCircle2 size={16}/> Guardar registro diario</button>
+        <button onClick={saveDailyLog} style={{ ...actionStyle, width:"100%", marginTop:13 }}><CheckCircle2 size={16}/> Guardar registro rápido</button>
+        <div style={{ marginTop:13, ...softCard, padding:14, color:"#fef3c7", lineHeight:1.45, fontSize:13 }}>
+          <b style={{ color:"#fbbf24" }}>Regla principal:</b> No cambiar la rutina diaria hasta la revisión semanal. Entrenar consistencia, no freestyle.
+        </div>
       </section>
 
-      <section id="rl-weekly" style={{ ...cardStyle, padding:24 }}>
-        <div style={labelStyle}>Revisión semanal</div>
-        <h2 style={{ ...S.h2, margin:"7px 0 14px" }}>Cambios solo aquí</h2>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
-          {[
-            ["openNets", "¿Mejoraron los open nets?"],
-            ["fifty", "¿Perdí menos 50/50?"],
-            ["kickoffs", "¿Mis kickoffs fueron más limpios?"],
-            ["rotation", "¿Me desordené menos en rotación?"],
-            ["airRoll", "¿Los air roll shots tuvieron más control?"],
-            ["sustainable", "¿La rutina se sintió pesada o sostenible?"],
-          ].map(([key, question]) => {
-            const on = Boolean(weeklyReview[key]);
-            return <button key={key} onClick={() => setWeeklyReview(prev => ({ ...prev, [key]: !prev[key] }))} style={{ minHeight:54, borderRadius:16, border:on ? "1px solid rgba(167,139,250,.36)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(167,139,250,.13)" : "rgba(255,255,255,.035)", color:on ? "#d8b4fe" : T_COLOR.text, cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"0 14px", textAlign:"left", fontWeight:850 }}>{on ? <CheckCircle2 size={18} color="#c084fc"/> : <Circle size={18} color="#64748b"/>}<span>{question}</span></button>;
-          })}
+      <section style={{ ...cardStyle, padding:22 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:14 }}>
+          <div>
+            <div style={labelStyle}>Nivel 2 · Vista detallada</div>
+            <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Solo cuando necesitás detalle</h2>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {[
+              ["routine", "Rutina 90 min"],
+              ["packs", "Training packs"],
+              ["log", "Registro diario"],
+              ["weekly", "Revisión semanal"],
+              ["replay", "Notas de replay"],
+            ].map(([id, label]) => <button key={id} onClick={() => setDetailTab(id)} style={tabStyle(detailTab === id)}>{label}</button>)}
+          </div>
         </div>
-        <label style={{ display:"grid", gap:7, marginTop:14 }}>
-          <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Decisión de la semana</span>
-          <textarea value={weeklyReview.decision || ""} onChange={e => setWeeklyReview(prev => ({ ...prev, decision:e.target.value.slice(0, 700) }))} placeholder="Mantener rutina / ajustar un recurso / bajar volumen / revisar un error repetido." style={{ ...inputStyle, minHeight:100, resize:"vertical" }}/>
-        </label>
-        <button onClick={saveWeeklyReview} style={{ ...actionStyle, marginTop:14, width:"100%", borderColor:"rgba(167,139,250,.32)", background:"rgba(167,139,250,.12)", color:"#d8b4fe" }}><RefreshCw size={16}/> Guardar revisión semanal</button>
+        {renderDetailTab()}
       </section>
     </div>
   );
