@@ -4490,551 +4490,314 @@ function getRocketLeagueRoleBadgeStyle(role, accent = "#22d3ee") {
 function RocketLeagueView() {
   const { persistent, pDispatch } = useAppData();
   const { uiDispatch } = useAppUI();
+  const todayKey = getRocketLeagueDateKey();
 
-  const [dateKey, setDateKey] = useState(() => getRocketLeagueDateKey());
-  const plan = useMemo(() => getRocketLeaguePlanForDate(dateKey), [dateKey]);
-  const current = persistent.rocketLeague?.current || createRocketLeagueCurrent(dateKey, plan.id);
-  const completedIds = current.completedSubtaskIds || [];
-  const elapsedBySubtask = current.elapsedBySubtask || {};
-  const matchCountBySubtask = current.matchCountBySubtask || {};
-  const completedSet = useMemo(() => new Set(completedIds), [completedIds]);
   const activeQuests = useMemo(() => getActiveQuests(persistent), [persistent.quests.customItems]);
   const parentQuest = useMemo(
     () => activeQuests.find(q => q.id === ROCKET_LEAGUE_PARENT_QUEST_ID) || QUESTS.find(q => q.id === ROCKET_LEAGUE_PARENT_QUEST_ID),
     [activeQuests]
   );
   const parentCompleted = (persistent.quests.completedIds || []).includes(ROCKET_LEAGUE_PARENT_QUEST_ID);
-  const requiredRocketTasks = plan.subtasks.filter(task => !task.optional);
-  const allComplete = requiredRocketTasks.every(task => completedSet.has(task.id));
-  const doneCount = requiredRocketTasks.filter(task => completedSet.has(task.id)).length;
-  const totalTargetSeconds = plan.subtasks.reduce((sum, task) => sum + task.minutes * 60, 0);
 
-  const [activeSubtaskId, setActiveSubtaskId] = useState(null);
-  const [tickNow, setTickNow] = useState(Date.now());
-  const [localElapsedBySubtask, setLocalElapsedBySubtask] = useState(() => ({ ...elapsedBySubtask }));
-  const activeTimerRef = useRef({ id: null, startedAt: null });
-  const targetSoundedRef = useRef(new Set());
-
-  const mergeElapsedMaps = useCallback((base = {}, incoming = {}) => {
-    const next = { ...(base || {}) };
-    Object.entries(incoming || {}).forEach(([key, value]) => {
-      next[key] = Math.max(
-        Math.max(0, Math.floor(Number(next[key]) || 0)),
-        Math.max(0, Math.floor(Number(value) || 0))
-      );
-    });
-    return next;
+  const storageLoad = useCallback((key, fallback) => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return fallback;
+      const raw = window.localStorage.getItem(key);
+      return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+    } catch {
+      return fallback;
+    }
+  }, []);
+  const storageSave = useCallback((key, value) => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch { /* local-only helper */ }
   }, []);
 
-  const commitActiveTimer = useCallback(() => {
-    const { id, startedAt } = activeTimerRef.current;
-    if (!id || !startedAt) return 0;
-    const delta = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-    activeTimerRef.current = { id: null, startedAt: null };
-    if (delta > 0) {
-      setLocalElapsedBySubtask(prev => ({
-        ...(prev || {}),
-        [id]: Math.max(0, Math.floor(Number(prev?.[id]) || 0)) + delta,
-      }));
-      pDispatch(AC.rlTimerCommit(id, delta));
-    }
-    return delta;
-  }, [pDispatch]);
+  const precheckItems = useMemo(() => [
+    "Mando conectado por USB",
+    "FPS cap / RTSS igual que siempre",
+    "No cambiar sensibilidad ni binds hoy",
+    "Cerrar apps pesadas",
+    "Objetivo del día claro",
+    "Empezar temporizador de 90 min",
+  ], []);
 
-  useEffect(() => {
-    if (current.dateKey !== dateKey || current.planId !== plan.id) {
-      commitActiveTimer();
-      setActiveSubtaskId(null);
-      pDispatch(AC.rlDailySync(dateKey, plan.id));
-    }
-  }, [current.dateKey, current.planId, dateKey, plan.id, pDispatch, commitActiveTimer]);
+  const routineFields = useMemo(() => [
+    ["openNets", "Open nets"],
+    ["airRoll", "Air roll shots"],
+    ["kickoffs", "Kickoffs"],
+    ["fifty", "50/50"],
+    ["rotation", "Rotación"],
+  ], []);
 
-  useEffect(() => {
-    setLocalElapsedBySubtask({ ...(elapsedBySubtask || {}) });
-    targetSoundedRef.current = new Set();
-  }, [current.dateKey, current.planId]);
+  const [precheck, setPrecheck] = useState(() => storageLoad(`lifeos:rl:precheck:${todayKey}`, {}));
+  const [todayRoutine, setTodayRoutine] = useState(() => storageLoad(`lifeos:rl:routine:${todayKey}`, {
+    openNets: "",
+    airRoll: "",
+    kickoffs: "",
+    fifty: "",
+    rotation: "",
+  }));
+  const [dailyLog, setDailyLog] = useState(() => storageLoad(`lifeos:rl:dailyLog:${todayKey}`, {
+    date: todayKey,
+    completed: parentCompleted ? "Sí" : "",
+    energy: "",
+    flow: "",
+    mainError: "",
+    tomorrowFix: "",
+  }));
+  const [weeklyReview, setWeeklyReview] = useState(() => storageLoad("lifeos:rl:weeklyReview", {
+    openNets: false,
+    fifty: false,
+    kickoffs: false,
+    rotation: false,
+    airRoll: false,
+    sustainable: false,
+    decision: "",
+  }));
 
-  useEffect(() => {
-    setLocalElapsedBySubtask(prev => mergeElapsedMaps(prev, elapsedBySubtask));
-  }, [elapsedBySubtask, mergeElapsedMaps]);
+  useEffect(() => storageSave(`lifeos:rl:precheck:${todayKey}`, precheck), [precheck, storageSave, todayKey]);
+  useEffect(() => storageSave(`lifeos:rl:routine:${todayKey}`, todayRoutine), [todayRoutine, storageSave, todayKey]);
+  useEffect(() => storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog), [dailyLog, storageSave, todayKey]);
+  useEffect(() => storageSave("lifeos:rl:weeklyReview", weeklyReview), [weeklyReview, storageSave]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      setTickNow(now);
-      setDateKey(prev => {
-        const next = getRocketLeagueDateKey(new Date(now));
-        return prev === next ? prev : next;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const checkedCount = precheckItems.filter(item => precheck[item]).length;
+  const quickRoutineCount = routineFields.filter(([key]) => String(todayRoutine[key] || "").trim()).length;
 
-  useEffect(() => () => commitActiveTimer(), [commitActiveTimer]);
-
-  const getElapsedSeconds = useCallback((subtaskId) => {
-    const persisted = Math.max(0, Math.floor(Number(localElapsedBySubtask?.[subtaskId]) || 0));
-    const active = activeTimerRef.current;
-    if (active.id === subtaskId && active.startedAt) {
-      return persisted + Math.max(0, Math.floor((tickNow - active.startedAt) / 1000));
-    }
-    return persisted;
-  }, [localElapsedBySubtask, tickNow]);
-
-  const getMatchCount = useCallback((subtaskId) => {
-    return Math.max(0, Math.floor(Number(matchCountBySubtask[subtaskId]) || 0));
-  }, [matchCountBySubtask]);
-
-  const totalElapsedSeconds = useMemo(
-    () => plan.subtasks.reduce((sum, task) => sum + getElapsedSeconds(task.id), 0),
-    [plan.subtasks, getElapsedSeconds]
-  );
-
-  const nextRotationSeconds = getSecondsUntilNextLocalDay(tickNow);
-  const tomorrowDateKey = getRocketLeagueDateKey(new Date(tickNow + 24 * 60 * 60 * 1000));
-  const tomorrowPlan = useMemo(() => getRocketLeaguePlanForDate(tomorrowDateKey), [tomorrowDateKey]);
-  const weeklyFocus = useMemo(() => getRocketLeagueWeeklyFocus(dateKey), [dateKey]);
-  const focusRole = useMemo(() => getRocketLeagueFocusRole(dateKey), [dateKey]);
-  const nextWeeklyFocusSeconds = useMemo(() => getSecondsUntilNextRocketWeeklyFocus(tickNow), [tickNow]);
-
-  const fireRocketTimerCue = useCallback((task) => {
-    unlockLifeOSAudio();
-    playLifeOSSound("alarm");
-    if (typeof window !== "undefined") {
-      window.setTimeout(() => playLifeOSSound("alarm"), 520);
-      window.setTimeout(() => playLifeOSSound("alarm"), 1040);
-    }
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      try { navigator.vibrate([300, 100, 300, 100, 520]); } catch {}
-    }
+  const notify = useCallback((title, sub) => {
     const id = Date.now();
-    uiDispatch(AC.toastAdd(id, `${task.title}: tiempo objetivo`, `${task.minutes} min completados`));
-    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3600);
+    uiDispatch(AC.toastAdd(id, title, sub));
+    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
   }, [uiDispatch]);
 
-  useEffect(() => {
-    if (!activeSubtaskId) return;
-    const activeTask = plan.subtasks.find(task => task.id === activeSubtaskId);
-    if (!activeTask) return;
-    const targetSeconds = activeTask.minutes * 60;
-    const elapsed = getElapsedSeconds(activeSubtaskId);
-    const soundKey = `${current.dateKey}:${current.planId}:${activeSubtaskId}`;
-    if (elapsed >= targetSeconds && !targetSoundedRef.current.has(soundKey)) {
-      targetSoundedRef.current.add(soundKey);
-      fireRocketTimerCue(activeTask);
-    }
-  }, [activeSubtaskId, tickNow, plan.subtasks, current.dateKey, current.planId, getElapsedSeconds, fireRocketTimerCue]);
-
-  const progressPct = Math.min(100, Math.round((doneCount / Math.max(requiredRocketTasks.length, 1)) * 100));
-  const timePct = Math.min(100, Math.round((totalElapsedSeconds / Math.max(totalTargetSeconds, 1)) * 100));
-
-  const toggleTimer = useCallback((subtaskId) => {
+  const markRoutineComplete = useCallback(() => {
     unlockLifeOSAudio();
-    if (activeTimerRef.current.id === subtaskId) {
-      commitActiveTimer();
-      setTickNow(Date.now());
-      setActiveSubtaskId(null);
+    setDailyLog(prev => ({ ...prev, completed: "Sí" }));
+    if (parentQuest && !parentCompleted) {
+      const oldNivel = SELECTORS.level(persistent.xp.total);
+      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
+      playLifeOSSound("mission");
+      notify("Rocket League completado", `+${parentQuest.xp} XP · 90 min cerrados sin cambiar la rutina`);
       return;
     }
-    commitActiveTimer();
-    activeTimerRef.current = { id: subtaskId, startedAt: Date.now() };
-    setTickNow(Date.now());
-    setActiveSubtaskId(subtaskId);
-  }, [commitActiveTimer]);
+    playLifeOSSound("complete");
+    notify("Rocket League marcado", "Rutina completada para hoy");
+  }, [parentQuest, parentCompleted, persistent.xp.total, pDispatch, notify]);
 
-  const toggleSubtask = useCallback((subtaskId) => {
-    unlockLifeOSAudio();
-    const wasDone = completedSet.has(subtaskId);
-    if (activeTimerRef.current.id === subtaskId) {
-      commitActiveTimer();
-      setActiveSubtaskId(null);
-    }
-    pDispatch(AC.rlSubtaskToggle(subtaskId));
-    if (!wasDone) {
-      const targetSeconds = getRocketLeagueSubtaskTargetSeconds(current.planId, subtaskId);
-      if (targetSeconds > 0) {
-        setLocalElapsedBySubtask(prev => ({
-          ...(prev || {}),
-          [subtaskId]: Math.max(Math.max(0, Math.floor(Number(prev?.[subtaskId]) || 0)), targetSeconds),
-        }));
-      }
-      playLifeOSSound("complete");
-    }
-  }, [commitActiveTimer, completedSet, current.planId, pDispatch]);
+  const saveDailyLog = useCallback(() => {
+    storageSave(`lifeos:rl:dailyLog:${todayKey}`, dailyLog);
+    notify("Registro Rocket guardado", "Una corrección clara para mañana vale más que 20 métricas");
+  }, [dailyLog, notify, storageSave, todayKey]);
 
-  const updateMatchProgress = useCallback((task, delta) => {
-    unlockLifeOSAudio();
-    const before = getMatchCount(task.id);
-    const target = Math.max(1, Math.floor(Number(task.targetCount) || 1));
-    const after = Math.min(target, Math.max(0, before + delta));
-    pDispatch(AC.rlMatchProgress(task.id, delta));
-    if (before < target && after >= target) {
-      playLifeOSSound("complete");
-      const id = Date.now();
-      uiDispatch(AC.toastAdd(id, `${task.title}: completado`, `${target} partidas de 1v1 listas`));
-      setTimeout(() => uiDispatch(AC.toastRemove(id)), 2600);
-    }
-  }, [getMatchCount, pDispatch, uiDispatch]);
+  const saveWeeklyReview = useCallback(() => {
+    storageSave("lifeos:rl:weeklyReview", weeklyReview);
+    notify("Revisión semanal guardada", "Cambiá la rutina solo en revisión, no por impulso diario");
+  }, [weeklyReview, notify, storageSave]);
 
-  const updateMental = useCallback((key, value) => {
-    pDispatch(AC.rlMentalUpdate(key, value));
-  }, [pDispatch]);
+  const cardStyle = {
+    borderRadius: 28,
+    border: "1px solid rgba(148,163,184,.16)",
+    background: "linear-gradient(145deg,rgba(15,23,42,.78),rgba(2,6,23,.60))",
+    boxShadow: "0 22px 80px rgba(0,0,0,.20)",
+  };
+  const softCard = {
+    borderRadius: 22,
+    border: "1px solid rgba(148,163,184,.12)",
+    background: "rgba(15,23,42,.52)",
+  };
+  const labelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.4, color: "#67e8f9", fontWeight: 950 };
+  const inputStyle = {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid rgba(148,163,184,.16)",
+    background: "rgba(2,6,23,.42)",
+    color: T_COLOR.text,
+    padding: "12px 13px",
+    outline: "none",
+    fontFamily: "inherit",
+    fontSize: 13,
+    lineHeight: 1.45,
+  };
+  const actionStyle = {
+    minHeight: 44,
+    borderRadius: 15,
+    border: "1px solid rgba(34,211,238,.22)",
+    background: "rgba(34,211,238,.09)",
+    color: "#67e8f9",
+    fontWeight: 950,
+    cursor: "pointer",
+    textDecoration: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: "0 13px",
+    fontSize: 12.5,
+  };
 
-  const saveMental = useCallback(() => {
-    commitActiveTimer();
-    pDispatch(AC.rlMentalSave());
-    const id = Date.now();
-    uiDispatch(AC.toastAdd(id, "Reflexión Rocket guardada", "Mental fuerte: menos tilt, mejores decisiones"));
-    setTimeout(() => uiDispatch(AC.toastRemove(id)), 2800);
-  }, [commitActiveTimer, pDispatch, uiDispatch]);
-
-  useEffect(() => {
-    if (!parentQuest) return;
-    if (allComplete && !parentCompleted) {
-      const oldNivel = SELECTORS.level(persistent.xp.total);
-      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
-      const id = Date.now();
-      uiDispatch(AC.toastAdd(id, "Rocket League Training completado", `+${parentQuest.xp} XP · buen trabajo, no ranked frío`));
-      playLifeOSSound("mission");
-      setTimeout(() => uiDispatch(AC.toastRemove(id)), 3200);
-    }
-    if (!allComplete && parentCompleted) {
-      const oldNivel = SELECTORS.level(persistent.xp.total);
-      pDispatch(AC.questComplete(ROCKET_LEAGUE_PARENT_QUEST_ID, parentQuest.xp, oldNivel));
-    }
-  }, [allComplete, parentCompleted, parentQuest, persistent.xp.total, pDispatch, uiDispatch]);
-
-  const missionStatus = parentCompleted
-    ? { label: "Completada", color: "#34d399" }
-    : allComplete
-      ? { label: "Lista para completar", color: "#fbbf24" }
-      : { label: "Pendiente", color: "#64748b" };
-
-  const mental = current.mental || createRocketLeagueCurrent().mental;
-  const moodOptions = [1, 2, 3, 4, 5];
-  const activeTask = activeSubtaskId ? plan.subtasks.find(task => task.id === activeSubtaskId) : null;
-  const nextIncompleteTask = plan.subtasks.find(task => !completedSet.has(task.id));
-  const timedBlocksComplete = plan.subtasks.filter(task => !task.noTimer && !task.optional).every(task => completedSet.has(task.id));
-  const matchTask = plan.subtasks.find(task => task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer);
-  const matchCount = matchTask ? getMatchCount(matchTask.id) : 0;
-  const speedflipDarRecommended = plan.subtasks.some(task => task.speedflipDar || String(task.id).includes("speedflip") || String(task.title).toLowerCase().includes("speedflip"));
-  const spotlightTask = activeTask || nextIncompleteTask;
-  const spotlightIsMatchTask = spotlightTask ? (spotlightTask.type === RL_SUBTASK_TYPES.MATCHES || spotlightTask.noTimer) : false;
-  const spotlightElapsed = spotlightTask && !spotlightIsMatchTask ? getElapsedSeconds(spotlightTask.id) : totalElapsedSeconds;
-  const spotlightTargetSeconds = spotlightTask && !spotlightIsMatchTask ? Math.max(1, spotlightTask.minutes * 60) : Math.max(1, totalTargetSeconds);
-  const spotlightPct = spotlightTask
-    ? spotlightIsMatchTask
-      ? Math.min(100, Math.round((getMatchCount(spotlightTask.id) / Math.max(1, Math.floor(Number(spotlightTask.targetCount) || 1))) * 100))
-      : Math.min(100, Math.round((spotlightElapsed / spotlightTargetSeconds) * 100))
-    : progressPct;
-  const spotlightAccent = spotlightTask?.accent || "#22d3ee";
-  const planRequiredCount = requiredRocketTasks.length;
-  const planDoneLabel = `${doneCount}/${planRequiredCount}`;
-
-
-  const markTilted = useCallback(() => {
-    unlockLifeOSAudio();
-    playLifeOSSound("timer");
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([180, 80, 180]);
-    const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const previousNote = String(mental.note || "").trim();
-    const line = `[${stamp}] Estoy tilteado: parar ranked, 5 min freeplay suave y volver solo si bajo a 2/5.`;
-    pDispatch(AC.rlMentalUpdate("tiltLevel", 5));
-    pDispatch(AC.rlMentalUpdate("note", previousNote ? `${previousNote}
-${line}` : line));
-    const id = Date.now();
-    uiDispatch(AC.toastAdd(id, "Modo anti-tilt activado", "Pará ranked: freeplay suave o cerrá sesión."));
-    setTimeout(() => uiDispatch(AC.toastRemove(id)), 3600);
-  }, [mental.note, pDispatch, uiDispatch]);
-
-  const startNextBlock = useCallback(() => {
-    const task = plan.subtasks.find(t => !completedSet.has(t.id) && !t.noTimer);
-    if (!task) return;
-    toggleTimer(task.id);
-  }, [plan.subtasks, completedSet, toggleTimer]);
-
-  const completeCurrentOrNext = useCallback(() => {
-    const target = activeTask || nextIncompleteTask;
-    if (!target) return;
-    if (target.noTimer) return;
-    toggleSubtask(target.id);
-  }, [activeTask, nextIncompleteTask, toggleSubtask]);
+  const Rating = ({ value, onChange, label }) => (
+    <div>
+      <div style={{ fontSize: 11, color: T_COLOR.muted, fontWeight: 900, marginBottom: 8 }}>{label}</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:7 }}>
+        {[1,2,3,4,5].map(v => {
+          const active = String(value) === String(v);
+          return <button key={v} onClick={() => onChange(v)} style={{ minHeight:36, borderRadius:12, border:active ? "1px solid rgba(34,211,238,.52)" : "1px solid rgba(148,163,184,.14)", background:active ? "rgba(34,211,238,.16)" : "rgba(255,255,255,.035)", color:active ? "#67e8f9" : T_COLOR.muted, fontWeight:950, cursor:"pointer" }}>{v}</button>;
+        })}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="rl-view-shell" style={{ animation:"sldIn .3s ease" }}>
-      <section className="rl-cockpit-hero">
-        <div className="rl-hero-glow" />
-        <div className="rl-hero-copy">
-          <div className="rl-kicker">Rocket League Playbook</div>
-          <h1 className="rl-hero-title">Rotación diaria Rocket · 90 min</h1>
-          <p className="rl-hero-sub">LifeOS elige el pack, Workshop o review exacto de cada bloque. Open nets, air roll shots, kickoffs, 50/50 y rotación sin decidir a mano.</p>
-          <div className="rl-chip-row">
-            {[ROCKET_LEAGUE_PROFILE.duel, ROCKET_LEAGUE_PROFILE.doubles, ROCKET_LEAGUE_PROFILE.standard, ROCKET_LEAGUE_PROFILE.platform].map(chip => (
-              <span key={chip} className="rl-pill">{chip}</span>
-            ))}
+    <div className="view-enter" style={{ display:"grid", gap:22 }}>
+      <section style={{ ...cardStyle, padding:28, position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute", inset:"-20% -10% auto auto", width:320, height:220, background:"radial-gradient(circle,rgba(34,211,238,.18),transparent 65%)", pointerEvents:"none" }} />
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.4fr) minmax(260px,.8fr)", gap:22, alignItems:"stretch" }} className="mob-layout-grid">
+          <div>
+            <div style={labelStyle}>Centro de control</div>
+            <h1 style={{ ...S.h1, margin:"8px 0 8px" }}>Rocket League</h1>
+            <p style={{ color:T_COLOR.muted, fontSize:15, lineHeight:1.65, maxWidth:760, margin:0 }}>
+              Objetivo actual: <b style={{ color:T_COLOR.text }}>Consistencia competitiva</b>. LifeOS solo abre la sesión; el detalle vive en el Excel.
+            </p>
+            <div style={{ display:"flex", gap:9, flexWrap:"wrap", marginTop:18 }}>
+              {["90 min diarios", "Descansos incluidos", "Revisión semanal", "No freestyle"].map(tag => (
+                <span key={tag} style={{ border:"1px solid rgba(148,163,184,.16)", background:"rgba(255,255,255,.045)", color:T_COLOR.text, borderRadius:999, padding:"8px 11px", fontSize:12, fontWeight:900 }}>{tag}</span>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="rl-hero-board">
-          <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", marginBottom:12 }}>
-            <span style={{ fontSize:10, color:T_COLOR.muted, fontWeight:900, textTransform:"uppercase", letterSpacing:1.2 }}>Misión padre</span>
-            <span style={{ fontSize:11, color:missionStatus.color, fontWeight:900 }}>{missionStatus.label}</span>
-          </div>
-          <div style={{ fontFamily:T_FONT.display, fontSize:34, fontWeight:950, color:T_COLOR.text, lineHeight:1 }}>{planDoneLabel}</div>
-          <div style={{ fontSize:11.5, color:T_COLOR.muted, margin:"4px 0 12px" }}>bloques obligatorios listos</div>
-          <ProgresoBar pct={progressPct} gradient="linear-gradient(90deg,#22d3ee,#fbbf24,#34d399)" height={8}/>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10.5, color:T_COLOR.muted, marginTop:9 }}>
-            <span>{formatSeconds(totalElapsedSeconds)} entrenados</span>
-            <span>{progressPct}%</span>
+          <div style={{ ...softCard, padding:18, display:"grid", gap:11 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center" }}>
+              <span style={labelStyle}>Estado actual</span>
+              <span style={{ color:parentCompleted ? "#34d399" : "#fbbf24", fontWeight:950, fontSize:12 }}>{parentCompleted ? "Completado" : "En progreso"}</span>
+            </div>
+            <div style={{ display:"grid", gap:9, fontSize:13, color:T_COLOR.muted }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Semana actual</span><b style={{ color:T_COLOR.text }}>Activa</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Rutina activa</span><b style={{ color:T_COLOR.text }}>Fija de 90 min</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Revisión</span><b style={{ color:T_COLOR.text }}>Semanal</b></div>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}><span>Checklist</span><b style={{ color:"#67e8f9" }}>{checkedCount}/{precheckItems.length}</b></div>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="rl-main-grid">
-        <div className="rl-left-flow">
-          <section className="rl-now-card" style={{ borderColor:`${spotlightAccent}38` }}>
-            <div className="rl-now-bg" style={{ background:`radial-gradient(circle at 18% 0%, ${spotlightAccent}24, transparent 42%)` }} />
-            <div className="rl-now-top">
-              <div style={{ minWidth:0 }}>
-                <div className="rl-kicker" style={{ color:spotlightAccent }}>{activeTask ? "Bloque activo" : "Ahora toca"}</div>
-                <h2 className="rl-now-title">{spotlightTask?.title || "Entrenamiento completo"}</h2>
-                <p className="rl-now-copy">{spotlightTask?.instruction || "Cerrá con resumen mental y guardá el progreso del día."}</p>
-              </div>
-              <div className="rl-now-clock" style={{ color:spotlightAccent }}>
-                {spotlightTask && !spotlightIsMatchTask ? formatSeconds(getElapsedSeconds(spotlightTask.id)) : formatSeconds(totalElapsedSeconds)}
-              </div>
-            </div>
-            <div className="rl-now-meta">
-              <span>{spotlightTask ? getRocketLeagueTaskRole(spotlightTask, plan) : "Cierre"}</span>
-              <span>{spotlightTask && !spotlightIsMatchTask ? `objetivo ${spotlightTask.minutes}:00` : `${doneCount}/${planRequiredCount} bloques`}</span>
-              <span>{plan.primaryMechanicLabel || weeklyFocus.label}</span>
-            </div>
-            <ProgresoBar pct={spotlightPct} gradient={`linear-gradient(90deg,${spotlightAccent}88,${spotlightAccent})`} height={10}/>
-            <div className="rl-now-actions">
-              <button onClick={activeTask ? () => toggleTimer(activeTask.id) : startNextBlock} disabled={!activeTask && !nextIncompleteTask} className="rl-action-primary" style={{ opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>
-                {activeTask ? <Pause size={17}/> : <Play size={17}/>} {activeTask ? "Pausar bloque" : "Iniciar siguiente"}
-              </button>
-              <button onClick={completeCurrentOrNext} disabled={!activeTask && !nextIncompleteTask} className="rl-action-secondary" style={{ opacity:(!activeTask && !nextIncompleteTask) ? .45 : 1 }}>
-                <CheckCircle2 size={17}/> Completar bloque
-              </button>
-            </div>
-          </section>
-
-          <section className="rl-playbook-card">
-            <div className="rl-section-head">
-              <div>
-                <div className="rl-kicker">Plan de hoy</div>
-                <h2 className="rl-section-title">Cabina de entrenamiento</h2>
-              </div>
-              <span className="rl-pill" style={{ color:weeklyFocus.accent, borderColor:`${weeklyFocus.accent}35`, background:`${weeklyFocus.accent}12` }}>{weeklyFocus.short}</span>
-            </div>
-            <div className="rl-plan-note"><b>Lectura rápida:</b> estructura fija de 90 min. Solo rota el recurso exacto: RL 04 open nets, RL 06 air roll shots, RL 08 kickoffs, RL 10 50/50 y RL 12 decisiones. Si un código falla, dejá nota y buscalo por nombre.</div>
-            <div className="rl-training-lane">
-              {plan.subtasks.map((task, index) => {
-                const done = completedSet.has(task.id);
-                const active = activeSubtaskId === task.id;
-                const elapsed = getElapsedSeconds(task.id);
-                const isMatchTask = task.type === RL_SUBTASK_TYPES.MATCHES || task.noTimer;
-                const currentMatchCount = isMatchTask ? getMatchCount(task.id) : 0;
-                const targetCount = Math.max(1, Math.floor(Number(task.targetCount) || 1));
-                const target = task.minutes * 60;
-                const pct = isMatchTask ? Math.min(100, Math.round((currentMatchCount / targetCount) * 100)) : Math.min(100, Math.round((elapsed / Math.max(target, 1)) * 100));
-                const over = !isMatchTask && elapsed > target;
-                const Icon = task.type === RL_SUBTASK_TYPES.MENTAL ? Brain : (task.type === RL_SUBTASK_TYPES.SPEEDFLIP || task.type === RL_SUBTASK_TYPES.SPEEDFLIP_DAR) ? Zap : task.type === RL_SUBTASK_TYPES.FREEPLAY ? Flame : task.type === RL_SUBTASK_TYPES.MATCHES ? Sword : task.type === RL_SUBTASK_TYPES.WORKSHOP ? Layers : Target;
-                const taskRole = getRocketLeagueTaskRole(task, plan);
-                const status = done ? "Listo" : active ? "En curso" : "Pendiente";
-                return (
-                  <article key={task.id} className={`rl-playbook-row ${active ? "on" : ""} ${done ? "done" : ""}`} style={{ borderColor:active ? `${task.accent}55` : done ? `${task.accent}28` : "rgba(255,255,255,.075)" }}>
-                    <div className="rl-row-index" style={{ color:task.accent, borderColor:`${task.accent}30`, background:`${task.accent}12` }}>{String(index + 1).padStart(2,"0")}</div>
-                    <div className="rl-row-icon" style={{ color:task.accent, background:`${task.accent}12`, borderColor:`${task.accent}26` }}><Icon size={18}/></div>
-                    <div className="rl-row-main">
-                      <div className="rl-row-title-line"><h3>{task.title}</h3><span style={{ color:done ? "#34d399" : active ? task.accent : T_COLOR.muted }}>{status}</span></div>
-                      <p>{task.instruction}</p>
-                      <div className="rl-row-tags"><span>{taskRole}</span><span>{task.type}</span>{task.pack && <span>Código: {task.pack.code}</span>}{task.workshop && <span>{task.workshop.name}</span>}</div>
-                      {task.roleReason && <div className="rl-row-coach" style={{ color:taskRole === "Foco principal" ? "#fde68a" : "#bbf7d0" }}>{task.roleReason}</div>}
-                      <div style={{ marginTop:12 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:over ? "#fbbf24" : T_COLOR.muted, marginBottom:6 }}>
-                          {isMatchTask ? (<><span>{currentMatchCount}/{targetCount} partidas</span><span>sin cronómetro</span></>) : (<><span>{formatSeconds(elapsed)}</span><span>objetivo {task.minutes}:00{over ? " · overrun" : ""}</span></>)}
-                        </div>
-                        <ProgresoBar pct={pct} gradient={over ? "linear-gradient(90deg,#fbbf24,#fb923c)" : `linear-gradient(90deg,${task.accent}88,${task.accent})`} height={6}/>
-                      </div>
-                    </div>
-                    <div className="rl-row-actions">
-                      <button onClick={() => isMatchTask ? updateMatchProgress(task, 1) : toggleTimer(task.id)} style={{ borderColor:active || isMatchTask ? `${task.accent}70` : "rgba(255,255,255,.10)", color:active || isMatchTask ? task.accent : T_COLOR.muted, background:active || isMatchTask ? `${task.accent}14` : "rgba(255,255,255,.035)" }} title={isMatchTask ? "+1 partida" : active ? "Pausar" : "Iniciar"}>{isMatchTask ? <Plus size={16}/> : active ? <Pause size={16}/> : <Play size={16}/>}</button>
-                      <button onClick={() => toggleSubtask(task.id)} style={{ borderColor:done ? `${task.accent}70` : "rgba(255,255,255,.10)", color:done ? task.accent : T_COLOR.muted, background:done ? `${task.accent}14` : "rgba(255,255,255,.035)" }} title={done ? "Desmarcar" : "Completar"}>{done ? <CheckCircle2 size={17}/> : <Circle size={17}/>}</button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+      <section style={{ ...cardStyle, padding:22 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:14, alignItems:"center", flexWrap:"wrap", marginBottom:14 }}>
+          <div>
+            <div style={labelStyle}>Accesos rápidos</div>
+            <h2 style={{ ...S.h2, margin:"6px 0 0" }}>Abrir solo lo necesario</h2>
+          </div>
+          <span style={{ color:T_COLOR.muted, fontSize:12 }}>LifeOS = control · Excel = detalle</span>
         </div>
-
-        <div className="rl-side-stack">
-          <div className="g" style={{ padding:18 }}>
-            <div style={S.stitle}>Cronómetro</div>
-            <div style={{ fontFamily:T_FONT.display, fontSize:38, fontWeight:900, color:activeSubtaskId ? "#22d3ee" : T_COLOR.text, lineHeight:1 }}>{formatSeconds(totalElapsedSeconds)}</div>
-            <div style={{ fontSize:12, color:T_COLOR.muted, margin:"6px 0 12px" }}>{activeSubtaskId ? `Activo: ${plan.subtasks.find(t => t.id === activeSubtaskId)?.title || "bloque"}` : "Sin bloque activo"}</div>
-            <ProgresoBar pct={timePct} gradient="linear-gradient(90deg,#22d3ee,#7c3aed)" height={8}/>
-          </div>
-
-          <div className="g" style={{ padding:18, borderColor:allComplete ? "rgba(52,211,153,.22)" : "rgba(251,191,36,.16)" }}>
-            <div style={S.stitle}>Resumen Rocket</div>
-            <div style={{ display:"grid", gap:8, fontSize:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Entrenamiento 90 min</span><b style={{ color:timedBlocksComplete ? "#34d399" : "#fbbf24" }}>{timedBlocksComplete ? "Listo" : "Pendiente"}</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Ranked opcional</span><b style={{ color:matchTask && completedSet.has(matchTask.id) ? "#34d399" : "#fbbf24" }}>{matchTask ? `${matchCount}/${matchTask.targetCount || 3}` : "—"}</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Mental</span><b style={{ color:mental.saved ? "#34d399" : "#64748b" }}>{mental.saved ? "Guardado" : "Sin guardar"}</b></div>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><span style={{ color:T_COLOR.muted }}>Foco del ciclo</span><b style={{ color:weeklyFocus.accent }}>{plan.primaryMechanicLabel || weeklyFocus.short}</b></div>
-            </div>
-            <div style={{ marginTop:12, color:T_COLOR.muted, fontSize:11.5, lineHeight:1.55 }}>
-              Si terminás los 90 min y no tenés ganas de ranked, cerrá ahí. Ranked/1v1 es opcional: primero consistencia, después cola competitiva.
-            </div>
-          </div>
-
-          {speedflipDarRecommended && <RocketSpeedflipDarCleanCancelCard recommended={speedflipDarRecommended}/>}
-
-          <div className="g" style={{ padding:18, borderColor:"rgba(56,189,248,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-              <Layers size={18} color="#38bdf8"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Workshop bajo condición</div>
-            </div>
-            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Workshop queda fuera hasta nuevo aviso. La rutina activa usa Freeplay + Training Packs para controlar mejor la dificultad y evitar que Dribbling Challenge/Rings se vuelvan foco antes de tiempo.
-            </div>
-            <div style={{ display:"grid", gap:6, marginTop:10 }}>
-              {ROCKET_LEAGUE_WORKSHOP_RULES.map((rule, i) => (
-                <div key={rule} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.2, color:T_COLOR.muted, lineHeight:1.35 }}>
-                  <span style={{ color:"#38bdf8", fontWeight:900 }}>{i + 1}.</span>
-                  <span>{rule}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {Object.values(ROCKET_LEAGUE_WORKSHOP_MAPS).filter(map => map.modeSafe !== false && map.activeRotation !== false).slice(0, 6).map(map => (
-                <div key={map.name} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{map.name}</div>
-                    <span style={{ fontSize:9.5, color:"#34d399", fontWeight:900, border:"1px solid rgba(52,211,153,.18)", background:"rgba(52,211,153,.08)", borderRadius:99, padding:"2px 7px" }}>sin modos extra</span>
-                  </div>
-                  <div style={{ fontSize:10.5, color:"#38bdf8", fontWeight:900, marginTop:2 }}>{map.source} · {map.kind}</div>
-                  <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{map.focus}</div>
-                  <div style={{ fontSize:10.5, color:"#cbd5e1", marginTop:5, lineHeight:1.35 }}>{map.howToUse}</div>
-                  <div style={{ fontSize:10, color:"#fbbf24", marginTop:5, lineHeight:1.35 }}>Evitar: {map.avoid}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18, borderColor:"rgba(232,121,249,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-              <Target size={18} color="#e879f9"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Training Packs útiles</div>
-            </div>
-            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55 }}>
-              Lista de packs que LifeOS usa según el ciclo. No son todos para el mismo día: el plan de 90 min ya elige el pack correcto para el foco actual.
-            </div>
-            <div style={{ display:"grid", gap:7, marginTop:12 }}>
-              {[ROCKET_LEAGUE_PACKS.groundShots, ROCKET_LEAGUE_PACKS.powershots, ROCKET_LEAGUE_PACKS.powershotPractice, ROCKET_LEAGUE_PACKS.airRollShotsAlt, ROCKET_LEAGUE_PACKS.airRollShots, ROCKET_LEAGUE_PACKS.speedflipKickoffTest, ROCKET_LEAGUE_PACKS.masteringKickoffs, ROCKET_LEAGUE_PACKS.basicKickoffs, ROCKET_LEAGUE_PACKS.shadowDefense, ROCKET_LEAGUE_PACKS.defensiveSituations, ROCKET_LEAGUE_PACKS.tenShotsToMaster, ROCKET_LEAGUE_PACKS.shootingConsistency, ROCKET_LEAGUE_PACKS.recoveryTraining].filter(Boolean).map(pack => (
-                <div key={pack.code} style={{ padding:10, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                  <div style={{ fontSize:12, fontWeight:900, color:T_COLOR.text }}>{pack.name}</div>
-                  <div style={{ fontSize:11, color:"#e879f9", fontWeight:900, marginTop:3 }}>Código: {pack.code}</div>
-                  <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2 }}>{pack.focus}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18, borderColor:"rgba(52,211,153,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-              <RefreshCw size={18} color="#34d399"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Recoveries clave</div>
-            </div>
-            <div style={{ display:"grid", gap:8 }}>
-              {ROCKET_LEAGUE_RECOVERY_TIPS.map((tip, i) => (
-                <div key={tip} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:11.5, color:T_COLOR.muted, lineHeight:1.45 }}>
-                  <span style={{ color:"#34d399", fontWeight:900 }}>{i + 1}.</span>
-                  <span>{tip}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18, borderColor:"rgba(96,165,250,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-              <Gamepad2 size={18} color="#60a5fa"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>DualSense PS5 preset</div>
-            </div>
-            <div style={{ fontSize:11.5, color:T_COLOR.muted, lineHeight:1.5, marginBottom:12 }}>
-              Comprado el 5 de mayo: todavía debería aceptar zona muerta baja. Si sentís drift, subila poco a poco.
-            </div>
-            <div style={{ display:"grid", gap:8 }}>
-              {ROCKET_LEAGUE_CONTROLLER_PRESET.map(setting => (
-                <div key={setting.label} style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8, padding:9, borderRadius:11, background:"rgba(255,255,255,.035)", border:"1px solid rgba(255,255,255,.07)" }}>
-                  <div>
-                    <div style={{ fontSize:11.5, color:T_COLOR.text, fontWeight:900 }}>{setting.label}</div>
-                    <div style={{ fontSize:10.5, color:T_COLOR.muted, marginTop:2, lineHeight:1.35 }}>{setting.note}</div>
-                  </div>
-                  <div style={{ fontFamily:T_FONT.display, color:"#60a5fa", fontWeight:900, fontSize:16 }}>{setting.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="g" style={{ padding:18, borderColor:"rgba(167,139,250,.18)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-              <Brain size={18} color="#a78bfa"/>
-              <div style={{ ...S.stitle, marginBottom:0 }}>Mental anti-tilt</div>
-            </div>
-            <div style={{ fontSize:12, color:T_COLOR.muted, lineHeight:1.55, marginBottom:14 }}>
-              Si perdiste 2 seguidas por tilt, no sigas ranked. Volvé a freeplay o cerrá sesión.
-            </div>
-            <button onClick={markTilted} style={{ width:"100%", minHeight:42, borderRadius:12, border:"1px solid rgba(248,113,113,.32)", background:"rgba(248,113,113,.12)", color:"#fca5a5", fontWeight:900, cursor:"pointer", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <AlertTriangle size={16}/> Estoy tilteado
-            </button>
-
-            <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>Ranked después del entreno</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:14 }}>
-              {[
-                ["win", "Gané", "#34d399"],
-                ["loss", "Perdí", "#f87171"],
-                ["tilt", "Tilt", "#fb923c"],
-                ["skip", "No ranked", "#94a3b8"],
-              ].map(([key,label,color]) => (
-                <button key={key} onClick={() => updateMental("rankedResult", key)} style={{ minHeight:34, borderRadius:10, border:mental.rankedResult === key ? `1px solid ${color}80` : "1px solid rgba(255,255,255,.08)", background:mental.rankedResult === key ? `${color}20` : "rgba(255,255,255,.035)", color:mental.rankedResult === key ? color : T_COLOR.muted, fontWeight:900, cursor:"pointer", fontSize:11 }}>{label}</button>
-              ))}
-            </div>
-
-            {[{ key:"moodBefore", label:"Mood antes" }, { key:"moodAfter", label:"Mood después" }, { key:"tiltLevel", label:"Tilt level" }].map(group => (
-              <div key={group.key} style={{ marginBottom:13 }}>
-                <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>{group.label}</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:6 }}>
-                  {moodOptions.map(v => {
-                    const on = mental[group.key] === v;
-                    return (
-                      <button key={`${group.key}-${v}`} onClick={() => updateMental(group.key, v)} style={{ minHeight:34, borderRadius:10, border:on ? "1px solid rgba(167,139,250,.45)" : "1px solid rgba(255,255,255,.08)", background:on ? "rgba(167,139,250,.16)" : "rgba(255,255,255,.035)", color:on ? "#c4b5fd" : T_COLOR.muted, fontWeight:900, cursor:"pointer" }}>{v}</button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:.8, color:T_COLOR.muted, fontWeight:900, marginBottom:7 }}>Nota rápida</div>
-            <textarea
-              value={mental.note || ""}
-              onChange={(e) => updateMental("note", e.target.value.slice(0, 600))}
-              placeholder="¿Qué error repetí hoy? ¿Qué hice bien aunque perdiera? ¿Cuándo empezó el tilt?"
-              style={{ width:"100%", minHeight:110, resize:"vertical", borderRadius:12, border:"1px solid rgba(255,255,255,.08)", background:"rgba(0,0,0,.18)", color:T_COLOR.text, padding:12, outline:"none", fontFamily:"inherit", fontSize:12, lineHeight:1.5 }}
-            />
-            <button onClick={saveMental} style={{ marginTop:10, width:"100%", minHeight:42, borderRadius:12, border:"1px solid rgba(167,139,250,.32)", background:mental.saved ? "rgba(52,211,153,.14)" : "rgba(167,139,250,.14)", color:mental.saved ? "#34d399" : "#c4b5fd", fontWeight:900, cursor:"pointer" }}>
-              {mental.saved ? "Reflexión guardada" : "Guardar reflexión Rocket League"}
-            </button>
-          </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+          <a href="/Rocket_League_Training_System.xlsx" download style={actionStyle}><BookOpen size={16}/> Abrir Excel</a>
+          <a href="#rl-routine" style={actionStyle}><Timer size={16}/> Abrir temporizadores</a>
+          <a href="#rl-precheck" style={actionStyle}><CheckCircle2 size={16}/> Checklist pre-entreno</a>
+          <a href="#rl-log" style={actionStyle}><Edit3 size={16}/> Registro diario</a>
+          <a href="#rl-weekly" style={actionStyle}><BarChart2 size={16}/> Revisión semanal</a>
         </div>
-      </div>
+      </section>
+
+      <section id="rl-routine" style={{ ...cardStyle, padding:24 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", flexWrap:"wrap", marginBottom:18 }}>
+          <div>
+            <div style={labelStyle}>Rutina de hoy · versión resumida</div>
+            <h2 style={{ ...S.h2, margin:"7px 0 6px" }}>Hoy toca</h2>
+            <p style={{ color:T_COLOR.muted, margin:0, lineHeight:1.55 }}>Pegá aquí lo que diga el Excel o completalo manualmente. No se guarda una tabla semanal dentro de LifeOS.</p>
+          </div>
+          <div style={{ ...softCard, padding:"10px 13px", color:"#67e8f9", fontWeight:950 }}>{quickRoutineCount}/5 focos listos</div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+          {routineFields.map(([key,label]) => (
+            <label key={key} style={{ display:"grid", gap:7 }}>
+              <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>{label}</span>
+              <input value={todayRoutine[key] || ""} onChange={e => setTodayRoutine(prev => ({ ...prev, [key]: e.target.value }))} placeholder="Desde Excel" style={inputStyle}/>
+            </label>
+          ))}
+        </div>
+        <div style={{ marginTop:16, display:"grid", gridTemplateColumns:"1fr auto", gap:12, alignItems:"center" }} className="mob-layout-grid">
+          <div style={{ ...softCard, padding:14, color:"#fef3c7", lineHeight:1.45, fontSize:13 }}>
+            <b style={{ color:"#fbbf24" }}>Regla principal:</b> No cambiar la rutina diaria hasta la revisión semanal. Entrenar consistencia, no freestyle.
+          </div>
+          <button onClick={markRoutineComplete} style={{ ...actionStyle, borderColor:"rgba(52,211,153,.30)", background:"rgba(52,211,153,.12)", color:"#86efac", minWidth:210 }}><Trophy size={16}/> Marcar rutina completada</button>
+        </div>
+      </section>
+
+      <section id="rl-precheck" style={{ ...cardStyle, padding:24 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"center", flexWrap:"wrap", marginBottom:16 }}>
+          <div>
+            <div style={labelStyle}>Checklist rápido antes de entrenar</div>
+            <h2 style={{ ...S.h2, margin:"7px 0 0" }}>Entrar estable, no improvisar</h2>
+          </div>
+          <span style={{ color:"#67e8f9", fontWeight:950 }}>{checkedCount}/{precheckItems.length}</span>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+          {precheckItems.map(item => {
+            const on = Boolean(precheck[item]);
+            return (
+              <button key={item} onClick={() => setPrecheck(prev => ({ ...prev, [item]: !prev[item] }))} style={{ minHeight:54, display:"flex", alignItems:"center", gap:11, textAlign:"left", padding:"0 14px", borderRadius:16, border:on ? "1px solid rgba(52,211,153,.35)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(52,211,153,.10)" : "rgba(255,255,255,.035)", color:on ? "#bbf7d0" : T_COLOR.text, cursor:"pointer", fontWeight:850 }}>
+                {on ? <CheckCircle2 size={18} color="#34d399"/> : <Circle size={18} color="#64748b"/>}
+                <span>{item}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section id="rl-log" style={{ ...cardStyle, padding:24 }}>
+        <div style={labelStyle}>Registro rápido</div>
+        <h2 style={{ ...S.h2, margin:"7px 0 16px" }}>Solo lo que sirve para mañana</h2>
+        <div style={{ display:"grid", gridTemplateColumns:"180px 180px 1fr 1fr", gap:12 }} className="mob-layout-grid">
+          <label style={{ display:"grid", gap:7 }}>
+            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Fecha</span>
+            <input value={dailyLog.date || todayKey} onChange={e => setDailyLog(prev => ({ ...prev, date:e.target.value }))} style={inputStyle}/>
+          </label>
+          <label style={{ display:"grid", gap:7 }}>
+            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Rutina completada</span>
+            <select value={dailyLog.completed || ""} onChange={e => setDailyLog(prev => ({ ...prev, completed:e.target.value }))} style={inputStyle}>
+              <option value="">Elegir</option><option>Sí</option><option>No</option>
+            </select>
+          </label>
+          <Rating label="Energía 1-5" value={dailyLog.energy} onChange={v => setDailyLog(prev => ({ ...prev, energy:v }))}/>
+          <Rating label="Fluidez 1-5" value={dailyLog.flow} onChange={v => setDailyLog(prev => ({ ...prev, flow:v }))}/>
+          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}>
+            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Error principal</span>
+            <textarea value={dailyLog.mainError || ""} onChange={e => setDailyLog(prev => ({ ...prev, mainError:e.target.value.slice(0, 500) }))} placeholder="Ej. Llegué tarde al segundo toque / salté antes de tiempo / fallé open nets por girar de más." style={{ ...inputStyle, minHeight:88, resize:"vertical" }}/>
+          </label>
+          <label style={{ display:"grid", gap:7, gridColumn:"1 / -1" }}>
+            <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Corrección para mañana</span>
+            <textarea value={dailyLog.tomorrowFix || ""} onChange={e => setDailyLog(prev => ({ ...prev, tomorrowFix:e.target.value.slice(0, 500) }))} placeholder="Una corrección concreta. No cinco." style={{ ...inputStyle, minHeight:88, resize:"vertical" }}/>
+          </label>
+        </div>
+        <button onClick={saveDailyLog} style={{ ...actionStyle, marginTop:14, width:"100%" }}><CheckCircle2 size={16}/> Guardar registro diario</button>
+      </section>
+
+      <section id="rl-weekly" style={{ ...cardStyle, padding:24 }}>
+        <div style={labelStyle}>Revisión semanal</div>
+        <h2 style={{ ...S.h2, margin:"7px 0 14px" }}>Cambios solo aquí</h2>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:10 }} className="mob-layout-grid">
+          {[
+            ["openNets", "¿Mejoraron los open nets?"],
+            ["fifty", "¿Perdí menos 50/50?"],
+            ["kickoffs", "¿Mis kickoffs fueron más limpios?"],
+            ["rotation", "¿Me desordené menos en rotación?"],
+            ["airRoll", "¿Los air roll shots tuvieron más control?"],
+            ["sustainable", "¿La rutina se sintió pesada o sostenible?"],
+          ].map(([key, question]) => {
+            const on = Boolean(weeklyReview[key]);
+            return <button key={key} onClick={() => setWeeklyReview(prev => ({ ...prev, [key]: !prev[key] }))} style={{ minHeight:54, borderRadius:16, border:on ? "1px solid rgba(167,139,250,.36)" : "1px solid rgba(148,163,184,.14)", background:on ? "rgba(167,139,250,.13)" : "rgba(255,255,255,.035)", color:on ? "#d8b4fe" : T_COLOR.text, cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"0 14px", textAlign:"left", fontWeight:850 }}>{on ? <CheckCircle2 size={18} color="#c084fc"/> : <Circle size={18} color="#64748b"/>}<span>{question}</span></button>;
+          })}
+        </div>
+        <label style={{ display:"grid", gap:7, marginTop:14 }}>
+          <span style={{ color:T_COLOR.text, fontWeight:950, fontSize:12 }}>Decisión de la semana</span>
+          <textarea value={weeklyReview.decision || ""} onChange={e => setWeeklyReview(prev => ({ ...prev, decision:e.target.value.slice(0, 700) }))} placeholder="Mantener rutina / ajustar un recurso / bajar volumen / revisar un error repetido." style={{ ...inputStyle, minHeight:100, resize:"vertical" }}/>
+        </label>
+        <button onClick={saveWeeklyReview} style={{ ...actionStyle, marginTop:14, width:"100%", borderColor:"rgba(167,139,250,.32)", background:"rgba(167,139,250,.12)", color:"#d8b4fe" }}><RefreshCw size={16}/> Guardar revisión semanal</button>
+      </section>
     </div>
   );
 }
-
-
 
 function BlenderView() {
   const { persistent, pDispatch } = useAppData();
